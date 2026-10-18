@@ -23,7 +23,7 @@
 
 **关闭提醒窗口不会解除播放保护。** 勾选“本次不再提示”后，爱趣听主进程重启前不再弹出；只退到后台或断开后重新连接 CarPlay，不会清除这项选择。
 
-本分支最低支持 Android 6.0（API23），DiPlay 与配套 WeCarFlow 使用共用签名。适配范围为凯美瑞先锋车机，具体兼容性取决于车型、车机固件和 iPhone 系统版本。配套项目说明见 [WeCarFlow](wecarflow/README.md)。
+本分支最低支持 Android 6.0（API23），DiPlay 与配套 WeCarFlow 使用共用签名。适配范围为凯美瑞先锋车机，具体兼容性取决于车型、车机固件和 iPhone 系统版本。配套项目说明见 [WeCarFlow](wecarflow/README.md)。 车机开机后拉起 DiPlay 的配套安装包见 [开机启动助手](boot-launcher/README.md)。
 
 **下方为上游项目介绍。** 其中比亚迪支持范围、`com.shihab.diplay` 包名、官方下载及问题反馈入口均属于上游；凯美瑞适配版请以本节说明为准。
 

@@ -44,3 +44,7 @@ release-signing.properties
 *.key
 *.apk
 *.aab
+
+# Explicitly supplied head-unit boot launcher companion APKs
+!/boot-launcher/开机启动（A）替换车机微信.apk
+!/boot-launcher/开机启动（A）替换车机微信_开关版.apk
