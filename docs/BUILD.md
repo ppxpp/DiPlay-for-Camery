@@ -126,12 +126,7 @@ Use only the intended runtime files in this directory.
 Keep the directory and its private key outside Git.
 The build rejects unexpected credential containers in APK assets.
 
-An optional `.private/runtime-assets/network/hotspot.json` also bundles the local
-test hotspot defaults (`ssid`, `passphrase`, `band`, `channel`, `security`). On
-first launch it fills an unconfigured manual hotspot and selects wireless manual
-hotspot mode. Existing settings and subsequent edits are preserved. This profile
-is included in both debug and release mobile APKs and remains outside Git;
-it does not turn on Android's system hotspot automatically.
+Hotspot names and passwords are configured in the app; APKs do not import bundled hotspot defaults.
 
 Run the standalone debug task (ordinary `:mobile:assembleDebug` also bundles the identity):
 

@@ -990,4 +990,5 @@
 
     <string name="settings_hotspot_interface">热点网络接口（可选）</string>
     <string name="settings_hotspot_interface_description">仅用于把热点放在 Android 不认为是 Wi-Fi 热点的网络接口上的车机，例如部分吉利、领克及其它高通车机上的 eth0.3。留空则自动查找。</string>
+    <string name="disclaimer_agree_swipe_hint">同意并继续\n左右滑动翻页</string>
 </resources>

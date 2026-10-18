@@ -48,7 +48,8 @@ internal object PioneerDebugIntegration {
             }
         }
         if (PioneerDebugRuntime.hostState == null) PioneerDebugRuntime.hostState = ::idleState
-        if (PioneerUsbPolicy.matchesDevice() && !AirPlayPersistence.loadWirelessEnabled(app)) {
+        if (PioneerDebugRuntime.automaticStartEnabled(app) &&
+            PioneerUsbPolicy.matchesDevice() && !AirPlayPersistence.loadWirelessEnabled(app)) {
             runCatching { PioneerDebugRuntime.start(app) }
                 .onFailure { PioneerDebugRuntime.log(app, "TCP debug start failed: ${it.message}") }
         }

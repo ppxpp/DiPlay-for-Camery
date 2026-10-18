@@ -145,7 +145,7 @@ object DisclaimerScreen {
             setPadding(dpOf(style, 28), dpOf(style, 8), dpOf(style, 28), dpOf(style, 24))
         }
         val disagree = actionLabel(activity, style, activity.getText(R.string.disclaimer_disagree), false)
-        val agree = actionLabel(activity, style, activity.getText(R.string.disclaimer_agree), true)
+        val agree = actionLabel(activity, style, activity.getText(R.string.disclaimer_agree_swipe_hint), true)
         // Agree stays disabled until the last page is reached, so the user scrolls through it all.
         agree.isEnabled = false
         agree.alpha = 0.4f
@@ -165,6 +165,7 @@ object DisclaimerScreen {
                     dot.setBackgroundColor(if (index == position) style.accent else style.border)
                 }
                 if (position == pages.lastIndex) {
+                    agree.setText(R.string.disclaimer_agree)
                     agree.isEnabled = true
                     agree.alpha = 1f
                 }

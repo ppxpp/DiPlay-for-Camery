@@ -10,6 +10,9 @@ import org.json.JSONObject
 
 /** A saved identity is not a transport selection. Only an explicit proxy connect enables it. */
 object RemoteGatewaySettings {
+    fun isAvailable(context: Context): Boolean =
+        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+
     private fun file(context: Context) = File(context.noBackupFilesDir, "remote-gateway.json")
 
     @Synchronized fun load(context: Context): RemoteRfcommGateway? = runCatching {
@@ -34,7 +37,7 @@ object RemoteGatewaySettings {
 
     /** Proxy currently supports the existing-Wi-Fi deployment only; P2P always uses local Bluetooth. */
     @Synchronized fun loadSelected(context: Context, mode: WirelessHotspotMode = AirPlayPersistence.loadWirelessHotspotMode(context)): RemoteRfcommGateway? {
-        if (mode != WirelessHotspotMode.EXISTING_WIFI) return null
+        if (!isAvailable(context) || mode != WirelessHotspotMode.EXISTING_WIFI) return null
         val gateway = load(context) ?: return null
         // Old saved/discovered identities are intentionally not auto-enabled on upgrade.
         return gateway.takeIf { runCatching { JSONObject(file(context).readText()).optBoolean("enabled", false) }.getOrDefault(false) }

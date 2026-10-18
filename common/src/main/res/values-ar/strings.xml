@@ -961,4 +961,5 @@
 
     <string name="settings_hotspot_interface">واجهة نقطة الاتصال (اختياري)</string>
     <string name="settings_hotspot_interface_description">لوحدات الرأس التي تشغّل نقطة الاتصال على واجهة شبكة لا يبلّغ عنها أندرويد كنقطة اتصال Wi-Fi، مثل eth0.3 في بعض وحدات Geely وLynk &amp; Co وغيرها من وحدات Qualcomm. اتركه فارغاً للعثور عليها تلقائياً.</string>
+    <string name="disclaimer_agree_swipe_hint">موافقة ومتابعة\nاسحب يمينًا أو يسارًا</string>
 </resources>

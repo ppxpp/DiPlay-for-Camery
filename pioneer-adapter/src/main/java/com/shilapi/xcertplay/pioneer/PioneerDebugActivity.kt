@@ -52,7 +52,6 @@ class PioneerDebugActivity : Activity() {
         button("关闭 TCP 调试") { stopService(Intent(this, PioneerDebugService::class.java)) }
         column.addView(TextView(this).apply { text = "不要同时运行 usbcheck 与 DiPlay。有线验证前先关闭 usbcheck。更新前停止 CarPlay。使用实际显示端口；调试占用的端口可能与无线会话冲突，可先关闭调试。" })
         setContentView(ScrollView(this).apply { addView(column) })
-        PioneerDebugRuntime.start(this)
         install(intent)
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); install(intent) }

@@ -8,8 +8,6 @@ import java.io.IOException
 object RemoteRfcommProtocol {
     // Temporary development credential shared by the proxy and DiPlay installations.
     const val DEVELOPMENT_TOKEN = "123456"
-    // Default pairing identity used when no pairing file exists yet.
-    const val DEVELOPMENT_PROXY_BLUETOOTH_MAC = "94:7B:AE:88:66:DE"
     fun validToken(token: String) = token == DEVELOPMENT_TOKEN || token.length in 16..256
 
     const val SERVICE_TYPE = "_diplay-proxy._tcp."

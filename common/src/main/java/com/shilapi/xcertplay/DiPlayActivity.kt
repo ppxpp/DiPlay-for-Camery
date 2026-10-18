@@ -978,9 +978,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             else connect(true)
         }
         card.addView(connectButton, matchButton(height = if (compact) 54 else 68))
-        card.addView(homeButton(getString(R.string.gateway_title), false) {
-            startActivity(Intent(this, GatewayDeviceActivity::class.java))
-        }, matchButton(CONTROL_GAP_DP, if (compact) 46 else 56))
+        if (RemoteGatewaySettings.isAvailable(this)) {
+            card.addView(homeButton(getString(R.string.gateway_title), false) {
+                startActivity(Intent(this, GatewayDeviceActivity::class.java))
+            }, matchButton(CONTROL_GAP_DP, if (compact) 46 else 56))
+        }
         val connectionHint = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
             WirelessHotspotMode.EXISTING_WIFI -> getString(R.string.existing_wifi_hint)
             WirelessHotspotMode.MANUAL -> getString(R.string.hotspot_hint_manual)
@@ -1803,12 +1805,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }
             card.addView(exportButton, matchButton(10, 60))
-            if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() ||
-                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.enabled(this)) {
-                card.addView(button(getString(R.string.settings_pioneer_lan_debug), false) {
-                    startActivity(Intent(this, com.shilapi.xcertplay.pioneer.PioneerDebugActivity::class.java))
-                }, matchButton(10, 60))
-            }
+            card.addView(button(getString(R.string.settings_pioneer_lan_debug), false) {
+                startActivity(Intent(this, com.shilapi.xcertplay.pioneer.PioneerDebugActivity::class.java))
+            }, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
             card.addView(button(getString(R.string.settings_report_on_phone), false) { openBackup(SettingsCategory.DIAGNOSTICS) }, matchButton(10, 60))
             val destination = getString(R.string.reports_save_to_downloads_diplay)
@@ -3329,9 +3328,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }, LinearLayout.LayoutParams(0, dp(6), 1f).apply { if (index > 0) marginStart = dp(8) })
         }
         content.addView(progress)
-        content.addView(button(getString(R.string.gateway_title), false) {
-            startActivity(Intent(this, GatewayDeviceActivity::class.java))
-        }, matchButton(CONTROL_GAP_DP, 56))
+        if (RemoteGatewaySettings.isAvailable(this)) {
+            content.addView(button(getString(R.string.gateway_title), false) {
+                startActivity(Intent(this, GatewayDeviceActivity::class.java))
+            }, matchButton(CONTROL_GAP_DP, 56))
+        }
         when (step) {
             SetupGuide.STEP_CAR -> setupCarStep(content)
             SetupGuide.STEP_CONNECTION -> setupConnectionStep(content)

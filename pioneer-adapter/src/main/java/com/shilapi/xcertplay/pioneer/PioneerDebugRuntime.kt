@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.pioneer
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
@@ -43,6 +44,9 @@ object PioneerDebugRuntime {
     @Volatile var redact: (String) -> String? = { it }
     private val main = Handler(Looper.getMainLooper())
     private val logLock = Any()
+
+    fun automaticStartEnabled(context: Context): Boolean =
+        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     fun start(context: Context) {
         ContextCompat.startForegroundService(context, Intent(context, PioneerDebugService::class.java))
