@@ -15,8 +15,9 @@ local.properties
 .externalNativeBuild/
 captures/
 
-# Local agent working notes
+# Local agent working notes and temporary debugging/analysis files
 /agent_docs/
+/agent_docs/temporary/
 
 # Local device captures, diagnostic archives, and build evidence
 /evidence/
