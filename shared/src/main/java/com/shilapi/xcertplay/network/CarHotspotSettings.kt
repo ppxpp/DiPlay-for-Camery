@@ -12,6 +12,11 @@ object CarHotspotSettings {
     fun setEnabled(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean("auto_enable", enabled).apply()
 
+    fun configWrite(context: Context): Boolean = prefs(context).getBoolean("config_write", false)
+
+    fun setConfigWrite(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean("config_write", enabled).apply()
+
     // Visibility is independent of the saved choice: ADB is only needed to grant permission.
     fun visible(bydAvailable: Boolean, access: LocalAdb.Access): Boolean =
         bydAvailable && (access == LocalAdb.Access.READY || access == LocalAdb.Access.NOT_APPROVED)

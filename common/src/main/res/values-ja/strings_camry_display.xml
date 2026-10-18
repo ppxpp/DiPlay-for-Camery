@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hide_bottom_arrow">下部のナビゲーション矢印を隠す（カムリ車載機）</string>
+    <string name="settings_camry_hide_bottom_arrow_description">カムリのパイオニア製車載機専用です。DiPlay の表示中は車両の下部ショートカット矢印を隠します。無効にするか DiPlay を離れると元に戻ります。変更はすぐに反映されます。</string>
+    <string name="settings_camry_usb_charging_advice">カムリ車載機では 0.5 A または 1.5 A を推奨します。それ以上に設定すると、USB で iPhone を認識できない場合があります。</string>
+</resources>

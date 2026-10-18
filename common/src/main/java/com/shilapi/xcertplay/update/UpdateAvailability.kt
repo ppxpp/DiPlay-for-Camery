@@ -4,8 +4,9 @@ import android.content.Context
 
 /** Durable metadata only. APK downloads always remain an explicit foreground action. */
 internal object UpdateAvailability {
-    private const val PREFERENCES = "diplay_update_availability"
+    private const val PREFERENCES = "diplay_update_availability_v2"
     private const val TAG = "tag"
+    private const val VERSION_CODE = "version_code"
     private const val APK_NAME = "apk_name"
     private const val APK_URL = "apk_url"
     private const val CHECKSUMS_URL = "checksums_url"
@@ -28,15 +29,18 @@ internal object UpdateAvailability {
         preferences(context).edit().putBoolean(BACKGROUND_CHECKS, enabled).apply()
     }
 
-    fun available(context: Context, installedVersion: String): UpdateRelease? {
+    fun available(context: Context, installedVersionCode: Long): UpdateRelease? {
         val values = preferences(context)
         val release = UpdateRelease(
             tagName = values.getString(TAG, null) ?: return null,
+            versionCode = values.getLong(VERSION_CODE, -1L),
             apkName = values.getString(APK_NAME, null) ?: return null,
             apkUrl = values.getString(APK_URL, null) ?: return null,
             checksumsUrl = values.getString(CHECKSUMS_URL, null) ?: return null,
         )
-        if (UpdateVersion.isNewer(release.tagName, installedVersion)) return release
+        if (release.versionCode > 0L && UpdateVersion.isNewer(release.versionCode, installedVersionCode)) {
+            return release
+        }
         clear(context)
         return null
     }
@@ -44,6 +48,7 @@ internal object UpdateAvailability {
     fun save(context: Context, release: UpdateRelease) {
         preferences(context).edit()
             .putString(TAG, release.tagName)
+            .putLong(VERSION_CODE, release.versionCode)
             .putString(APK_NAME, release.apkName)
             .putString(APK_URL, release.apkUrl)
             .putString(CHECKSUMS_URL, release.checksumsUrl)
@@ -53,6 +58,7 @@ internal object UpdateAvailability {
     fun clear(context: Context) {
         preferences(context).edit()
             .remove(TAG)
+            .remove(VERSION_CODE)
             .remove(APK_NAME)
             .remove(APK_URL)
             .remove(CHECKSUMS_URL)

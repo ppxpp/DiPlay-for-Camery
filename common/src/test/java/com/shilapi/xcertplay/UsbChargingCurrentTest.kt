@@ -22,11 +22,18 @@ class UsbChargingCurrentTest {
         assertEquals(listOf("normal", "reduced", "low"), UsbChargingCurrent.entries.map { it.key })
         assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey(null))
         assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey("2"))
+        assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey("one_amp"))
     }
 
     @Test fun theChoiceIsSavedAndDefaultsToLow() {
         assertEquals(UsbChargingCurrent.LOW, AirPlayPersistence.loadUsbChargingCurrent(context))
         AirPlayPersistence.saveUsbChargingCurrent(context, UsbChargingCurrent.NORMAL)
         assertEquals(UsbChargingCurrent.NORMAL, AirPlayPersistence.loadUsbChargingCurrent(context))
+    }
+
+    @Test fun recommendedReducedCurrentRoundTripsAs1500Milliamps() {
+        AirPlayPersistence.saveUsbChargingCurrent(context, UsbChargingCurrent.REDUCED)
+        assertEquals(1500, AirPlayPersistence.loadUsbChargingCurrent(context).milliAmps)
+        assertEquals(UsbChargingCurrent.REDUCED, UsbChargingCurrent.fromKey("reduced"))
     }
 }

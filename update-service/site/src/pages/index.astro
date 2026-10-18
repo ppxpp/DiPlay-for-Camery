@@ -1,0 +1,127 @@
+---
+import '../styles/global.css';
+import DocsLinks from '../components/DocsLinks.astro';
+import Hero from '../components/Hero.astro';
+import { site } from '../data/site.ts';
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{site.name}</title>
+    <meta name="description" content={site.intro} />
+    <meta name="theme-color" content="#fbfcfe" />
+    <link rel="icon" href="/app-icon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.shortName} />
+    <meta property="og:title" content={site.name} />
+    <meta property="og:description" content={site.intro} />
+    <meta property="og:locale" content="zh_CN" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="shell">
+        <a class="brand" href="/">
+          <img src="/app-icon.png" alt="" width="28" height="28" />
+          {site.shortName}
+        </a>
+        <nav class="topnav">
+          <a href="#docs">文档</a>
+          <a href="#before">试用前须知</a>
+          {
+            site.feedbackUrl ? (
+              <a class="ext" href={site.feedbackUrl} target="_blank" rel="noopener">
+                问题反馈
+              </a>
+            ) : null
+          }
+        </nav>
+      </div>
+    </header>
+
+    <main class="shell">
+      <Hero />
+
+      <section id="docs" aria-labelledby="docs-title">
+        <div class="section-head">
+          <h2 id="docs-title">文档</h2>
+          <p>安装步骤、功能说明与已知问题都在飞书文档中维护，会随版本持续更新。</p>
+        </div>
+        <DocsLinks />
+      </section>
+
+      <section id="before" aria-labelledby="before-title">
+        <div class="section-head">
+          <h2 id="before-title">试用前请了解</h2>
+          <p>请在你自己拥有的车机上使用，并在停车状态下完成安装与测试。</p>
+        </div>
+        <div class="cols two">
+          <div class="card">
+            <h3 class="card-title">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.5" />
+                <path d="M8 5v3.5M8 10.8v.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+              许可与风险
+            </h3>
+            <ul class="plain">
+              {
+                site.limits.map((item) => (
+                  <li>{item}</li>
+                ))
+              }
+            </ul>
+          </div>
+          <div class="card">
+            <h3 class="card-title">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M2.5 4.5h11v7h-6l-2.5 2.5v-2.5h-2.5v-7Z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              反馈与环境信息
+            </h3>
+            <p>
+              反馈时请注明车机固件版本、iPhone 与 iOS 版本、连接方式（Wi-Fi 热点 + 外接蓝牙 /
+              USB）、相关设置、复现步骤与故障时间，并附上应用内导出的诊断报告。
+            </p>
+            {
+              site.feedbackUrl ? (
+                <a class="btn secondary" href={site.feedbackUrl} target="_blank" rel="noopener">
+                  问题反馈
+                </a>
+              ) : (
+                <p class="hero-meta">反馈渠道待公布。</p>
+              )
+            }
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell">
+        <p>{site.footer}</p>
+        <nav>
+          <a href={site.sourceRefUrl || site.repoUrl} target="_blank" rel="noopener">源码仓库</a>
+          <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">
+            GPL-3.0
+          </a>
+          {
+            site.feedbackUrl ? (
+              <a href={site.feedbackUrl} target="_blank" rel="noopener">
+                问题反馈
+              </a>
+            ) : null
+          }
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

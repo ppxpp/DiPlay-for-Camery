@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hide_bottom_arrow">隐藏底部箭头导航（凯美瑞车机）</string>
+    <string name="settings_camry_hide_bottom_arrow_description">仅适用于凯美瑞先锋车机。DiPlay 在前台时隐藏原车底部快捷箭头；关闭此项或离开 DiPlay 后恢复。修改立即生效。</string>
+    <string name="settings_camry_usb_charging_advice">凯美瑞车机建议选择 0.5A 或 1.5A，否则可能导致 USB 无法识别 iPhone。</string>
+</resources>

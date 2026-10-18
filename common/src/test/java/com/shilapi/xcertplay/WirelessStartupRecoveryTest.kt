@@ -120,6 +120,20 @@ class WirelessStartupRecoveryTest {
         assertEquals(View.VISIBLE, retry.visibility)
     }
 
+    // The driver refused Android's prompt to turn the car hotspot off: a retry would only show it again.
+    @Test fun wifiDirectRefusedBesideTheCarHotspotSaysSoAndDoesNotRetry() {
+        val stage = TextView(activity)
+        ReflectionHelpers.setField(activity, "stageStatusView", stage)
+        report(status = CarPlayStatus.Failed("Could not establish WIFI_P2P hotspot: " +
+            "Android was not allowed to turn the car hotspot off for Wi-Fi Direct",
+            startupFailure = WirelessStartupFailure.WIFI_DIRECT_BESIDE_HOTSPOT))
+        assertEquals(activity.getString(R.string.wifi_direct_refused_beside_hotspot), stage.text.toString())
+        assertEquals(0, budget().retries)
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertTrue(ReflectionHelpers.getField(activity, "startupRetryStopped"))
+        assertEquals(View.VISIBLE, retry.visibility)
+    }
+
     // The driver can switch Bluetooth on, so the screen asks for it and the attempts go on.
     @Test fun bluetoothThatIsOffAsksForItAndKeepsRetrying() {
         val stage = TextView(activity)

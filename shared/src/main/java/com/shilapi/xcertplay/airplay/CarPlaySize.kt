@@ -10,7 +10,7 @@ enum class CarPlaySize(val label: String, val widthMillimeters: Int) {
     SMALL("Small", 350);
 
     companion object {
-        val DEFAULT = MEDIUM
+        val DEFAULT = LARGE
 
         /** Maps any stored width, including values from older builds, to the nearest preset. */
         fun fromWidthMillimeters(millimeters: Int): CarPlaySize =

@@ -32,6 +32,8 @@ interface AirPlaySessionListener {
     fun onSessionActive(session: AirPlaySession) {}
     fun onSessionEnded(session: AirPlaySession) {}
     fun onVideoFrameRendered(session: AirPlaySession) {}
+    /** First decoded frame released to this screen's Surface; not a physical display timestamp. */
+    fun onScreenFrameOutput(session: AirPlaySession, type: Int) {}
     /** Validated downstream; immutable copy of iPhone's top-left grayscale coverage PNG. */
     fun onCornerMask(session: AirPlaySession, png: ByteArray, displayWidth: Int) {}
     fun onTransportError(message: String) {}
@@ -99,6 +101,7 @@ class AirPlaySession(
     private var eventSocket: Socket? = null
     private var eventCipher: ControlCipher? = null
     private var eventCseq = 0
+    private val nightModeReplies = java.util.concurrent.ConcurrentHashMap<Int, Boolean>()
     private var pendingNightMode: Boolean? = null
     private val firstTouchSendLogged = AtomicBoolean(false)
     private val touchSendFailureLogged = AtomicBoolean(false)
@@ -160,8 +163,11 @@ class AirPlaySession(
 
     internal fun logDebug(message: String) = debugLog(message)
 
-    internal fun videoFrameRendered() {
-        if (!closed.get()) listener.onVideoFrameRendered(this)
+    internal fun videoFrameRendered(type: Int = 110) {
+        if (!closed.get()) {
+            listener.onScreenFrameOutput(this, type)
+            listener.onVideoFrameRendered(this)
+        }
     }
 
     internal fun logTrace(message: String) = trace(message)
@@ -355,6 +361,16 @@ class AirPlaySession(
         val cipher = eventCipher ?: return false
         if (closed.get()) return false
         eventCseq++
+        val commandCseq = eventCseq
+        if (command["type"] == "setNightMode") {
+            val night = (command["params"] as? Map<*, *>)?.get("nightMode") as? Boolean
+            if (night != null) {
+                // Bound diagnostics even when the phone never replies to a command.
+                if (nightModeReplies.size >= 16) nightModeReplies.clear()
+                nightModeReplies[commandCseq] = night
+                debugLog("NIGHT_MODE_COMMAND cseq=$commandCseq night=$night")
+            }
+        }
         val encodeStart = System.nanoTime()
         val body = BplistCodec.encode(command)
         val head = "POST /command RTSP/1.0\r\n" + extraHeaders +
@@ -772,6 +788,7 @@ class AirPlaySession(
         for (entry in streams) {
             val stream = asMap(entry) ?: continue
             val type = long(stream["type"])?.toInt() ?: continue
+            debugLog("Audio lifecycle: SETUP type=$type audioType=${stream["audioType"] ?: "default"}")
             debugLog("airplay SETUP stream type=$type payload=$stream")
             when (type) {
                 STREAM_TYPE_MAIN_SCREEN, STREAM_TYPE_ALT_SCREEN -> {
@@ -834,6 +851,11 @@ class AirPlaySession(
         val type = string(body["type"])
         val params = asMap(body["params"]) ?: emptyMap()
         debugLog("airplay command type=$type keys=${params.keys.sorted()}")
+        if (type == "modesChanged") {
+            val resources = (params["resources"] as? List<*>)?.mapNotNull { asMap(it) }
+                ?.map { resource -> resource.filterKeys { it in setOf("resourceID", "entity", "owner", "borrower", "transferType") } }
+            debugLog("Audio lifecycle: modesChanged resources=$resources")
+        }
         val streamId = request.headers["x-apple-streamid"]?.toLongOrNull()
         val data = params["data"] as? ByteArray
         if (streamId != null && data != null) {
@@ -857,6 +879,7 @@ class AirPlaySession(
             null
         }
         val types = teardownStreamTypes(decodedBody)
+        debugLog("Audio lifecycle: TEARDOWN types=${types ?: "all"} activeBefore=$activeStreams")
 
         debugLog(
             "airplay TEARDOWN types=${types ?: "all"} activeBefore=$activeStreams " +
@@ -1121,6 +1144,7 @@ class AirPlaySession(
     private fun runEventRead(socket: Socket) {
         var reason = "session-closed"
         var receivedBytes = 0L
+        var sampledReplies = 0
         try {
             val input = BufferedInputStream(socket.getInputStream())
             val output = BufferedOutputStream(socket.getOutputStream())
@@ -1145,7 +1169,26 @@ class AirPlaySession(
                 val parsed = RtspMessage.parseMessages(plaintext)
                 plaintext = parsed.rest
                 for (message in parsed.messages) {
-                    if (message.method.startsWith("RTSP/") || message.method.startsWith("HTTP/")) continue
+                    if (message.method.startsWith("RTSP/") || message.method.startsWith("HTTP/")) {
+                        val cseq = message.headers["cseq"]?.toIntOrNull()
+                        val requested = cseq?.let(nightModeReplies::remove)
+                        if (sampledReplies < 8) {
+                            sampledReplies++
+                            val responseBody = if (message.body.isEmpty()) null else
+                                runCatching { BplistCodec.decode(message.body) as? Map<*, *> }.getOrNull()
+                            debugLog("EVENT_RESPONSE status=${message.path.toIntOrNull()} cseq=$cseq " +
+                                "bodyBytes=${message.body.size} result=${responseBody?.get("status")} " +
+                                "headerKeys=${message.headers.keys.joinToString(",")}")
+                        }
+                        if (requested != null) {
+                            val body = if (message.body.isEmpty()) null else
+                                runCatching { BplistCodec.decode(message.body) as? Map<*, *> }.getOrNull()
+                            val result = (body?.get("status") as? Number)?.toLong()
+                            debugLog("NIGHT_MODE_RESPONSE cseq=$cseq night=$requested " +
+                                "status=${message.path.toIntOrNull()} bodyBytes=${message.body.size} result=$result")
+                        }
+                        continue
+                    }
                     debugLog(
                         "airplay event rx ${message.method} ${message.path} cseq=${message.headers["cseq"] ?: "-"} body=${message.body.size}",
                     )
@@ -1272,7 +1315,10 @@ internal fun safeClose(closeable: Closeable?) {
 }
 
 private fun ByteArray.toHex(): String =
-    joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    // Reuse upstream's allocation-light encoder. The trace text is identical; String.format
+    // per byte delayed /info responses on the old ARM head unit even when UI hid TRACE logs.
+    if (false) joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    else toHexString()
 
 private fun asMap(value: Any?): Map<String, Any?>? {
     val map = value as? Map<*, *> ?: return null

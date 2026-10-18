@@ -19,7 +19,10 @@ def read_exact(stream, count):
 
 
 def request(args, cmd, **fields):
-    header = {"cmd": cmd, "token": args.token, **fields}
+    header = {"cmd": cmd, **fields}
+    # Optional legacy credential for talking to older installed builds.
+    if args.token:
+        header["token"] = args.token
     upload = args.apk if cmd == "update" else None
     if upload:
         header["size"] = Path(upload).stat().st_size
@@ -53,19 +56,45 @@ def main():
     parser = argparse.ArgumentParser(description="DiPlay TCP 调试，车机与本机需在同一局域网")
     parser.add_argument("--host", required=True, help="车机首页显示的 LAN IPv4")
     parser.add_argument("--port", type=int, default=8721, help="以 APP 显示的实际端口为准")
-    parser.add_argument("--token", default=os.environ.get("DIPLAY_DEBUG_TOKEN"), help="首页口令或 DIPLAY_DEBUG_TOKEN 环境变量")
+    parser.add_argument("--token", default=os.environ.get("DIPLAY_DEBUG_TOKEN"), help="仅兼容旧版服务；新版无需口令")
     parser.add_argument("--timeout", type=float, default=45)
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
+    audio_source = commands.add_parser("audio-source", help="读取先锋音源或执行FM/爱趣听切换实验")
+    audio_source.add_argument("--mode", choices=["STATUS", "FM", "WECARFLOW", "OFF", "NEXT", "BT"], default="STATUS")
+    commands.add_parser("update-storage", help="读取更新缓存与可用空间")
+    commands.add_parser("clear-update-cache", help="只清理DiPlay上传的安装临时APK，不清用户数据；先关闭旧安装页")
+    commands.add_parser("companion-status", help="读取WeCarFlow安装版本、保护服务进程与签名")
+    commands.add_parser("restart-app", help="仅已知车机：结束本应用进程并定时重开，验证进程回收恢复")
+    ui = commands.add_parser("host-ui", help="仅已知车机：应用内设置/前后台验证，不修改偏好")
+    ui.add_argument("--action", choices=["AUDIO_TAKE", "AUDIO_RELEASE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
     video = commands.add_parser("video-settings", help="读取或修改视频设置，下次连接生效")
     video.add_argument("--fps", type=int, choices=[30, 60])
     video.add_argument("--resolution-percent", type=int, help="30..160，下次连接生效")
     video.add_argument("--low-latency-decoder", choices=["ON", "OFF"])
     video.add_argument("--smooth-video", choices=["ON", "OFF"])
     video.add_argument("--direct-video-output", choices=["ON", "OFF"])
-    commands.add_parser("video-gesture", help="CarPlay主屏连续12次往返滑动；先显示地图页面")
+    tap = commands.add_parser("video-tap", help="点击当前CarPlay视频，归一化坐标0..1")
+    tap.add_argument("--x", type=float, required=True)
+    tap.add_argument("--y", type=float, required=True)
+    gesture = commands.add_parser("video-gesture", help="CarPlay主屏连续12次往返滑动或缩放；先显示地图页面")
+    gesture.add_argument("--kind", choices=["SWIPE", "PINCH"], default="SWIPE")
     commands.add_parser("network", help="读取 IPv6/TUN 内核计数、路由与可读防火墙规则")
     commands.add_parser("runtime", help="读取本进程CPU、线程及Logcat；不执行远程shell")
+    commands.add_parser("system-load", help="只读系统进程CPU计数、温度及解码能力")
+    for name in ("async-session-logs", "freescale-reorder", "audio-clock-trim"):
+        item = commands.add_parser(name)
+        item.add_argument("--mode", choices=["ON", "OFF"], required=True)
+    coalescing = commands.add_parser("touch-coalescing", help="仅已知车机：相邻未发送MOVE合并对照")
+    coalescing.add_argument("--mode", choices=["ON", "OFF"], required=True)
+    poll = commands.add_parser("lwip-poll-wait", help="仅已知车机：接收等待1/2/4ms对照")
+    poll.add_argument("--millis", type=int, choices=[1, 2, 4], required=True)
+    priority = commands.add_parser("video-priority", help="同连接视频输入线程优先级对比")
+    priority.add_argument("--mode", choices=["ON", "OFF"], required=True)
+    crypto = commands.add_parser("native-crypto", help="仅用于同连接加解密性能对照，重启恢复默认")
+    crypto.add_argument("--mode", choices=["ON", "OFF"], required=True)
+    snapshot = commands.add_parser("video-snapshot", help="读取当前CarPlay视频Surface的PNG，非系统截图")
+    snapshot.add_argument("--output", default="carplay-surface.png")
     batch = commands.add_parser("usb-tx-batch", help="实时切换NCM已排队数据聚合上限，1为原模式")
     batch.add_argument("--frames", type=int, choices=[1, 4, 8], required=True)
     commands.add_parser("usb-reset", help="会话完全停止后，通过已授权FD复位唯一iPhone；随后重新查询状态")
@@ -93,8 +122,6 @@ def main():
     update = commands.add_parser("update")
     update.add_argument("apk")
     args = parser.parse_args()
-    if not args.token:
-        parser.error("请通过 --token 或 DIPLAY_DEBUG_TOKEN 指定首页口令")
     try:
         if args.cmd == "logs":
             offset = args.offset
@@ -110,7 +137,11 @@ def main():
                     break
                 time.sleep(1)
         else:
-            fields = {"mode": args.mode} if args.cmd in ("usb-mode", "usb-configuration", "network-backend", "lwip-diagnostics", "phone-diagnostics") else {}
+            fields = {"mode": args.mode} if args.cmd in ("audio-source", "usb-mode", "usb-configuration", "network-backend", "lwip-diagnostics", "phone-diagnostics", "native-crypto", "video-priority", "touch-coalescing", "async-session-logs", "freescale-reorder", "audio-clock-trim") else {}
+            if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
+            if args.cmd == "video-gesture": fields = {"kind": args.kind}
+            if args.cmd == "host-ui": fields = {"action": args.action}
+            if args.cmd == "video-tap": fields = {"x": args.x, "y": args.y}
             if args.cmd == "toast": fields = {"text": args.text}
             if args.cmd == "usb-tx-batch": fields = {"frames": args.frames}
             if args.cmd == "video-settings":
@@ -120,7 +151,10 @@ def main():
                                   ("direct_video_output", "directVideoOutput")]:
                     if getattr(args, attr) is not None: fields[key] = getattr(args, attr) == "ON"
             reply, body = request(args, args.cmd, **fields)
-            if args.cmd in ("network", "runtime"):
+            if args.cmd == "video-snapshot":
+                Path(args.output).write_bytes(body)
+                print(f"已保存 {Path(args.output).resolve()} ({len(body)} bytes)")
+            elif args.cmd in ("network", "runtime", "system-load"):
                 print(body.decode("utf-8", errors="replace"))
             elif args.cmd != "export":
                 print(json.dumps(reply, ensure_ascii=False, indent=2))

@@ -1,4 +1,4 @@
-name: Publish download site
+name: Publish download site (diplay)
 on:
   push:
     branches: [main]

@@ -1,0 +1,20 @@
+---
+import { site } from '../data/site.ts';
+---
+
+<aside class="spec-card">
+  <h2>适配设备</h2>
+  <p>本项目按这台车机的固件做适配与验证，不承诺覆盖其他主机。</p>
+  <dl class="spec">
+    <dt>车机</dt>
+    <dd>{ site.device.model }</dd>
+    <dt>已验证版本</dt>
+    <dd>{ site.device.verifiedFirmware }</dd>
+    <dt>连接方式</dt>
+    <dd>{ site.device.connection }</dd>
+  </dl>
+  <div class="note">
+    <strong>支持范围</strong>
+    { site.scope }
+  </div>
+</aside>

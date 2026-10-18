@@ -1,0 +1,21 @@
+---
+import { site } from '../data/site.ts';
+import { fetchUpdateChannel } from '../data/updates.ts';
+import DeviceCard from './DeviceCard.astro';
+import DownloadPanel from './DownloadPanel.vue';
+
+const [initialStable, initialBeta] = await Promise.all([
+  fetchUpdateChannel('stable'),
+  fetchUpdateChannel('beta'),
+]);
+---
+
+<div class="hero">
+  <div>
+    <span class="eyebrow">社区适配版</span>
+    <h1>{ site.name }</h1>
+    <p class="intro">{ site.intro }</p>
+    <DownloadPanel client:load initialStable={initialStable} initialBeta={initialBeta} />
+  </div>
+  <DeviceCard />
+</div>

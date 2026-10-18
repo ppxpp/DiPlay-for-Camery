@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hide_bottom_arrow">隱藏底部箭頭導覽（凱美瑞車機）</string>
+    <string name="settings_camry_hide_bottom_arrow_description">僅適用於凱美瑞先鋒車機。DiPlay 在前景時隱藏原車底部快捷箭頭；關閉此項或離開 DiPlay 後恢復。修改立即生效。</string>
+    <string name="settings_camry_usb_charging_advice">凱美瑞車機建議選擇 0.5A 或 1.5A，否則可能導致 USB 無法辨識 iPhone。</string>
+</resources>

@@ -5,17 +5,17 @@ import java.net.URLConnection
 
 internal object UpdateReleaseLookup {
     fun latest(
-        installedVersion: String,
+        installedVersionCode: Long,
         userAgent: String,
         openConnection: (URL) -> URLConnection = { it.openConnection() },
     ): UpdateRelease? {
         val json = UpdateClient.fetchText(
             UpdateClient.RELEASES_URL,
-            "application/vnd.github+json",
+            "application/json",
             userAgent,
             openConnection,
         )
         val release = UpdateCatalog.parse(json) ?: return null
-        return release.takeIf { UpdateVersion.isNewer(it.tagName, installedVersion) }
+        return release.takeIf { UpdateVersion.isNewer(it.versionCode, installedVersionCode) }
     }
 }

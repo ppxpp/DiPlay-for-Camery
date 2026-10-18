@@ -46,6 +46,20 @@ class NightModeSettingsTest {
         CarPlayBackgroundSession.clear()
     }
 
+    @Test fun freshDisplaySettingsSelectCamryNightMode() {
+        renderSettings()
+        assertTrue(button(R.string.carplay_night_mode).text.toString()
+            .endsWith(activity.getString(R.string.carplay_night_camry)))
+        assertAmbientVisible(false)
+        assertScheduleVisible(false)
+    }
+
+    @Test fun freshDisplaySettingsSelectLargeCarPlaySize() {
+        renderSettings()
+        assertTrue(button(R.string.carplay_size).text.toString()
+            .endsWith(activity.getString(R.string.option_size_large)))
+    }
+
     @Test fun savedModesShowAmbientSettingsOnlyForAmbientLight() {
         for (mode in CarPlayNightMode.entries) {
             AirPlayPersistence.saveCarPlayNightMode(activity, mode)
@@ -193,6 +207,7 @@ class NightModeSettingsTest {
         CarPlayNightMode.DAY -> R.string.carplay_night_day
         CarPlayNightMode.NIGHT -> R.string.carplay_night_night
         CarPlayNightMode.SCHEDULE -> R.string.carplay_night_schedule
+        CarPlayNightMode.CAMRY -> R.string.carplay_night_camry
     }
 
     private fun appearanceSummary(mode: CarPlayNightMode) =

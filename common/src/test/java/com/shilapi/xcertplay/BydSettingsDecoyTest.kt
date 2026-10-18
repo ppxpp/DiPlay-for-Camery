@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.content.ComponentName
 import android.content.IntentFilter
+import android.os.Build
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
@@ -111,6 +112,21 @@ class BydSettingsDecoyTest {
         install(bydBluetooth)
 
         bluetoothButton().performClick()
+
+        assertEquals(Settings.ACTION_BLUETOOTH_SETTINGS, started().action)
+    }
+
+    /** Android 7.0, which DiPlay also installs on, has no audited BYD build either, so it is left alone too. */
+    @Test @Config(sdk = [25])
+    fun theDecoyIsIgnoredBelowAndroid71() {
+        resolveTo(decoy, Settings.ACTION_BLUETOOTH_SETTINGS)
+        install(bydBluetooth)
+        ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", Build.VERSION_CODES.N)
+        try {
+            bluetoothButton().performClick()
+        } finally {
+            ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", Build.VERSION_CODES.N_MR1)
+        }
 
         assertEquals(Settings.ACTION_BLUETOOTH_SETTINGS, started().action)
     }

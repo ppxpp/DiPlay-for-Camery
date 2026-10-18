@@ -1,0 +1,59 @@
+---
+import { site } from '../data/site.ts';
+
+const items = [
+  {
+    title: '安装教程',
+    text: '前置条件与权限授予、无线与有线两种连接方式的首次连接步骤、装好后建议修改的设置。',
+    url: site.docs.install
+  },
+  {
+    title: '能做什么',
+    text: '车机音频通道、方向盘按键、本机音乐隔离、仪表盘显示与日夜模式的详细说明。',
+    url: site.docs.features
+  },
+  {
+    title: '已知问题',
+    text: '当前仍会出现的卡顿、掉线与功能不生效情况，以及每一项对应的规避设置。',
+    url: site.docs.knownIssues
+  }
+];
+---
+
+<ul class="docs">
+  {
+    items.map((item) =>
+      item.url ? (
+        <li>
+          <a class="doc-link" href={item.url} target="_blank" rel="noopener">
+            <h3>
+              {item.title}
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M4.5 11.5 11.5 4.5M11.5 4.5H6M11.5 4.5V10"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </h3>
+            <p>{item.text}</p>
+          </a>
+        </li>
+      ) : (
+        <li>
+          <div class="doc-link" aria-disabled="true">
+            <h3>
+              <span>
+                {item.title}
+                <span class="tag">待发布</span>
+              </span>
+            </h3>
+            <p>{item.text}</p>
+          </div>
+        </li>
+      )
+    )
+  }
+</ul>

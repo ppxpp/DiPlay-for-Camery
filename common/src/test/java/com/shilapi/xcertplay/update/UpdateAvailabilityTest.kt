@@ -20,17 +20,17 @@ class UpdateAvailabilityTest {
     @After fun clear() = UpdateAvailability.clearAllForTest(context)
 
     @Test fun persistsAReleaseThatIsNewerThanTheInstalledBuild() {
-        val release = release("v0.2.16")
+        val release = release("v0.3.0", 100L)
         UpdateAvailability.save(context, release)
 
-        assertEquals(release, UpdateAvailability.available(context, "0.2.15"))
+        assertEquals(release, UpdateAvailability.available(context, 99L))
     }
 
     @Test fun removesAReleaseAfterTheAppCatchesUp() {
-        UpdateAvailability.save(context, release("v0.2.16"))
+        UpdateAvailability.save(context, release("v0.3.0", 100L))
 
-        assertNull(UpdateAvailability.available(context, "0.2.16"))
-        assertNull(UpdateAvailability.available(context, "0.2.15"))
+        assertNull(UpdateAvailability.available(context, 100L))
+        assertNull(UpdateAvailability.available(context, 101L))
     }
 
     @Test fun backgroundChecksDefaultOnAndPersistTheChoice() {
@@ -44,13 +44,13 @@ class UpdateAvailabilityTest {
             "Update check: background=on; lastSuccess=never; cachedRelease=none; lastResult=none (never); lastInstall=none (never)",
             UpdateAvailability.report(context, 10_000_000L),
         )
-        UpdateAvailability.save(context, release("v0.2.16"))
+        UpdateAvailability.save(context, release("v0.3.0", 100L))
         UpdateAvailability.recordAttempt(context, 10_000_000L - 5 * 60_000)
         UpdateAvailability.recordResult(context, 10_000_000L - 60_000, "no validated network (attempt 2)")
         UpdateAvailability.recordInstall(context, 10_000_000L - 2 * 60_000, "chooser uri=public installers=2")
         UpdateAvailability.saveBackgroundChecksEnabled(context, false)
         assertEquals(
-            "Update check: background=off; lastSuccess=5 min ago; cachedRelease=v0.2.16; " +
+            "Update check: background=off; lastSuccess=5 min ago; cachedRelease=v0.3.0; " +
                 "lastResult=no validated network (attempt 2) (1 min ago); " +
                 "lastInstall=chooser uri=public installers=2 (2 min ago)",
             UpdateAvailability.report(context, 10_000_000L),
@@ -67,8 +67,9 @@ class UpdateAvailabilityTest {
         assertTrue(UpdateAvailability.shouldCheck(context, now - 1))
     }
 
-    private fun release(tag: String) = UpdateRelease(
+    private fun release(tag: String, versionCode: Long) = UpdateRelease(
         tagName = tag,
+        versionCode = versionCode,
         apkName = "DiPlay-$tag.apk",
         apkUrl = "https://example.com/DiPlay-$tag.apk",
         checksumsUrl = "https://example.com/SHA256SUMS.txt",

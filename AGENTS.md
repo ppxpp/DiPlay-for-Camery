@@ -27,6 +27,17 @@ Set `ANDROID_HOME` or `local.properties` if Gradle cannot find the SDK.
 
 Temporary debugging, analysis, handoff, and test-progress Markdown that is not a maintained project document MUST be stored under `agent_docs/temporary/`, using subfolders when useful. The root `.gitignore` excludes this directory. Do not add per-file ignore rules or leave temporary notes scattered through tracked project paths. Keep durable product documentation, release notes, and regression guides in their normal tracked locations.
 
+## Camry adaptation regressions
+
+For changes to the vehicle adaptation or an upstream integration, the shared local/CI entry point is
+`scripts/check_vehicle_adaptation.sh`. Add `--with-wecarflow-baseline` when the private WeCarFlow
+baseline and decompiled tree are available. This builds a source-only validation APK, not an
+installable CarPlay package. Keep focused checks available for routine debugging.
+
+The protected behaviors, test boundaries and physical acceptance checklist are documented in
+[the adaptation regression guide](docs/vehicle-adaptation/2026-10-18-1112-凯美瑞适配防回归说明与实车验收清单.md).
+Keep process notes and test progress out of README files.
+
 ## Adding or moving a setting
 
 The Settings screen is grouped by driver goal, not by implementation.
@@ -55,7 +66,7 @@ Exception: a gated control that only its own audience sees, and that completes a
 Example: auto car hotspot needs ADB but appears only for car-hotspot users, so it is in Connection.
 
 Mark an experimental setting or card with the title suffix ` (experimental)`, never `· experimental`, a dash, or an `Experimental …` prefix.
-Each locale MUST use its existing form: `(تجريبي)`, `(experimental)`, `(экспериментально)`, `(експериментально)`, `（实验性）`, `（實驗性）`, `（実験的機能）`.
+Each locale MUST use its existing form: `(تجريبي)`, `(experimental)`, `(sperimentale)`, `(экспериментально)`, `(експериментально)`, `（实验性）`, `（實驗性）`, `（実験的機能）`.
 
 ### Add the code
 

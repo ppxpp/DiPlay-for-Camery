@@ -1,0 +1,10 @@
+name = "gtmc-app-updates"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-05-03"
+
+[vars]
+ASSET_BASE_URL = "https://updates-assets.app.gtmc.mgulu.com"
+
+[[r2_buckets]]
+binding = "META"
+bucket_name = "gtmc-app-updates-meta-prod"

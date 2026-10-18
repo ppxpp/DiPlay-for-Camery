@@ -69,6 +69,7 @@ class NcmUsbBridge internal constructor(
     private var readQueued = false
     private val readQueuePolicy = UsbReadQueuePolicy.forCurrentPlatform()
     private val readRequests = UsbRequestQueue(connection, "ncm-read-reaper")
+    private val traffic = NcmTrafficCounter()
     private val statusRunning = AtomicBoolean(statusEndpoint != null)
     private val statusThread = statusEndpoint?.let { endpoint ->
         Thread({ drainStatus(endpoint) }, "ncm-status-in").apply {
@@ -99,9 +100,10 @@ class NcmUsbBridge internal constructor(
         val block = Ntb16Codec.buildBatch(frames, seq)
         val writing = System.nanoTime()
         val native = com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()
-        // Framework bulkTransfer pins the heap during a NAK; keep upstream's short startup wait.
-        // The Pioneer native path copies first and retains its validated caller timeout.
-        val writeTimeout = if (!native && !bulkOutAccepted)
+        // Use upstream's short startup wait for both framework and native writes. Keep the old
+        // native caller-timeout alternative in source, disabled until comparative evidence exists.
+        val legacyNativeWait = native && com.shilapi.xcertplay.pioneer.LocalConnectionExperiments.NATIVE_LONG_INITIAL_WRITE
+        val writeTimeout = if (!legacyNativeWait && !bulkOutAccepted)
             minOf(timeoutMillis, NOT_READY_WRITE_TIMEOUT_MILLIS) else timeoutMillis
         val detail = if (native && com.shilapi.xcertplay.pioneer.PioneerDiagnostics.enabled)
             com.shilapi.xcertplay.pioneer.PioneerUsbNative.bulkWriteMeasured(connection.fileDescriptor, outEndpoint.address, block, writeTimeout) else null
@@ -133,6 +135,7 @@ class NcmUsbBridge internal constructor(
                 Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out became ready")
             }
         }
+        if (classification == WriteFailure.NONE) repeat(frames.size) { traffic.sent() }
         if (native && writeDiagnosticBudget-- > 0) runCatching { onDiagnostic(
             "NCM_TX transferred=$transferred expected=${block.size} frames=${frames.size} frameBytes=${frames.sumOf { it.size }} timeoutMs=$writeTimeout failure=$classification") }
         WriteResult(transferred, block.size, classification, writing - started, System.nanoTime() - writing, detail?.get(1) ?: 0, detail?.get(2) ?: 0)
@@ -165,6 +168,9 @@ class NcmUsbBridge internal constructor(
         bufferedSize = 0; optionalShortPacketPad = false; frames.clear(); frameTimes.clear(); queuedBytes = 0
         zero == 0 && one == 0
     } }
+
+    /** Frames to and from the iPhone so far, for a report line; see [NcmTrafficCounter]. */
+    fun trafficSummary(airPlayPort: Int?): String = traffic.summary(airPlayPort)
 
     /**
      * Returns the next complete Ethernet frame, or null when [timeoutMillis] elapses without one.
@@ -383,6 +389,7 @@ class NcmUsbBridge internal constructor(
         val queued = frameTimes.removeFirst()
         com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(readQueuedSession, "ncm-rx-frame-wait", System.nanoTime()-queued)
         queuedBytes -= frame.size
+        traffic.received(frame)
         return frame
     }
 

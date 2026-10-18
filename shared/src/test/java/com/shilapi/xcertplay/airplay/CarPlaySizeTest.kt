@@ -5,6 +5,12 @@ import org.junit.Test
 
 class CarPlaySizeTest {
     @Test
+    fun `Camry defaults to large with a 250 mm reported width`() {
+        assertEquals(CarPlaySize.LARGE, CarPlaySize.DEFAULT)
+        assertEquals(250, CarPlaySize.DEFAULT.widthMillimeters)
+    }
+
+    @Test
     fun `presets map back to themselves`() {
         CarPlaySize.entries.forEach { assertEquals(it, CarPlaySize.fromWidthMillimeters(it.widthMillimeters)) }
     }

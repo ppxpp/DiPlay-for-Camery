@@ -62,6 +62,8 @@ internal class AudioFocusCoordinator(
     private var mediaVolume = FULL_VOLUME
     private var closed = false
     private var focusGeneration = 0L
+    private var recoveryOnly = false
+    private var recoveryEpoch = 0L
     private var currentListener = listenerFor(focusGeneration)
     internal val listener: AudioManager.OnAudioFocusChangeListener get() = currentListener
 
@@ -119,15 +121,54 @@ internal class AudioFocusCoordinator(
             audioRouting.selectMediaSource(report)
         }
         active[track] = Entry(channel, attributes)
+        recoveryOnly = false
+        recoveryEpoch++
         refreshRequest()
         applyMediaVolume(track, active.getValue(track))
-        if (channel == AudioChannel.MEDIA && focusStream != null) {
-            Handler(Looper.getMainLooper()).postDelayed({
-                synchronized(this) {
-                    if (!closed && active.containsKey(track)) audioRouting.pauseLocalPlayer(appContext, report)
-                }
-            }, 500)
+        // The isolated playback guard pauses only already registered player peers. Never send
+        // ACTION_MEDIA_BUTTON here: Android cold-starts the original music Application for it.
+    }
+
+    /** Retry only on an externally confirmed source return; never selects a native source. */
+    @Synchronized
+    fun recoverVehicleMedia(): Boolean {
+        if (closed || manager == null || !audioRouting.available || independentSpeechTracks.isNotEmpty() ||
+            active.values.any { it.channel == AudioChannel.PHONE || it.channel == AudioChannel.ASSISTANT }) return false
+        val attributes = active.values.firstOrNull { it.channel == AudioChannel.MEDIA }?.attributes
+            ?: AudioAttributes.Builder().setLegacyStreamType(audioRouting.streamType(AudioChannel.MEDIA) ?: return false).build()
+        val stream = audioRouting.focusStream(attributes) ?: return false
+        if (request == null) {
+            focusGeneration++
+            currentListener = listenerFor(focusGeneration)
+            request = AudioFocusRequestCompat(AudioManager.AUDIOFOCUS_GAIN, attributes, currentListener,
+                Handler(Looper.getMainLooper()), stream)
+            requestedChannel = AudioChannel.MEDIA
         }
+        val result = request!!.request(manager)
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
+        if (active.isEmpty()) {
+            recoveryOnly = true
+            val epoch = ++recoveryEpoch
+            Handler(Looper.getMainLooper()).postDelayed({
+                synchronized(this) { if (recoveryEpoch == epoch) cancelVehicleRecovery() }
+            }, 3000L)
+        }
+        report("Audio: source return focus granted=$result activeTracks=${active.size} streamType=$stream")
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    /** Only a temporary no-track request is ours to cancel; active renderer focus is untouched. */
+    @Synchronized
+    fun cancelVehicleRecovery() {
+        if (!recoveryOnly) return
+        recoveryOnly = false
+        recoveryEpoch++
+        if (active.isNotEmpty()) return
+        val previous = request
+        request = null
+        requestedChannel = null
+        focusGeneration++
+        manager?.let { previous?.abandon(it) }
     }
 
     @Synchronized
@@ -273,6 +314,15 @@ class AndroidMediaSink(
         onAudioDiagnostic,
     )
 
+    fun hasMediaAudio(): Boolean = synchronized(mediaAudioTypes) { mediaAudioTypes.isNotEmpty() }
+
+    fun canRecoverVehicleMedia(): Boolean = microphoneUplinks.isEmpty() &&
+        audioRenderers.keys.none { it.audioType in setOf("telephony", "speechRecognition", "alert") }
+
+    fun recoverVehicleMediaFocus(): Boolean = canRecoverVehicleMedia() && audioFocusCoordinator.recoverVehicleMedia()
+
+    fun cancelVehicleMediaRecovery() = audioFocusCoordinator.cancelVehicleRecovery()
+
     /** The media-key session may own Android's current focus request for this same sink. */
     fun onMediaAudioFocusChanged(change: Int) {
         audioFocusCoordinator.onExternalFocusChange(change)
@@ -306,6 +356,7 @@ class AndroidMediaSink(
         audioRenderers.values.forEach { it.setNavigationAttenuationDb(navigationAttenuationDb) }
     }
     private val microphoneUplinks = ConcurrentHashMap<AudioStreamId, MicrophoneUplink>()
+    private var microphoneClosed = false // guarded by this
     private val audioModeLock = Any()
     private var communicationModeStream: AudioStreamId? = null
     private var savedAudioMode = AudioManager.MODE_NORMAL
@@ -363,10 +414,17 @@ class AndroidMediaSink(
      * surface change queued before this: one already elsewhere has nothing to do. With [parkMain] the
      * main-screen decoder moves to an offscreen consumer it owns and keeps its state (smooth video, so the
      * picture can return at once); other decoders are released. Decoders closed earlier whose workers have
-     * not exited yet are waited for too. [SurfaceDetach.await] returns the result.
+     * not exited yet are waited for too. [SurfaceDetach.await] returns the result. Hosts retiring several
+     * sinks may share absolute [deadlineNanos] and [graceDeadlineNanos] so waiting never multiplies
+     * the timeout by the number of sinks. The defaults preserve the normal holder-release barrier.
      */
-    fun beginSurfaceDetach(surface: Surface, parkMain: Boolean): SurfaceDetach {
-        val deadline = System.nanoTime() + detachTimeoutNanos
+    fun beginSurfaceDetach(
+        surface: Surface,
+        parkMain: Boolean,
+        deadlineNanos: Long = System.nanoTime() + detachTimeoutNanos,
+        graceDeadlineNanos: Long = deadlineNanos + detachGraceNanos,
+    ): SurfaceDetach {
+        val deadline = deadlineNanos
         val requests = ArrayList<SurfaceDetachRequest>()
         val steps = ArrayList<() -> Boolean>()
         synchronized(videoOwnershipLock) {
@@ -375,10 +433,10 @@ class AndroidMediaSink(
             for ((type, decoder) in videoDecoders.entries.toList()) {
                 val request = decoder.requestDetach(surface, park = parkMain && type == MAIN_SCREEN_TYPE)
                 requests += request
-                steps += { settleDetach(type, decoder, request, deadline) }
+                steps += { settleDetach(type, decoder, request, deadline, graceDeadlineNanos) }
             }
             closingVideoDecoders.removeIf { it.exited }
-            closingVideoDecoders.toList().forEach { closing -> steps += { closing.awaitExitUntil(deadline + detachGraceNanos) } }
+            closingVideoDecoders.toList().forEach { closing -> steps += { closing.awaitExitUntil(graceDeadlineNanos) } }
         }
         return SurfaceDetach(requests, steps)
     }
@@ -396,13 +454,19 @@ class AndroidMediaSink(
         fun await(): Boolean = steps.map { it() }.all { it }
     }
 
-    private fun settleDetach(type: Int, decoder: VideoDecoder, request: SurfaceDetachRequest, deadline: Long): Boolean {
+    private fun settleDetach(
+        type: Int,
+        decoder: VideoDecoder,
+        request: SurfaceDetachRequest,
+        deadline: Long,
+        graceDeadline: Long,
+    ): Boolean {
         if (decoder.awaitDetach(request, deadline)) return true
         Log.w("xcertplay-usb", "Video detach not confirmed in time type=$type; closing that decoder")
         videoDiagnosticHandlers[type]?.invoke("surface detach not confirmed; decoder closed")
         // The stream's next frame starts a fresh decoder on no surface, so it cannot compete for this one.
         retire(type, decoder)
-        return decoder.awaitExitUntil(deadline + detachGraceNanos)
+        return decoder.awaitExitUntil(graceDeadline)
     }
 
     /** Closes a stream's decoder and keeps it visible to surface detaches until its worker exits. */
@@ -574,14 +638,18 @@ class AndroidMediaSink(
         if (before != after) onMediaAudioChanged(after)
     }
 
+    @Synchronized
     override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) {
+        if (microphoneClosed) return
         // This callback runs on the downlink thread; microphone failures must not stop playback.
         try {
+            MicrophoneProbe.stop()
             val speakerphoneCall = config.audioType == "telephony" &&
                 appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)
             if (config.audioType == "telephony" && !speakerphoneCall) enterCommunicationMode(id)
             val uplink = microphoneUplinks.computeIfAbsent(id) {
                 MicrophoneUplink(config, onAudioDiagnostic,
+                    applicationPackage = appContext?.packageName,
                     speakerphoneCall = speakerphoneCall,
                     echoReference = if (config.audioType == TELEPHONY_AUDIO_TYPE) callEchoReferences[id] else null)
             }
@@ -596,12 +664,20 @@ class AndroidMediaSink(
         }
     }
 
+    @Synchronized
     override fun onMicrophoneStopped(id: AudioStreamId) {
         try {
             microphoneUplinks.remove(id)?.close()
         } finally {
             restoreAudioMode(id)
         }
+    }
+
+    @Synchronized
+    fun startMicrophoneProbe(context: android.content.Context, choice: String) {
+        check(!microphoneClosed) { "Media sink is closed" }
+        check(microphoneUplinks.isEmpty()) { "Wait until the current call or Siri finishes" }
+        MicrophoneProbe.start(context.applicationContext, choice, onAudioDiagnostic)
     }
 
     private fun enterCommunicationMode(id: AudioStreamId) {
@@ -694,11 +770,15 @@ class AndroidMediaSink(
         callEchoReferences.clear()
         val hadMedia = synchronized(mediaAudioTypes) { mediaAudioTypes.isNotEmpty().also { mediaAudioTypes.clear() } }
         if (hadMedia) onMediaAudioChanged(false)
-        try {
-            microphoneUplinks.values.forEach(MicrophoneUplink::close)
-        } finally {
-            microphoneUplinks.clear()
-            restoreAudioMode(null)
+        synchronized(this) {
+            microphoneClosed = true
+            val probeStopped = runCatching { MicrophoneProbe.stop(); true }.getOrDefault(false)
+            try {
+                microphoneUplinks.values.forEach(MicrophoneUplink::close)
+            } finally {
+                microphoneUplinks.clear()
+                if (probeStopped) restoreAudioMode(null)
+            }
         }
     }
 
@@ -914,7 +994,7 @@ private class VideoDecoder(
     private val preferSoftwareHevcDecoder: Boolean,
     private val requestKeyFrame: () -> Unit,
     private val report: (String) -> Unit,
-    statsLabel: String? = null,
+    private val statsLabel: String? = null,
     pacingDelayNanos: Long = 0L,
     /** Called on the worker as its last step, after it has released its codec. */
     private val onExit: (VideoDecoder) -> Unit = {},
@@ -1091,10 +1171,8 @@ private class VideoDecoder(
         try {
             while (running) {
                 val job = queue.poll(5)
-                outputFailure?.let { failure ->
-                    outputFailure = null
-                    onJobFailure("output", failure)
-                }
+                // Keep the output gate closed until releaseDecoder retires the failed codec.
+                outputFailure?.let { failure -> onJobFailure("output", failure) }
                 try {
                     when (job) {
                         is VideoJob.Config -> configureDecoder(job)
@@ -1159,6 +1237,11 @@ private class VideoDecoder(
         // MTK vendor failures may surface as CodecException or the broader IllegalStateException.
         // Retire the active experimental mode before recreating the decoder.
         if (error is IllegalStateException) {
+            if (com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder &&
+                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder = false
+                report("Freescale no-reorder comparison disabled after codec failure")
+            }
             dropMtkTuning("codec failed during $stage")
             dropMtkCodec2LowLatency("codec failed during $stage")
         }
@@ -1395,6 +1478,15 @@ private class VideoDecoder(
             configuredVendorLowLatency = vendorKeys.isNotEmpty()
             val pictureOrder = attempt.tuned && atOnce && listsPictureOrder(codec)
             if (pictureOrder) format.setInteger(PICTURE_ORDER_PARAMETER, 1)
+            if (streamType == MAIN_SCREEN_TYPE && statsLabel == null &&
+                mime == MediaFormat.MIMETYPE_VIDEO_AVC && createdName.startsWith("OMX.Freescale.") &&
+                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() &&
+                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder) {
+                // NXP ACodec vendor extension, not the unrelated Qualcomm low-latency keys.
+                // Explicit comparison only until validated on this firmware and this stream.
+                format.setString("disreorder", "1")
+                report("Freescale disable AVC reorder requested via disreorder=1")
+            }
             codec.configure(format, surface, null, 0)
             phase = "start"
             phaseStartNs = System.nanoTime()
@@ -1410,6 +1502,11 @@ private class VideoDecoder(
             val elapsedMs = (System.nanoTime() - startedNs) / 1_000_000
             runCatching { candidate?.release() }.onFailure {
                 Log.w(TAG, "video decoder candidate release failed name=$codecName", it)
+            }
+            if (codecName.startsWith("OMX.Freescale.") &&
+                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder) {
+                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder = false
+                report("Freescale no-reorder comparison refused; next attempt uses default")
             }
             reportFailure("stage=configure phase=$phase phaseMs=$phaseMs elapsedMs=$elapsedMs " +
                 "tuned=${attempt.tuned} operatingRate=${attempt.operatingRate} " +
@@ -1738,6 +1835,7 @@ private class VideoDecoder(
         synchronized(outputLock) {
             codec = decoder
             decoder = null
+            outputFailure = null
             // The output thread returns from dequeueOutputBuffer within its timeout and then sees no codec.
             awaitNotDequeuing(codec)
         }
@@ -1863,9 +1961,6 @@ private class AudioRenderer(
     private var track: AudioTrack? = null
     @Volatile private var navigationAttenuationDb = 0
     private var appliedNavigationAttenuationDb: Int? = null
-    private var lastNavigationGainAttemptDb: Int? = null
-    private var lastNavigationGainFailureNs = 0L
-    private var reportedNavigationGainFailureDb: Int? = null
     private var pcm = ByteArray(64 * 1024)
     private var playbackStarted = false
     private var prebufferBytes = 0
@@ -1882,6 +1977,12 @@ private class AudioRenderer(
     private var outputBuffers = 0
     private var firstPcmLogged = false
     private val packetsReceived = AtomicInteger()
+    private val receivedBytes = AtomicLong()
+    private var pcmBytesThisWindow = 0L
+    private var writtenBytesThisWindow = 0L
+    private var unwrittenBytesThisWindow = 0L
+    private val writeExitCounts = linkedMapOf<String, Int>()
+    private var clockTrimApplied = true
     private val packetsDropped = AtomicInteger()
     private val lastArrivalNs = AtomicLong()
     private val maxArrivalGapMs = AtomicLong()
@@ -1890,6 +1991,7 @@ private class AudioRenderer(
     private val ambientMedia = AmbientMusicActivityPolicy.acceptsAudio(format.audioType, format.payloadType)
     private val ambientEnvelope = AmbientMusicEnvelope()
     private val ambientBass = AmbientMusicBassAnalyzer(format.sampleRate, pcmChannels)
+    private val ambientBands = AmbientMusicBandAnalyzer(format.sampleRate, pcmChannels)
     private var ambientRendererToken = 0L
     private var writtenFramesThisWindow = 0L
     private var writeErrorsThisWindow = 0
@@ -1926,6 +2028,7 @@ private class AudioRenderer(
     fun submit(rtp: ByteArray, sample: Int) {
         if (started) {
             packetsReceived.incrementAndGet()
+            receivedBytes.addAndGet(rtp.size.toLong())
             val now = System.nanoTime()
             val previous = lastArrivalNs.getAndSet(now)
             if (previous != 0L) maxArrivalGapMs.accumulateAndGet((now - previous) / 1_000_000L, ::maxOf)
@@ -1985,8 +2088,7 @@ private class AudioRenderer(
             diagnosticStage = "focus"
             requestAudioFocus()
             while (running) {
-                // Apply pending Settings changes on this worker, never on the UI thread.
-                // Also handles quiet navigation tracks with no incoming PCM.
+                // Report Settings changes from this worker, never from the UI thread, also between prompts.
                 applyNavigationAttenuation()
                 diagnosticStage = "packet"
                 queue.poll(AUDIO_POLL_MILLIS, TimeUnit.MILLISECONDS)?.let {
@@ -2186,33 +2288,25 @@ private class AudioRenderer(
         navigationAttenuationDb = NavigationAudioGain.clamp(db)
     }
 
-    /** Worker-thread only: never call AudioTrack APIs from a Settings callback. */
+    /**
+     * Worker-thread only. The guidance is scaled in [attenuateNavigation] as it is written, not with
+     * AudioTrack.setVolume: on a BYD DiLink 3.0 the track accepted every setVolume and the guidance on
+     * stream 14 stayed as loud (#719). Each change is reported once, when it reaches this stream.
+     */
     private fun applyNavigationAttenuation() {
         if (mappedChannel != AudioChannel.NAVIGATION) return
-        val playingTrack = track ?: return
         val requestedDb = navigationAttenuationDb
         // Leave default playback exactly as it was before this setting existed.
         if (requestedDb == 0 && appliedNavigationAttenuationDb == null) return
         if (appliedNavigationAttenuationDb == requestedDb) return
-        // Some head units reject setVolume for an entire stream. Avoid retrying on every
-        // 10 ms poll/PCM write and flooding diagnostics, but recover from transient failures.
-        if (lastNavigationGainAttemptDb == requestedDb && lastNavigationGainFailureNs != 0L &&
-            System.nanoTime() - lastNavigationGainFailureNs < NAVIGATION_GAIN_RETRY_NS) return
-        val gain = NavigationAudioGain.linear(requestedDb)
-        val success = runCatching { playingTrack.setVolume(gain) == AudioTrack.SUCCESS }.getOrDefault(false)
-        lastNavigationGainAttemptDb = requestedDb
-        if (success) {
-            appliedNavigationAttenuationDb = requestedDb
-            lastNavigationGainFailureNs = 0L
-            reportedNavigationGainFailureDb = null
-            runCatching { report("Audio: navigation attenuation=" + requestedDb + "dB applied=true") }
-        } else {
-            lastNavigationGainFailureNs = System.nanoTime()
-            if (reportedNavigationGainFailureDb != requestedDb) {
-                reportedNavigationGainFailureDb = requestedDb
-                runCatching { report("Audio: navigation attenuation=" + requestedDb + "dB applied=false") }
-            }
-        }
+        appliedNavigationAttenuationDb = requestedDb
+        runCatching { report("Audio: navigation attenuation=" + requestedDb + "dB applied=true") }
+    }
+
+    /** Lowers navigation guidance in the PCM itself; other channels and 0 dB pass through untouched. */
+    private fun attenuateNavigation(data: ByteArray, offset: Int, length: Int) {
+        if (mappedChannel != AudioChannel.NAVIGATION) return
+        NavigationAudioGain.scalePcm16(data, offset, length, navigationAttenuationDb)
     }
 
     private fun audioAttributesFor(
@@ -2495,7 +2589,12 @@ private class AudioRenderer(
     }
 
     private fun writePcm(data: ByteArray, offset: Int = 0, length: Int = data.size) {
-        val track = track ?: return
+        pcmBytesThisWindow += length
+        val track = track ?: run {
+            unwrittenBytesThisWindow += length
+            writeExitCounts["no-track"] = (writeExitCounts["no-track"] ?: 0) + 1
+            return
+        }
         diagnosticStage = "track-write"
         if (!firstPcmLogged && length > 0) {
             firstPcmLogged = true
@@ -2504,73 +2603,89 @@ private class AudioRenderer(
                 "audio first PCM type=${format.payloadType} bytes=$length",
             )
         }
-        voiceFilter?.process(data, offset, length)
-        if (!fadeApplied) {
-            applyFadeIn(data, offset, length)
-            fadeApplied = true
-        }
         var written = 0
         var stalledSinceNs = 0L
-        while (written < length && running) {
-            // Long-running PCM writes may span several slider adjustments.
+        var exitReason = "stopped"
+        try {
+            voiceFilter?.process(data, offset, length)
             applyNavigationAttenuation()
-            val writeLength = if (playbackStarted) {
-                length - written
-            } else {
-                minOf(length - written, PREBUFFER_WRITE_CHUNK_BYTES)
+            // Scale this PCM block once, before partial/nonblocking writes can retry its remainder.
+            attenuateNavigation(data, offset, length)
+            if (!fadeApplied) {
+                applyFadeIn(data, offset, length)
+                fadeApplied = true
             }
-            val writeStarted = System.nanoTime()
-            diagnosticStage = "track-write"
-            // A vehicle policy can require bounded writes while its output bus is inactive.
-            val count = track.write(data, offset + written, writeLength,
-                if (VehicleAudioRouting.selected.nonBlockingWrites) AudioTrack.WRITE_NON_BLOCKING else AudioTrack.WRITE_BLOCKING)
-            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
-            maxWriteMs = maxOf(maxWriteMs, (System.nanoTime() - writeStarted) / 1_000_000L)
-            if (count < 0) {
-                writeErrorsThisWindow++
-                lastWriteErrorCode = count
-                break
-            }
-            if (count == 0) {
-                zeroWritesThisWindow++
-                if (VehicleAudioRouting.selected.nonBlockingWrites) {
-                    if (stalledSinceNs == 0L) stalledSinceNs = System.nanoTime()
-                    if (System.nanoTime() - stalledSinceNs < 250_000_000L) {
-                        Thread.sleep(5)
-                        continue
+            while (written < length && running) {
+                val writeLength = if (playbackStarted) {
+                    length - written
+                } else {
+                    minOf(length - written, PREBUFFER_WRITE_CHUNK_BYTES)
+                }
+                val writeStarted = System.nanoTime()
+                diagnosticStage = "track-write"
+                // A vehicle policy can require bounded writes while its output bus is inactive.
+                val count = track.write(data, offset + written, writeLength,
+                    if (VehicleAudioRouting.selected.nonBlockingWrites) AudioTrack.WRITE_NON_BLOCKING else AudioTrack.WRITE_BLOCKING)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
+                maxWriteMs = maxOf(maxWriteMs, (System.nanoTime() - writeStarted) / 1_000_000L)
+                if (count < 0) {
+                    writeErrorsThisWindow++
+                    lastWriteErrorCode = count
+                    exitReason = "error-$count"
+                    break
+                }
+                if (count == 0) {
+                    zeroWritesThisWindow++
+                    if (VehicleAudioRouting.selected.nonBlockingWrites) {
+                        if (stalledSinceNs == 0L) stalledSinceNs = System.nanoTime()
+                        if (System.nanoTime() - stalledSinceNs < 250_000_000L) {
+                            Thread.sleep(5)
+                            continue
+                        }
+                    }
+                    exitReason = if (VehicleAudioRouting.selected.nonBlockingWrites) "stall-timeout" else "zero-write"
+                    break
+                }
+                stalledSinceNs = 0L
+                if (count < writeLength) partialWritesThisWindow++
+                val framesWritten = count / frameBytes
+                if (ambientMedia && AmbientMusicController.wantsPcm(ambientRendererToken)) {
+                    ambientEnvelope.append(totalWrittenFrames, framesWritten.toLong(),
+                        AmbientMusicEnvelope.pcmRms(data, offset + written, count),
+                        ambientBass.rms(data, offset + written, count),
+                        if (AmbientMusicController.wantsBands(ambientRendererToken)) ambientBands.analyze(data, offset + written, count) else null)
+                }
+                written += count
+                writtenBytesThisWindow += count
+                totalWrittenFrames += framesWritten
+                writtenFramesThisWindow += framesWritten
+                bufferProgress.written(count)
+                lastPcmWriteNs = System.nanoTime()
+                if (playbackStarted) reportNavigationPlayback(track)
+                if (playbackStarted) trimClock(track)
+                if (!playbackStarted) {
+                    prebufferBytes += count
+                    if (prebufferBytes >= startThresholdBytes) {
+                        startPlayback(track)
+                        Log.i(TAG, "audio playback started type=${format.payloadType}")
                     }
                 }
-                break
-            }
-            stalledSinceNs = 0L
-            if (count < writeLength) partialWritesThisWindow++
-            val framesWritten = count / frameBytes
-            if (ambientMedia && AmbientMusicController.wantsPcm(ambientRendererToken)) {
-                ambientEnvelope.append(totalWrittenFrames, framesWritten.toLong(),
-                    AmbientMusicEnvelope.pcmRms(data, offset + written, count),
-                    ambientBass.rms(data, offset + written, count))
-            }
-            written += count
-            totalWrittenFrames += framesWritten
-            writtenFramesThisWindow += framesWritten
-            bufferProgress.written(count)
-            lastPcmWriteNs = System.nanoTime()
-            if (playbackStarted) reportNavigationPlayback(track)
-            if (playbackStarted) trimClock(track)
-            if (!playbackStarted) {
-                prebufferBytes += count
-                if (prebufferBytes >= startThresholdBytes) {
-                    startPlayback(track)
-                    Log.i(TAG, "audio playback started type=${format.payloadType}")
+                echoReference?.let { reference ->
+                    val pending = if (playbackStarted) {
+                        totalWrittenFrames - (track.playbackHeadPosition.toLong() and 0xffffffffL)
+                    } else {
+                        null
+                    }
+                    reference.append(data, offset + written - count, count, pcmChannels, pending, System.nanoTime())
                 }
             }
-            echoReference?.let { reference ->
-                val pending = if (playbackStarted) {
-                    totalWrittenFrames - (track.playbackHeadPosition.toLong() and 0xffffffffL)
-                } else {
-                    null
-                }
-                reference.append(data, offset + written - count, count, pcmChannels, pending, System.nanoTime())
+        } catch (error: Throwable) {
+            exitReason = if (error is InterruptedException) "interrupted" else "exception"
+            throw error
+        } finally {
+            if (written < length) {
+                unwrittenBytesThisWindow += length - written
+                writeExitCounts[exitReason] = (writeExitCounts[exitReason] ?: 0) + 1
             }
         }
     }
@@ -2604,15 +2719,26 @@ private class AudioRenderer(
     }
 
     private fun trimClock(track: AudioTrack) {
-        val trim = clockTrim ?: return
+        if (mappedChannel != AudioChannel.MEDIA) return
+        val enabled = com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.audioClockTrimEnabled
+        if (enabled != clockTrimApplied) {
+            val result = runCatching { track.setPlaybackRate(format.sampleRate) }.getOrDefault(AudioTrack.ERROR)
+            report("Audio: clock trim comparison enabled=$enabled resetResult=$result")
+            if (result != AudioTrack.SUCCESS) return
+            clockTrimApplied = enabled
+            // Start a fresh controller after the fixed-rate interval; do not reuse its stale level.
+            clockTrim = MediaClockTrim(format.sampleRate, (startThresholdBytes / frameBytes).toLong())
+        }
+        if (!enabled) return
+        val activeTrim = clockTrim ?: return
         val now = System.nanoTime()
         val compressedRtpFrames = mediaLagGuard?.pendingFrames(queue, newestRtpSample, AudioPacket::sample)
             ?: 0L
         val compressedPcmFrames = compressedRtpFrames * format.sampleRate /
             format.rtpClockRate.coerceAtLeast(1)
-        trim.sample(bufferProgress.queuedBytes(track.playbackHeadPosition) / frameBytes,
+        activeTrim.sample(bufferProgress.queuedBytes(track.playbackHeadPosition) / frameBytes,
             now, compressedPcmFrames)
-        val rate = trim.rateDue(now) ?: return
+        val rate = activeTrim.rateDue(now) ?: return
         val result = runCatching { track.setPlaybackRate(rate) }.getOrDefault(AudioTrack.ERROR)
         if (result != AudioTrack.SUCCESS) {
             // The track keeps its rate; music then plays as it did before the trim.
@@ -2697,6 +2823,18 @@ private class AudioRenderer(
             Log.i(STATS_TAG, decoderLine)
             runCatching { report(decoderLine) }
         }
+        val ioLine = "Audio: io stats audioType=${format.audioType} " +
+            "rxBytes=${receivedBytes.getAndSet(0)} pcmBytes=$pcmBytesThisWindow " +
+            "writtenBytes=$writtenBytesThisWindow unwrittenBytes=$unwrittenBytesThisWindow " +
+            "writeExits=${writeExitCounts.entries.joinToString(",") { "${it.key}:${it.value}" }.ifEmpty { "none" }} " +
+            "clockTrimEnabled=${com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.audioClockTrimEnabled} " +
+            "actualPlaybackRate=${currentTrack?.playbackRate ?: -1} ended=$force"
+        Log.i(STATS_TAG, ioLine)
+        runCatching { report(ioLine) }
+        pcmBytesThisWindow = 0L
+        writtenBytesThisWindow = 0L
+        unwrittenBytesThisWindow = 0L
+        writeExitCounts.clear()
         statsLastUnderruns = underruns
         maxWriteMs = 0L
         writtenFramesThisWindow = 0L
@@ -2785,7 +2923,6 @@ private class AudioRenderer(
         const val INPUT_TIMEOUT_US = 10_000L
         const val AUDIO_INPUT_WAIT_NS = 100_000_000L
         const val AUDIO_POLL_MILLIS = 10L
-        const val NAVIGATION_GAIN_RETRY_NS = 500_000_000L
         const val BUFFER_TAIL_WAIT_NS = 500_000_000L
         // Holds a burst after a Wi-Fi gap (~4 s of AAC) instead of dropping it.
         const val MAX_QUEUED_PACKETS = 192
