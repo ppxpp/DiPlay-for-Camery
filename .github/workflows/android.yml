@@ -1,4 +1,4 @@
-name: Android checks
+name: Android checks (diplay)
 on:
   push:
     branches: [main]

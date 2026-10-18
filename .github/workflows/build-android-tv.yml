@@ -1,4 +1,4 @@
-name: Build DiPlay Android TV source APK
+name: Build DiPlay Android TV source APK (diplay)
 
 on:
   workflow_dispatch:
