@@ -1,0 +1,28 @@
+{
+  "name": "gtmc-app-updates",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic app update manifest service on Cloudflare Pages Functions + R2",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "npm run build && wrangler pages dev dist",
+    "build": "node scripts/build-site.mjs",
+    "site:dev": "npm --prefix site run dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name gtmc-app-updates --branch main",
+    "publish:release": "node scripts/publish-update.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.86.0"
+  }
+}

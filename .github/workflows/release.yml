@@ -162,7 +162,7 @@ jobs:
         run: |
           RELEASE_DIR="$RUNNER_TEMP/release"
           mkdir -p "$RELEASE_DIR"
-          APK_NAME="DiPlay-${APP_VERSION}.apk"
+          APK_NAME="${VERSION_NAME}.apk"
           cp mobile/build/outputs/apk/release/mobile-release.apk "$RELEASE_DIR/$APK_NAME"
           (
             cd "$RELEASE_DIR"
@@ -173,6 +173,7 @@ jobs:
           ASSET_PREFIX="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/${APP_VERSION}"
           jq -n \
             --arg version "$APP_VERSION" \
+            --arg versionName "$VERSION_NAME" \
             --argjson versionCode "$VERSION_CODE" \
             --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg name "$APK_NAME" \
@@ -183,6 +184,7 @@ jobs:
             '{
               schemaVersion: 1,
               version: $version,
+              versionName: $versionName,
               versionCode: $versionCode,
               publishedAt: $publishedAt,
               mandatory: false,
@@ -243,8 +245,8 @@ jobs:
         run: |
           API_URL="${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/latest"
           for attempt in 1 2 3 4 5; do
-            if BODY="$(curl -fsS "$API_URL")" && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" '.version == $version' > /dev/null; then
-              echo "Verified $API_URL -> $APP_VERSION"
+            if BODY="$(curl -fsS "$API_URL")" && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" --arg versionName "$VERSION_NAME" '.version == $version and .versionName == $versionName' > /dev/null; then
+              echo "Verified $API_URL -> $APP_VERSION ($VERSION_NAME)"
               exit 0
             fi
             echo "Waiting for $API_URL to report $APP_VERSION (attempt $attempt)"
@@ -263,3 +265,21 @@ jobs:
             ${{ env.RELEASE_DIR }}/latest.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Set up Node for the update site
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            update-service/package-lock.json
+            update-service/site/package-lock.json
+
+      - name: Deploy the update site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          npm ci --prefix update-service
+          npm ci --prefix update-service/site
+          npm --prefix update-service run deploy
