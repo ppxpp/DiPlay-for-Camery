@@ -67,14 +67,14 @@ v1 没有反向会话查询或请求级 generation。中央桥接进程重启会
 
 `GuardNotice`负责提示窗口，`GuardNoticePolicy`只保存内存中的提示状态，两者不调用保护的acquire/release。`tests/test_guard_notice.py`执行实际Java回调，检查无保护不弹、迟到握手、内部跳页、再次进入、勾选抑制、断开重连仍抑制、重启恢复以及保护不受影响。该测试使用Android替身，不代替车机UI实测。
 
-双方策略与提示规则的通俗说明见[DiPlay与WeCarFlow冲突处理及弹窗说明](../docs/vehicle-adaptation/2026-10-16-2238-DiPlay与WeCarFlow冲突处理及弹窗说明.md)。
+双方策略与提示规则遵循前述连接状态与保护状态边界。
 
 
 ## 仅启动 DiPlay 桥接（carplay.3）
 
 保护服务和中央状态提供者位于 `:carplayguard` 独立进程，跳过原 FlowApplication 业务初始化，仅登记 PAL 前后曲。DiPlay v90 起启动时预绑定这项服务，CarPlay 实际连接后才 acquire；不会为了绑定、暂停、提示或歌曲同步拉起原主进程。已运行的主进程和核心进程通过 Binder 登记，中央重启时重新登记。
 
-实际安装说明以 [2026-10-17 16:01 改造与验证记录](../docs/vehicle-adaptation/2026-10-17-1601-DiPlay仅启动WeCarFlow方控桥接的改造与验证.md) 为准。当前车机 carplay.2 已确认与新包签名一致，可以覆盖升级，不需要卸载或清数据。该现场确认不代表其他原厂签名安装也能覆盖。
+覆盖升级能力取决于目标设备与安装包的签名是否匹配；单台车机的验证结果不代表其他原厂签名设备也能覆盖。
 
 ## 当前维护方式（2026-10-17）
 

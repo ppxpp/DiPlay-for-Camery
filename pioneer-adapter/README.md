@@ -2,11 +2,11 @@
 
 本模块把已在 usbcheck 成功验证的 USB 接管方式接入正式 DiPlay，并提供手机占用 USB 时的 TCP 调试。它不实现另一套 CarPlay 协议，不自动授予 VPN 权限。
 
-整体数据流、线程调度、缓冲与性能卡点见根目录 [lwIP 技术架构文档](../../2026-10-14-DiPlay接入lwIP后的技术架构与性能卡点.md)。首次成功后重连仍不稳定，当前最新失败位于 USB 网络发送恢复，不能将下述成功记录理解为稳定性已解决。
+整体数据流、线程调度与缓冲由本模块源码实现；首次连接成功不代表重连稳定性已经通过验收。
 
 ## 按优化方案编写的新版本
 
-`0.2.19-pioneer-lwip6-hud-test` / versionCode 49 已完成代码和本机验证，尚未进行车机实测。新增单独USB发送线程、有界FIFO、分阶段截止时间、有限接口/整轮恢复、触控MOVE合并、显式端口租约及分段直方图。原有视频参考链和媒体参数保持基线，先用新计时定位再做参数对照。完整实现与验证边界见根目录架构文档第17节。
+`0.2.19-pioneer-lwip6-hud-test` / versionCode 49 已完成代码和本机验证，尚未进行车机实测。新增单独USB发送线程、有界FIFO、分阶段截止时间、有限接口/整轮恢复、触控MOVE合并、显式端口租约及分段直方图。原有视频参考链和媒体参数保持基线，先用新计时定位再做参数对照。实现边界以当前源码和可重复的检查入口为准。
 
 TCP调试新增 `lwip-diagnostics --mode ON|OFF`，可以即时切换聚合计时做观测开销对照；`status`包含会话阶段时间线和队列状态。现有 `stop`、`start-wired`、`logs`、`export`、`update`仍可使用。
 
@@ -14,7 +14,7 @@ TCP调试新增 `lwip-diagnostics --mode ON|OFF`，可以即时切换聚合计�
 
 成功版 `0.2.18-pioneer-lwip3-hud-test` / versionCode 46，包名仍为 `com.gtmc.app.fengyunyx.b819`。车机采用新线、USB充电设置0.5A。配对/MFi通过，lwIP TCP握手、AirPlay加密、事件/视频TCP、媒体/导航UDP均建立，硬件解码首帧与持续视频、触控往返、AudioTrack播放进度有日志。实际听感、麦克风/Siri、重启/拔插重连和长时稳定性尚未全面验证。
 
-目标USB适配启用时默认LWIP，不建立TUN，不依赖VPN授权。原VPN只作为可切换对照保留；普通车机继续原方案。TCP调试保持LAN8721可达。lwIP从NCM帧学习手机IPv6/MAC，以本APP UID的本机端口转发到127.0.0.1，代理源127.0.0.2；NTP/麦克风手机端口各有轻量注册调用。原CarPlay加密、音视频逻辑保留。实现原理见 [LWIP验证路线.md](LWIP验证路线.md)，实测见 [成功记录](../evidence/pioneer-usb-integration-20261014/lwIP有线CarPlay成功记录.md)。
+目标USB适配启用时默认LWIP，不建立TUN，不依赖VPN授权。原VPN只作为可切换对照保留；普通车机继续原方案。TCP调试保持LAN8721可达。lwIP从NCM帧学习手机IPv6/MAC，以本APP UID的本机端口转发到127.0.0.1，代理源127.0.0.2；NTP/麦克风手机端口各有轻量注册调用。原CarPlay加密、音视频逻辑保留。具体实现以当前源码为准。
 
 网络路线切换：先stop，等待会话结束，执行 `network-backend --mode VPN` 或 `network-backend --mode LWIP`，再start-wired。VPN对照仍需授权且受本车机tun0接口过滤；不要把原VPN失败误判为USB失败。`network`读取固定系统诊断项，export包括network.json。lwIP状态由status.networkBackend/lwipActive/lwipStatus确认。
 
@@ -124,7 +124,7 @@ TCP 与无线 CarPlay 共用车机有限的允许端口。虽然优先选择 872
 
 ### 音乐连续性对照（v74 起）
 
-`audio-clock-trim --mode OFF` 将目标先锋车机的媒体 AudioTrack 恢复为音源采样率；`ON` 恢复上游速度校正。仅用于已识别车机的同会话单变量对照，不保存偏好，进程重启恢复设备默认：v77 起仅已识别的 SABRESD_MX6DQ/tamago/API25 车机有线 LWIP 会话默认固定音源速率，其他设备和连接路径仍默认开启上游校正。v76 的设备级默认曾覆盖该车机无线模式，v77收窄此范围。实测对照见[续测记录](../2026-10-16-车机音乐连续性与视频低延迟续测记录.md)。`status.audioClockTrimEnabled` 是当前有效状态，`audioClockTrimOverride` 为 `null` 时表示自动默认，布尔值表示运行时覆盖；实际生效须同时检查 `Audio: clock trim comparison` 的 `resetResult=0` 和下一窗口 `Audio: io stats` 的 `actualPlaybackRate`。
+`audio-clock-trim --mode OFF` 将目标先锋车机的媒体 AudioTrack 恢复为音源采样率；`ON` 恢复上游速度校正。仅用于已识别车机的同会话单变量对照，不保存偏好，进程重启恢复设备默认：v77 起仅已识别的 SABRESD_MX6DQ/tamago/API25 车机有线 LWIP 会话默认固定音源速率，其他设备和连接路径仍默认开启上游校正。v76 的设备级默认曾覆盖该车机无线模式，v77收窄此范围。实测对照记录保存在本地临时目录。`status.audioClockTrimEnabled` 是当前有效状态，`audioClockTrimOverride` 为 `null` 时表示自动默认，布尔值表示运行时覆盖；实际生效须同时检查 `Audio: clock trim comparison` 的 `resetResult=0` 和下一窗口 `Audio: io stats` 的 `actualPlaybackRate`。
 
 先保持同一音乐、缓冲、100% 分辨率及 60 帧设置采集数分钟，再按 ON → OFF → ON 比较，每段用完整 `export` 保存报告。新 `Audio: io stats` 分别记录收到的 RTP 总字节（含头部）、送入写入函数的 PCM 字节、AudioTrack 接受的字节、未写完字节与退出原因；RTP 和 PCM 字节不可直接相减。PCM 应满足 `pcmBytes = writtenBytes + unwrittenBytes`，停止会话的末尾窗口单独统计。`stall-timeout` 表示连续零写入达到现有约 250ms 上限，`error-*` 为 AudioTrack 错误，另区分停止、线程中断、异常和无 track。
 
@@ -133,6 +133,6 @@ TCP 与无线 CarPlay 共用车机有限的允许端口。虽然优先选择 872
 
 ### 本地UI与页面生命周期对照（v78起）
 
-`host-ui --action SETTINGS_OPEN|SETTINGS_CLOSE|BACKGROUND|FOREGROUND` 仅在已识别车机可用，通过主线程执行应用内动作。关闭设置保留未保存编辑确认流程；返回success=false时不要自动丢弃编辑。超时表示动作可能仍会执行，应先检查新鲜status。`host.settingsMenuOpen` 和 `host.hostWindowFocused` 辅助确认页面状态；前后台调用返回不等于首帧恢复，需检查视频计数、Surface日志和计时之外的快照。`UI_SETTINGS_OPEN`分段记录load、baseline、build耗时；v79额外记录rebuilt以核对控件复用。验证记录见[交互与生命周期续测](../2026-10-16-交互卡顿实车对照与生命周期验证记录.md)。
+`host-ui --action SETTINGS_OPEN|SETTINGS_CLOSE|BACKGROUND|FOREGROUND` 仅在已识别车机可用，通过主线程执行应用内动作。关闭设置保留未保存编辑确认流程；返回success=false时不要自动丢弃编辑。超时表示动作可能仍会执行，应先检查新鲜status。`host.settingsMenuOpen` 和 `host.hostWindowFocused` 辅助确认页面状态；前后台调用返回不等于首帧恢复，需检查视频计数、Surface日志和计时之外的快照。`UI_SETTINGS_OPEN`分段记录load、baseline、build耗时；v79额外记录rebuilt以核对控件复用。过程记录保存在本地临时目录。
 
 `restart-app` 只用于已识别先锋车机的本应用进程回收验证：响应后由独立线程延迟结束本进程，结束前安排3秒后重新打开本应用。不会清除配对或偏好，但会终止活动会话；以新PID及连接状态确认恢复。`host-ui FOREGROUND` 优先将当前本应用任务带到前台，返回后仍应检查窗口焦点和视频新帧。
