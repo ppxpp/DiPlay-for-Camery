@@ -46,6 +46,9 @@ python3 scripts/check_public_tree.py
     --tests '*NavigationAudioGainTest' \
     :common:testDebugUnitTest \
     --tests '*CamrySettingsDefaultsTest' \
+    --tests '*CamryDisplaySettingsTest' \
+    --tests '*UsbChargingCurrentTest' \
+    --tests '*AdaptiveSettingsUiTest.settingsLiveWhereDriversLookForThem' \
     --tests '*CarPlayNightMode*' \
     --tests '*NightModeSettingsTest' \
     --tests '*Pioneer*' \

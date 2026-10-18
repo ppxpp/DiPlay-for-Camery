@@ -9,7 +9,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 
 /**
  * Suppresses the Pioneer UIFW ShortcutBar collapsed handle (mCloseFrame, the bottom arrow) while
- * DiPlay owns the foreground. The arrow is a SysUI overlay driven only by this broadcast and by
+ * DiPlay owns the foreground and its Camry display setting is enabled (on by default).
+ * The arrow is a SysUI overlay driven only by this broadcast and by
  * UIFW view state, so AOSP immersive flags never reach it.
  *
  * Foreground is tracked process-wide via [ProcessLifecycleOwner]: hidden on the app's ON_START and
@@ -21,17 +22,41 @@ object ShortcutBarPolicy {
     private const val TAG = "DiPlay-ShortcutBar"
     private const val ACTION = "jp.pioneer.ceam.ui.show.shortcutbar"
     private const val BAR_KEY = "BAR_KEY"
+    private const val PREFS = "pioneer-adapter"
+    private const val HIDE_KEY = "hide_shortcut_bar"
     private var attached = false
+    private var foreground = false
+
+    fun hidesBottomArrow(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(HIDE_KEY, true)
+
+    fun setHidesBottomArrow(context: Context, hide: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(HIDE_KEY, hide).apply()
+        if (attached && PioneerUsbPolicy.matchesDevice()) {
+            send(context.applicationContext, show = !foreground || !hide)
+        }
+    }
 
     /** Register once at process start; no-op on head units that are not the A-navigation Camry. */
     fun attach(appContext: Context) {
         if (attached || !PioneerUsbPolicy.matchesDevice()) return
+        attach(appContext, ProcessLifecycleOwner.get().lifecycle)
+    }
+
+    internal fun attach(appContext: Context, lifecycle: Lifecycle) {
+        if (attached || !PioneerUsbPolicy.matchesDevice()) return
         attached = true
         val app = appContext.applicationContext
-        ProcessLifecycleOwner.get().lifecycle.addObserver(LifecycleEventObserver { _, event ->
+        lifecycle.addObserver(LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> send(app, show = false)
-                Lifecycle.Event.ON_STOP -> send(app, show = true)
+                Lifecycle.Event.ON_START -> {
+                    foreground = true
+                    send(app, show = !hidesBottomArrow(app))
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    foreground = false
+                    send(app, show = true)
+                }
                 else -> Unit
             }
         })

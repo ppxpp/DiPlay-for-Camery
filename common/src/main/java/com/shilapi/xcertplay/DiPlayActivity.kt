@@ -1882,16 +1882,25 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             choice(card, getString(R.string.settings_usb_charging), listOf(
                 getString(R.string.settings_usb_charging_normal),
                 getString(R.string.settings_usb_charging_reduced),
+                getString(R.string.settings_camry_usb_charging_one_amp),
                 getString(R.string.settings_usb_charging_low),
             ), currents.indexOf(AirPlayPersistence.loadUsbChargingCurrent(this)), reconnects = false) {
                 AirPlayPersistence.saveUsbChargingCurrent(this, currents[it])
                 if (!AirPlayPersistence.loadWirelessEnabled(this)) markReconnectNeeded()
             }
             card.addView(label(getString(R.string.settings_usb_charging_description), 14, MUTED))
+            card.addView(label(getString(R.string.settings_camry_usb_charging_advice), 14, WARNING, true).apply {
+                setTypeface(typeface, Typeface.BOLD)
+            })
         }
         if (settingsSectionFilter?.contains(SettingsSection.BYD_ADB) != false) bydAdbSettings(content)
         filteredSection(content, SettingsSection.DISPLAY_AND_PERFORMANCE,
             getString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
+            toggle(card, getString(R.string.settings_camry_hide_bottom_arrow),
+                getString(R.string.settings_camry_hide_bottom_arrow_description),
+                com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.hidesBottomArrow(this)) { hide ->
+                com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.setHidesBottomArrow(this, hide)
+            }
             val appearances = AppAppearance.entries
             choice(
                 card,

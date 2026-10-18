@@ -58,6 +58,7 @@ jobs:
             shared/build/reports/tests/testDebugUnitTest/
             common/build/test-results/testDebugUnitTest/
             common/build/reports/tests/testDebugUnitTest/
+            common/build/reports/camry-display-ui/
             pioneer-adapter/build/test-results/testDebugUnitTest/
             pioneer-adapter/build/reports/tests/testDebugUnitTest/
             build/reports/vehicle-adaptation/

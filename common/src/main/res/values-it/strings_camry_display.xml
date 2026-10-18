@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hide_bottom_arrow">Nascondi freccia di navigazione inferiore (Camry)</string>
+    <string name="settings_camry_hide_bottom_arrow_description">Solo per unità Pioneer della Camry. Nasconde la freccia inferiore mentre DiPlay è in primo piano. Disattivando questa opzione o uscendo da DiPlay, la freccia riappare. Effetto immediato.</string>
+    <string name="settings_camry_usb_charging_advice">Camry: scegli 0,5 A o 1 A. Un valore superiore può impedire il riconoscimento di iPhone tramite USB.</string>
+    <string name="settings_camry_usb_charging_one_amp">1 A (consigliato per Camry)</string>
+</resources>
