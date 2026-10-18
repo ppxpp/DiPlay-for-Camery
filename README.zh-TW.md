@@ -1,7 +1,6 @@
 # DiPlay
 
-> **凱美瑞適配分支：** 本倉庫保留已驗證的先鋒/凱美瑞整合、`wecarflow/` 橋接、API23 相容工作及共用本機簽章。以下比亞迪支援範圍為上游專案說明。目前上游基線為 v0.2.21。
-
+> **凱美瑞適配分支：** 本倉庫面向凱美瑞先鋒車機，提供原車按鍵、日夜同步與 `wecarflow/` 播放保護橋接，支援 Android 6.0（API23）。以下比亞迪支援範圍為上游專案說明。目前上游基線為 v0.2.21。
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
@@ -17,7 +16,7 @@
 
 ## 開始使用
 
-請將 DiPlay 安裝在**車機上，而非 iPhone**。車機需要允許安裝 APK，本適配分支 APK 的最低版本為 Android 6.0（API23）；最低版本相容檢查不代表所有車型都已實測，先鋒車機驗證記錄見 docs/vehicle-adaptation。使用時無須越獄、轉接盒、Mac、帳號或遠端認證伺服器。
+請將 DiPlay 安裝在**車機上，而非 iPhone**。車機需要允許安裝 APK，本適配分支 APK 的最低版本為 Android 6.0（API23）；具體相容性取決於車機韌體與 iPhone 系統版本。使用時無須越獄、轉接盒、Mac、帳號或遠端認證伺服器。
 
 有線與無線 CarPlay 的核心功能不需要 ADB。部分儀表板、車輛資料、方向盤或停車影片功能需要相容韌體及已授權的網路 ADB，請依各設定的說明操作。
 
@@ -46,7 +45,7 @@ Android 13 以上會與 Android 的個別應用程式語言設定同步；Androi
 - 本機診斷報告匯出，只有在你選擇分享後才會傳送。
 - 實驗性選項預設關閉，請停車後依說明測試。
 
-[英文版本說明](docs/RELEASE-NOTES-0.2.21.md)與[驗證紀錄](docs/VALIDATION.md)記錄完整變更、已知限制及尚待實車測試的項目。自動化測試通過不代表所有車型、iOS、Siri 或通話情境都已驗證。
+[英文版本說明](docs/RELEASE-NOTES-0.2.21.md)提供功能介紹、相容限制及貢獻說明。
 
 ## 繁體中文文件
 
@@ -57,7 +56,6 @@ Android 13 以上會與 Android 的個別應用程式語言設定同步；Androi
 | [隱私權與診斷](docs/PRIVACY.zh-TW.md) | 資料儲存、權限、報告分享及更新檢查 |
 | [從原始碼建置](docs/BUILD.zh-TW.md) | Windows／Android Studio、建置環境、APK 路徑及認證素材 |
 | [翻譯維護](docs/LOCALIZATION.zh-TW.md) | 臺灣用語、資源檢查與文件同步方式 |
-| [本次繁體中文驗證紀錄](docs/VALIDATION.zh-TW.md) | 測試、建置結果及完整 CI 的未解失敗 |
 
 進階車型整合可參考[比亞迪導航](docs/BYD_NAVIGATION.md)、[Wi-Fi Direct 舊版限制](docs/ANDROID9_WIFI_DIRECT.md)及[現有 Wi-Fi 指南](docs/EXISTING_WIFI.md)；這些深入文件目前為英文。
 
