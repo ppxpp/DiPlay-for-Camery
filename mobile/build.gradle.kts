@@ -24,8 +24,8 @@ android {
         applicationId = "com.gtmc.app.fengyunyx.b819"
         minSdk = 23
         targetSdk = 37
-        versionCode = 100000 // 0.1.0 -> 000 100 000
-        versionName = "0.2.21_凯美瑞A导航适配版_0.1.0"
+        versionCode = 1001 // 0.1.0 -> 000 001 001
+        versionName = "0.2.21_凯美瑞A导航适配版_0.1.1"
 
     }
 
