@@ -2,6 +2,5 @@
 <resources>
     <string name="settings_camry_hide_bottom_arrow">Hide bottom navigation arrow (Camry head unit)</string>
     <string name="settings_camry_hide_bottom_arrow_description">Only for the Camry Pioneer head unit. Hide its bottom shortcut arrow while DiPlay is in the foreground. Turning this off or leaving DiPlay restores the arrow. Takes effect immediately.</string>
-    <string name="settings_camry_usb_charging_advice">Camry head unit: select 0.5 A or 1 A. A higher charging-current setting may prevent USB from recognizing the iPhone.</string>
-    <string name="settings_camry_usb_charging_one_amp">1 A (Camry recommended)</string>
+    <string name="settings_camry_usb_charging_advice">Camry head unit: select 0.5 A or 1.5 A. A higher charging-current setting may prevent USB from recognizing the iPhone.</string>
 </resources>

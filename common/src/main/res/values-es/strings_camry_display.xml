@@ -2,6 +2,5 @@
 <resources>
     <string name="settings_camry_hide_bottom_arrow">Ocultar flecha inferior de navegación (Camry)</string>
     <string name="settings_camry_hide_bottom_arrow_description">Solo para la unidad Pioneer del Camry. Oculta la flecha inferior mientras DiPlay está en primer plano. Se restaura al desactivar esta opción o salir de DiPlay. El cambio es inmediato.</string>
-    <string name="settings_camry_usb_charging_advice">Camry: selecciona 0,5 A o 1 A. Un valor superior puede impedir que USB reconozca el iPhone.</string>
-    <string name="settings_camry_usb_charging_one_amp">1 A (recomendado para Camry)</string>
+    <string name="settings_camry_usb_charging_advice">Camry: selecciona 0,5 A o 1,5 A. Un valor superior puede impedir que USB reconozca el iPhone.</string>
 </resources>

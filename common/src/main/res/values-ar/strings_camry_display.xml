@@ -2,6 +2,5 @@
 <resources>
     <string name="settings_camry_hide_bottom_arrow">إخفاء سهم التنقل السفلي (وحدة كامري)</string>
     <string name="settings_camry_hide_bottom_arrow_description">لوحدة بايونير في كامري فقط. يخفي السهم السفلي عندما يكون DiPlay في الواجهة. يعود السهم عند تعطيل الخيار أو مغادرة DiPlay. يسري التغيير فورًا.</string>
-    <string name="settings_camry_usb_charging_advice">لوحدة كامري، اختر 0.5 أمبير أو 1 أمبير. قد يمنع التيار الأعلى تعرف USB على iPhone.</string>
-    <string name="settings_camry_usb_charging_one_amp">1 أمبير (موصى به لكامري)</string>
+    <string name="settings_camry_usb_charging_advice">لوحدة كامري، اختر 0.5 أمبير أو 1.5 أمبير. قد يمنع التيار الأعلى تعرف USB على iPhone.</string>
 </resources>

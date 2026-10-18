@@ -76,7 +76,7 @@ class CamryDisplaySettingsTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun usbCamryAdviceIsHighlightedAndOneAmpIsSelectable() {
+    fun usbCamryAdviceIsHighlightedAndReducedCurrentIsSelectable() {
         val screen = open()
         category(screen, SettingsCategory.CONNECTION)
         val advice = texts(screen).single { it.text == screen.getString(R.string.settings_camry_usb_charging_advice) }
@@ -85,13 +85,13 @@ class CamryDisplaySettingsTest {
         assertNotEquals(description.currentTextColor, advice.currentTextColor)
         texts(screen).single { it.text.startsWith(screen.getString(R.string.settings_usb_charging) + " ·") }.performClick()
         val dialog = ShadowAlertDialog.getLatestAlertDialog()
-        val index = UsbChargingCurrent.entries.indexOf(UsbChargingCurrent.ONE_AMP)
-        assertEquals(screen.getString(R.string.settings_camry_usb_charging_one_amp), dialog.listView.adapter.getItem(index))
+        val index = UsbChargingCurrent.entries.indexOf(UsbChargingCurrent.REDUCED)
+        assertEquals(screen.getString(R.string.settings_usb_charging_reduced), dialog.listView.adapter.getItem(index))
         shadowOf(Looper.getMainLooper()).idle()
         dialog.listView.performItemClick(null, index, dialog.listView.adapter.getItemId(index))
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(1000, AirPlayPersistence.loadUsbChargingCurrent(screen).milliAmps)
+        assertEquals(1500, AirPlayPersistence.loadUsbChargingCurrent(screen).milliAmps)
     }
 
     @Test

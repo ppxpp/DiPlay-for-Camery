@@ -15,13 +15,14 @@ class UsbChargingCurrentTest {
 
     @Test fun chargingOptionsKeepTheirExistingValues() {
         assertEquals(CarPlayRuntimeConfig.DEFAULT_AVAILABLE_CURRENT_MILLI_AMPS, UsbChargingCurrent.LOW.milliAmps)
-        assertEquals(listOf(2400, 1500, 1000, 500), UsbChargingCurrent.entries.map { it.milliAmps })
+        assertEquals(listOf(2400, 1500, 500), UsbChargingCurrent.entries.map { it.milliAmps })
     }
 
     @Test fun storedValuesAreStableKeysAndUnknownOnesFallBackToLow() {
-        assertEquals(listOf("normal", "reduced", "one_amp", "low"), UsbChargingCurrent.entries.map { it.key })
+        assertEquals(listOf("normal", "reduced", "low"), UsbChargingCurrent.entries.map { it.key })
         assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey(null))
         assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey("2"))
+        assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey("one_amp"))
     }
 
     @Test fun theChoiceIsSavedAndDefaultsToLow() {
@@ -30,9 +31,9 @@ class UsbChargingCurrentTest {
         assertEquals(UsbChargingCurrent.NORMAL, AirPlayPersistence.loadUsbChargingCurrent(context))
     }
 
-    @Test fun oneAmpRoundTripsAs1000Milliamps() {
-        AirPlayPersistence.saveUsbChargingCurrent(context, UsbChargingCurrent.ONE_AMP)
-        assertEquals(1000, AirPlayPersistence.loadUsbChargingCurrent(context).milliAmps)
-        assertEquals(UsbChargingCurrent.ONE_AMP, UsbChargingCurrent.fromKey("one_amp"))
+    @Test fun recommendedReducedCurrentRoundTripsAs1500Milliamps() {
+        AirPlayPersistence.saveUsbChargingCurrent(context, UsbChargingCurrent.REDUCED)
+        assertEquals(1500, AirPlayPersistence.loadUsbChargingCurrent(context).milliAmps)
+        assertEquals(UsbChargingCurrent.REDUCED, UsbChargingCurrent.fromKey("reduced"))
     }
 }

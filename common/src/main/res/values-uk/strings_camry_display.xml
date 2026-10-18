@@ -2,6 +2,5 @@
 <resources>
     <string name="settings_camry_hide_bottom_arrow">Приховувати нижню стрілку навігації (Camry)</string>
     <string name="settings_camry_hide_bottom_arrow_description">Лише для головного пристрою Pioneer у Camry. Приховує нижню стрілку, поки DiPlay на передньому плані. Вимкнення або вихід із DiPlay повертає стрілку. Зміна діє одразу.</string>
-    <string name="settings_camry_usb_charging_advice">Для Camry рекомендовано 0,5 А або 1 А. Вищий струм може завадити розпізнаванню iPhone через USB.</string>
-    <string name="settings_camry_usb_charging_one_amp">1 А (рекомендовано для Camry)</string>
+    <string name="settings_camry_usb_charging_advice">Для Camry рекомендовано 0,5 А або 1,5 А. Вищий струм може завадити розпізнаванню iPhone через USB.</string>
 </resources>

@@ -1882,7 +1882,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             choice(card, getString(R.string.settings_usb_charging), listOf(
                 getString(R.string.settings_usb_charging_normal),
                 getString(R.string.settings_usb_charging_reduced),
-                getString(R.string.settings_camry_usb_charging_one_amp),
                 getString(R.string.settings_usb_charging_low),
             ), currents.indexOf(AirPlayPersistence.loadUsbChargingCurrent(this)), reconnects = false) {
                 AirPlayPersistence.saveUsbChargingCurrent(this, currents[it])
