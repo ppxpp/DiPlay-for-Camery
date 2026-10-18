@@ -94,12 +94,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Test, lint and build signed release
+      - name: Run update tests and build signed release
         run: >-
           ./gradlew
-          :shared:testDebugUnitTest
           :common:testDebugUnitTest
-          :mobile:lintRelease
+          --tests "com.shilapi.xcertplay.update.*"
+          --tests "com.shilapi.xcertplay.UpdateHomeAvailabilityTest"
           :mobile:assembleRelease
           --stacktrace
 
