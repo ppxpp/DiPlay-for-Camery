@@ -12,7 +12,7 @@ enum class CarPlayNightMode(val key: String) {
     CAMRY("camry");
 
     companion object {
-        fun fromKey(key: String?): CarPlayNightMode = entries.firstOrNull { it.key == key } ?: SYSTEM
+        fun fromKey(key: String?): CarPlayNightMode = entries.firstOrNull { it.key == key } ?: CAMRY
     }
 }
 

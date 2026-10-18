@@ -46,6 +46,14 @@ class NightModeSettingsTest {
         CarPlayBackgroundSession.clear()
     }
 
+    @Test fun freshDisplaySettingsSelectCamryNightMode() {
+        renderSettings()
+        assertTrue(button(R.string.carplay_night_mode).text.toString()
+            .endsWith(activity.getString(R.string.carplay_night_camry)))
+        assertAmbientVisible(false)
+        assertScheduleVisible(false)
+    }
+
     @Test fun savedModesShowAmbientSettingsOnlyForAmbientLight() {
         for (mode in CarPlayNightMode.entries) {
             AirPlayPersistence.saveCarPlayNightMode(activity, mode)

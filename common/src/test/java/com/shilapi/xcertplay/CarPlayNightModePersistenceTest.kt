@@ -17,10 +17,10 @@ class CarPlayNightModePersistenceTest {
 
     @Before fun clearPreferences() { prefs.edit().clear().apply() }
 
-    @Test fun freshInstallAndUnknownValuesFollowSystem() {
-        assertEquals(CarPlayNightMode.SYSTEM, AirPlayPersistence.loadCarPlayNightMode(context))
+    @Test fun freshInstallAndUnknownValuesFollowCamry() {
+        assertEquals(CarPlayNightMode.CAMRY, AirPlayPersistence.loadCarPlayNightMode(context))
         prefs.edit().putString("carplay_night_mode", "future-mode").apply()
-        assertEquals(CarPlayNightMode.SYSTEM, AirPlayPersistence.loadCarPlayNightMode(context))
+        assertEquals(CarPlayNightMode.CAMRY, AirPlayPersistence.loadCarPlayNightMode(context))
     }
 
     @Test fun thresholdDefaultAndCustomValuePersist() {
