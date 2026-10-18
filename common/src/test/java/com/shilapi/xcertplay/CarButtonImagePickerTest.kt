@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.ResolveInfo
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -161,6 +162,23 @@ class CarButtonImagePickerTest {
             applicationInfo = ApplicationInfo().apply { this.packageName = packageName; this.flags = flags }
         }
         match = IntentFilter.MATCH_CATEGORY_TYPE
+    }
+
+    @Test fun defaultCarButtonUsesToyotaNameAndIcon() = withHome { activity ->
+        val previousName = AirPlayPersistence.loadOemLabel(activity)
+        AirPlayPersistence.saveOemLabel(activity, "")
+        try {
+            val prefix = activity.getString(R.string.car_button_name) + " · "
+            val name = homeButtons(activity).single { it.text.toString().startsWith(prefix) }
+            assertEquals(prefix + "Toyota", name.text.toString())
+
+            val icon = BitmapFactory.decodeResource(activity.resources, R.raw.ic_car_home)
+            assertNotNull(icon)
+            assertEquals(192, icon.width)
+            assertEquals(192, icon.height)
+        } finally {
+            AirPlayPersistence.saveOemLabel(activity, previousName)
+        }
     }
 
     @Test fun savingCarButtonNameMarksTheActiveSessionWithoutStoppingIt() = withHome { activity ->

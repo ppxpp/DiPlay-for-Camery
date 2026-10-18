@@ -702,6 +702,7 @@
     <string name="settings_interface_size">حجم الواجهة</string>
     <string name="settings_interface_size_auto">تلقائي</string>
     <string name="settings_interface_size_hint">حجم النص وعناصر التحكم في شاشات DiPlay. يكبّرها الوضع التلقائي على الشاشات الكبيرة منخفضة الكثافة. لا يتأثر CarPlay.</string>
+    <string name="settings_update_flavor_note">هذا التحديث مخصص لنسخة DiPlay كامري A مع الملاحة، وليس تحديثًا لإصدار DiPlay الأصلي.</string>
     <string name="update_check">البحث عن تحديثات</string>
     <string name="update_checking">جارٍ البحث…</string>
     <string name="update_up_to_date">لديك آخر إصدار</string>
@@ -723,7 +724,7 @@
     <string name="backup_summary">تم استيراد %1$d من الإعدادات، وتجاهل %2$d.</string>
     <string name="backup_import_invalid">هذا الملف ليس نسخة احتياطية لإعدادات DiPlay.</string>
     <string name="settings_background_update_checks">التحقق من التحديثات في الخلفية</string>
-    <string name="settings_background_update_checks_description">مرة كل يوم، يتحقق DiPlay من GitHub عن إصدار جديد ويعرضه في الشاشة الرئيسية. لا يتم التنزيل أبدًا دون نقرتك.</string>
+    <string name="settings_background_update_checks_description">مرة كل يوم، يتحقق DiPlay من وجود إصدار جديد ويعرضه في الشاشة الرئيسية. لا يتم التنزيل أبدًا دون نقرتك.</string>
     <string name="setup_guide">دليل الإعداد</string>
     <string name="setup_guide_description">اعرف إصدار DiLink، واختر طريقة الاتصال، وفعّل الميزات المناسبة لسيارتك.</string>
     <string name="setup_step_of">الخطوة %1$d من %2$d</string>

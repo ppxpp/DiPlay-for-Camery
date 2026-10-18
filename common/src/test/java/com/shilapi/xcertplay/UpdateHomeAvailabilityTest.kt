@@ -63,6 +63,7 @@ class UpdateHomeAvailabilityTest {
 
     private fun release() = UpdateRelease(
         tagName = "v99.0.0",
+        versionCode = 99L,
         apkName = "DiPlay.apk",
         apkUrl = "https://example.com/DiPlay.apk",
         checksumsUrl = "https://example.com/SHA256SUMS.txt",

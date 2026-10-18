@@ -10,7 +10,7 @@ import java.net.URLConnection
 
 internal object UpdateClient {
     internal const val RELEASES_URL =
-        "https://api.github.com/repos/shihabal3amri/DiPlay/releases?per_page=3"
+        "https://diplay.mgulu.com/api/v1/apps/diplay/android/stable/latest"
     private const val CONNECT_TIMEOUT_MILLIS = 10_000
     private const val READ_TIMEOUT_MILLIS = 30_000
     private const val MAXIMUM_TEXT_BYTES = 4 * 1024 * 1024

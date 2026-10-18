@@ -10,69 +10,114 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
 class UpdateCatalogTest {
-    private val releaseJson = """
-        [
-          {
-            "tag_name": "v0.2.15",
-            "draft": true,
-            "assets": [
-              {"name": "DiPlay-0.2.15.apk", "browser_download_url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.15/DiPlay-0.2.15.apk"},
-              {"name": "SHA256SUMS.txt", "browser_download_url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.15/SHA256SUMS.txt"}
+    private fun manifest(
+        versionCode: Long = 100L,
+        schemaVersion: Int = 1,
+        artifacts: String = """
+            [
+              {
+                "name": "DiPlay-0.3.0.apk",
+                "arch": "universal",
+                "url": "https://dl.example.com/DiPlay-0.3.0.apk",
+                "checksumsUrl": "https://dl.example.com/SHA256SUMS.txt"
+              }
             ]
-          },
-          {
-            "tag_name": "v0.2.14",
-            "draft": false,
-            "prerelease": true,
-            "assets": [
-              {"name": "DiPlay-0.2.14.apk", "browser_download_url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.14/DiPlay-0.2.14.apk"},
-              {"name": "SHA256SUMS.txt", "browser_download_url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.14/SHA256SUMS.txt"}
-            ]
-          }
-        ]
+        """.trimIndent(),
+    ) = """
+        {
+          "schemaVersion": $schemaVersion,
+          "version": "0.3.0",
+          "versionCode": $versionCode,
+          "mandatory": false,
+          "artifacts": $artifacts
+        }
     """.trimIndent()
 
     @Test
-    fun skipsDraftsAndReturnsTheFirstPublishedRelease() {
-        val release = UpdateCatalog.parse(releaseJson)
-        assertEquals("v0.2.14", release?.tagName)
-        assertEquals("DiPlay-0.2.14.apk", release?.apkName)
-        assertEquals(
-            "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.14/DiPlay-0.2.14.apk",
-            release?.apkUrl,
-        )
-        assertEquals(
-            "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.14/SHA256SUMS.txt",
-            release?.checksumsUrl,
-        )
+    fun parsesTheLatestManifest() {
+        val release = UpdateCatalog.parse(manifest())
+
+        assertEquals("0.3.0", release?.tagName)
+        assertEquals(100L, release?.versionCode)
+        assertEquals("DiPlay-0.3.0.apk", release?.apkName)
+        assertEquals("https://dl.example.com/DiPlay-0.3.0.apk", release?.apkUrl)
+        assertEquals("https://dl.example.com/SHA256SUMS.txt", release?.checksumsUrl)
     }
 
     @Test
-    fun returnsNullWithoutAnApkAsset() {
-        val json = """
+    fun prefersTheUniversalApkWhenSeveralArtifactsExist() {
+        val artifacts = """
             [
-              {"tag_name": "v0.2.14", "draft": false, "assets": [
-                {"name": "source.zip", "browser_download_url": "https://example.com/source.zip"}
-              ]}
+              {
+                "name": "DiPlay-arm64.apk",
+                "arch": "arm64-v8a",
+                "url": "https://dl.example.com/DiPlay-arm64.apk",
+                "checksumsUrl": "https://dl.example.com/SHA256SUMS.txt"
+              },
+              {
+                "name": "DiPlay-universal.apk",
+                "arch": "universal",
+                "url": "https://dl.example.com/DiPlay-universal.apk",
+                "checksumsUrl": "https://dl.example.com/SHA256SUMS.txt"
+              }
             ]
         """.trimIndent()
-        assertNull(UpdateCatalog.parse(json))
+
+        val release = UpdateCatalog.parse(manifest(artifacts = artifacts))
+
+        assertEquals("DiPlay-universal.apk", release?.apkName)
+        assertEquals("https://dl.example.com/DiPlay-universal.apk", release?.apkUrl)
+    }
+
+    @Test
+    fun requiresAValidVersionCode() {
+        assertNull(UpdateCatalog.parse(manifest(versionCode = 0L)))
+    }
+
+    @Test
+    fun returnsNullWithoutAnApkArtifact() {
+        val artifacts = """
+            [
+              {
+                "name": "notes.txt",
+                "arch": "universal",
+                "url": "https://dl.example.com/notes.txt",
+                "checksumsUrl": "https://dl.example.com/SHA256SUMS.txt"
+              }
+            ]
+        """.trimIndent()
+
+        assertNull(UpdateCatalog.parse(manifest(artifacts = artifacts)))
     }
 
     @Test
     fun returnsNullWithoutChecksums() {
-        val json = """
+        val artifacts = """
             [
-              {"tag_name": "v0.2.14", "draft": false, "assets": [
-                {"name": "DiPlay-0.2.14.apk", "browser_download_url": "https://example.com/DiPlay-0.2.14.apk"}
-              ]}
+              {
+                "name": "DiPlay-0.3.0.apk",
+                "arch": "universal",
+                "url": "https://dl.example.com/DiPlay-0.3.0.apk"
+              }
             ]
         """.trimIndent()
-        assertNull(UpdateCatalog.parse(json))
+
+        assertNull(UpdateCatalog.parse(manifest(artifacts = artifacts)))
     }
 
     @Test
-    fun returnsNullForAnEmptyReleaseList() {
-        assertNull(UpdateCatalog.parse("[]"))
+    fun rejectsAnUnknownSchemaAndInsecureUrls() {
+        assertNull(UpdateCatalog.parse(manifest(schemaVersion = 2)))
+        val insecure = """
+            [
+              {
+                "name": "DiPlay-0.3.0.apk",
+                "arch": "universal",
+                "url": "http://dl.example.com/DiPlay-0.3.0.apk",
+                "checksumsUrl": "http://dl.example.com/SHA256SUMS.txt"
+              }
+            ]
+        """.trimIndent()
+        assertNull(UpdateCatalog.parse(manifest(artifacts = insecure)))
     }
 }

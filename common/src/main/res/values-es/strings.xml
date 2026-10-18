@@ -702,6 +702,7 @@
     <string name="settings_interface_size">Tamaño de la interfaz</string>
     <string name="settings_interface_size_auto">Automático</string>
     <string name="settings_interface_size_hint">Tamaño del texto y los controles en las pantallas de DiPlay. Automático los agranda en pantallas grandes de baja densidad. No afecta a CarPlay.</string>
+    <string name="settings_update_flavor_note">Esta actualización es para la adaptación de DiPlay para Camry A Navigation, no es una actualización de la versión original de DiPlay.</string>
     <string name="update_check">Buscar actualizaciones</string>
     <string name="update_checking">Buscando…</string>
     <string name="update_up_to_date">Ya tienes la última versión</string>
@@ -723,7 +724,7 @@
     <string name="backup_summary">Se importaron %1$d ajustes, se omitieron %2$d.</string>
     <string name="backup_import_invalid">Este archivo no es una copia de seguridad de ajustes de DiPlay.</string>
     <string name="settings_background_update_checks">Buscar actualizaciones en segundo plano</string>
-    <string name="settings_background_update_checks_description">Una vez al día, DiPlay busca una versión nueva en GitHub y la muestra en la pantalla de inicio. Nunca descarga sin que lo toques.</string>
+    <string name="settings_background_update_checks_description">Una vez al día, DiPlay busca una versión nueva y la muestra en la pantalla de inicio. Nunca descarga sin que lo toques.</string>
     <string name="setup_guide">Guía de configuración</string>
     <string name="setup_guide_description">Detecta tu versión de DiLink, elige una conexión y activa las funciones adecuadas para tu coche.</string>
     <string name="setup_step_of">PASO %1$d DE %2$d</string>

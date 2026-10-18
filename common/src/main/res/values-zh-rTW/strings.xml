@@ -766,6 +766,7 @@
     <string name="settings_interface_size">介面大小</string>
     <string name="settings_interface_size_auto">自動</string>
     <string name="settings_interface_size_hint">DiPlay 自身畫面中文字與控制項的大小。自動模式會在大尺寸低密度螢幕上放大它們。不影響 CarPlay。</string>
+    <string name="settings_update_flavor_note">這裡的更新用於 DiPlay 凱美瑞A導航適配版，不是更新 DiPlay 原版。</string>
     <string name="update_check">檢查更新</string>
     <string name="update_checking">正在檢查…</string>
     <string name="update_up_to_date">已是最新版本</string>
@@ -787,7 +788,7 @@
     <string name="backup_summary">已匯入 %1$d 項設定，略過 %2$d 項。</string>
     <string name="backup_import_invalid">這不是 DiPlay 設定備份檔。</string>
     <string name="settings_background_update_checks">在背景檢查更新</string>
-    <string name="settings_background_update_checks_description">DiPlay 每天會在 GitHub 上檢查一次新版本，並顯示在主畫面上。未經你點選，絕不會下載。</string>
+    <string name="settings_background_update_checks_description">DiPlay 每天檢查一次新版本，並顯示在主畫面上。未經你點選，絕不會下載。</string>
     <string name="setup_guide">設定精靈</string>
     <string name="setup_guide_description">識別 DiLink 版本，選擇連線方式，並開啟適合你車輛的功能。</string>
     <string name="setup_step_of">第 %1$d 步，共 %2$d 步</string>

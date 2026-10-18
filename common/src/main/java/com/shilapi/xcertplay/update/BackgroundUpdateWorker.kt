@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.update
 import android.content.Context
 import android.net.ConnectivityManager
 import android.util.Log
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -38,14 +39,15 @@ internal class BackgroundUpdateWorker(context: Context, parameters: WorkerParame
         val network = runCatching { InternetNetworkSelector.select(connectivity) }
             .onFailure { Log.i(TAG, "network lookup failed", it) }
             .getOrNull() ?: return retryOrGiveUp("no validated network")
-        val installedVersion = applicationContext.packageManager
-            .getPackageInfo(applicationContext.packageName, 0).versionName
-        // A dev build with no parsable version would otherwise show a permanent banner.
-        if (installedVersion == null || UpdateVersion.parse(installedVersion) == null) return Result.success()
+        val packageInfo = applicationContext.packageManager
+            .getPackageInfo(applicationContext.packageName, 0)
+        val installedVersionCode = PackageInfoCompat.getLongVersionCode(packageInfo)
+        if (installedVersionCode <= 0L) return Result.success()
+        val installedVersionName = packageInfo.versionName ?: "unknown"
         return try {
             val release = UpdateReleaseLookup.latest(
-                installedVersion = installedVersion,
-                userAgent = "DiPlay/$installedVersion",
+                installedVersionCode = installedVersionCode,
+                userAgent = "DiPlay/$installedVersionName",
                 openConnection = network::openConnection,
             )
             if (release == null) UpdateAvailability.clear(applicationContext)

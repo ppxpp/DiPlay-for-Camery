@@ -6,40 +6,23 @@ import org.junit.Test
 
 class UpdateVersionTest {
     @Test
-    fun newerTagIsAnUpdate() {
-        assertTrue(UpdateVersion.isNewer("v0.2.15", "0.2.14"))
+    fun higherVersionCodeIsAnUpdate() {
+        assertTrue(UpdateVersion.isNewer(100L, 99L))
     }
 
     @Test
-    fun sameVersionIsNotAnUpdate() {
-        assertFalse(UpdateVersion.isNewer("0.2.14", "0.2.14"))
+    fun sameVersionCodeIsNotAnUpdate() {
+        assertFalse(UpdateVersion.isNewer(99L, 99L))
     }
 
     @Test
-    fun olderTagIsIgnored() {
-        assertFalse(UpdateVersion.isNewer("v0.2.13", "0.2.14"))
+    fun lowerVersionCodeIsIgnored() {
+        assertFalse(UpdateVersion.isNewer(98L, 99L))
     }
 
     @Test
-    fun numericFieldsCompareLeftToRight() {
-        assertTrue(UpdateVersion.isNewer("0.3.0", "0.2.14"))
-        assertFalse(UpdateVersion.isNewer("0.2.9", "0.2.14"))
-    }
-
-    @Test
-    fun preReleaseSuffixStillComparesByNumbers() {
-        assertTrue(UpdateVersion.isNewer("0.2.15-beta.1", "0.2.14"))
-        assertFalse(UpdateVersion.isNewer("0.2.14-rc.1", "0.2.14"))
-    }
-
-    @Test
-    fun unparseableRemoteVersionIsNeverAnUpdate() {
-        assertFalse(UpdateVersion.isNewer("public-preview", "0.2.14"))
-    }
-
-    @Test
-    fun unparseableInstalledVersionAcceptsAnyParseableRemote() {
-        assertTrue(UpdateVersion.isNewer("0.2.15", "psa.2"))
-        assertFalse(UpdateVersion.isNewer("public-preview", "psa.2"))
+    fun comparisonUsesTheNumericBuildNumber() {
+        assertTrue(UpdateVersion.isNewer(1_000_000L, 999_999L))
+        assertFalse(UpdateVersion.isNewer(1_000_000L, 1_000_001L))
     }
 }

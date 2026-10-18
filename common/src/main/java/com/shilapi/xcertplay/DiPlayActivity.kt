@@ -40,6 +40,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.view.doOnLayout
 import androidx.core.view.WindowCompat
@@ -391,7 +392,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             openProjection(); finish(); return
         }
         scheduleBackgroundUpdateChecks()
-        availableUpdate = UpdateAvailability.available(this, version())
+        availableUpdate = UpdateAvailability.available(this, installedVersionCode())
         enforceInterfaceSize()
         refreshAppearance()
         rememberLaunchAppearance()
@@ -827,7 +828,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setImageResource(R.drawable.ic_carplay)
             contentDescription = getString(R.string.carplay)
         }, LinearLayout.LayoutParams(logoSize, logoSize))
-        addView(label(getString(R.string.diplay), if (compact) 20 else 26, TEXT, true,
+        addView(label(getString(if (page == "home") R.string.home_title else R.string.diplay), if (compact) 20 else 26, TEXT, true,
             centreGlyphs = androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]!!.language != "zh").apply {
             setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
         }, LinearLayout.LayoutParams(0, if (compact) dp(44) else dp(52), 1f))
@@ -2657,6 +2658,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun updateRow(): View {
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
+        container.addView(label(getString(R.string.settings_update_flavor_note), 14, MUTED).apply {
+            setPadding(0, 0, 0, dp(8))
+        })
         updateMessage?.let { container.addView(label(it, 14, MUTED)) }
         when (updateStage) {
             UpdateStage.IDLE, UpdateStage.FAILED ->
@@ -2714,7 +2718,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun latestRelease(): UpdateRelease? {
-        return UpdateReleaseLookup.latest(version(), userAgent())
+        return UpdateReleaseLookup.latest(installedVersionCode(), userAgent())
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
@@ -6089,6 +6093,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         return grid
     }
+    private fun installedVersionCode(): Long =
+        PackageInfoCompat.getLongVersionCode(packageManager.getPackageInfo(packageName, 0))
     private fun version() = packageManager.getPackageInfo(packageName, 0).versionName ?: "0.1.0-beta.1"
     private fun languageSettings(content: LinearLayout) {
         filteredSection(content, SettingsSection.LANGUAGE,
