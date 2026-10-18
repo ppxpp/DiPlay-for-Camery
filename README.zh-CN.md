@@ -1,5 +1,8 @@
 # DiPlay
 
+> **凯美瑞适配分支：** 本仓库保留已验证的先锋/凯美瑞集成、`wecarflow/` 桥接、API23 兼容工作及共享本地签名。以下比亚迪支持范围为上游项目说明。当前上游基线为 v0.2.21。
+
+
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
 为兼容的比亚迪安卓车机提供有线及无线 CarPlay，采用 DiAuto 风格界面。
@@ -8,29 +11,29 @@
 
 > **免责声明：** DiPlay 与 Apple 无关联，未获 Apple 授权或认可，也不是 MFi 认证产品。软件按"现状"提供，无任何担保（GPL-3.0）。使用所涉及的行车安全、法规、隐私与知识产权风险由使用者自行承担——安装或分发前请先阅读 [DISCLAIMER.md](DISCLAIMER.md)。
 
-[下载与中文网站](https://shihabal3amri.github.io/DiPlay/zh-Hans/) · [0.2.20 版本](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.20) · [完整说明](README.md) · [报告问题](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
+[下载与中文网站](https://shihabal3amri.github.io/DiPlay/zh-Hans/) · [0.2.21 版本](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.21) · [完整说明](README.md) · [报告问题](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
 
-## 0.2.20 — 公开预览版
+## 0.2.21 — 公开预览版
 
-请安装在允许 APK 安装的 Android 7.1+（API 25+）车机上；Android 7.1–8.1 尚未经实车验证。无需越狱、转接盒、账户或认证服务器。有线及无线核心连接不要求 ADB；可选车辆数据及车辆控制需要支持的固件和已授权网络 ADB。
+本适配分支 APK 的最低版本为 Android 6.0（API23），请安装在允许 APK 安装的车机上；最低版本兼容检查不代表所有车型都已实测，先锋车机验证记录见 docs/vehicle-adaptation。无需越狱、转接盒、账户或认证服务器。有线及无线核心连接不要求 ADB；可选车辆数据及车辆控制需要支持的固件和已授权网络 ADB。
 
-Wi-Fi Direct 现支持 Android 7.1–9 的旧版建组路径，使用系统返回的真实凭据。首选信道依赖固件 API；Android 7.1–9 无法读回协商频率，所以请求信道在诊断中标为未经验证，系统默认为信道 0。Android 10+ 保留频率验证。也可使用车机内置热点、USB 或[现有 Wi-Fi／同一局域网](docs/EXISTING_WIFI.md)；同一局域网模式由车机和 iPhone 自行连接外部路由器，DiPlay 不替你修改默认路由。[Android 9 Wi-Fi Direct 限制](docs/ANDROID9_WIFI_DIRECT.md)说明清理及持久配置边界。
+Wi-Fi Direct 现支持 Android 7.0–9 的旧版建组路径，使用系统返回的真实凭据。首选信道依赖固件 API；Android 7.0–9 无法读回协商频率，所以请求信道在诊断中标为未经验证，系统默认为信道 0。Android 10+ 保留频率验证。也可使用车机内置热点、USB 或[现有 Wi-Fi／同一局域网](docs/EXISTING_WIFI.md)；同一局域网模式由车机和 iPhone 自行连接外部路由器，DiPlay 不替你修改默认路由。[Android 9 Wi-Fi Direct 限制](docs/ANDROID9_WIFI_DIRECT.md)说明清理及持久配置边界。
 
 ### 新增与修正
 
-- **音乐**：音频时钟偏快或偏慢的车机上，音乐不再每隔一分钟左右停顿；车机打开 360° 影像时杂音更少；无线和 USB 分别保存音乐缓冲。
-- **通话与麦克风**：车机送到听筒的通话改用扬声器播放；“**设置 → 音频 → 通话使用扬声器**”可让当作车机使用的手机或平板始终用扬声器通话；应用里的语音消息也能使用车机麦克风；按一次比亚迪方向盘语音键只打开一次 Siri。
-- **有线连接**：USB 音频驱动占用 iPhone 的车机也能启动有线 CarPlay；点“保存并重新连接”后几秒内恢复；Android 17 车机也能启动有线连接。
-- **车机热点**：“**自动开启热点**”支持更多车机，包括 Android 8.0–10 的非比亚迪车机（无需 ADB）；“车机热点未开启”对话框里的“连接”现在会直接连接。
-- **仪表地图与视频**：“仪表盘上的CarPlay地图（实验性）”支持更多比亚迪固件，包括豹 5 Ultra；DiLink 3 不再显示会让仪表地图无法出现的 DiLink 4 选项；车机没有 HEVC 硬件解码器时改用 H.264。
-- **诊断报告**：记录 DiPlay 最近一次崩溃、收到的方向盘与媒体按键、音乐重新缓冲，以及等待 CH341 认证适配器时系统列出的 USB 设备。
+- **音乐**：修正 0.2.20 中音乐落后于 iPhone 的问题；暂停、切歌不再延迟几秒，播放速度也不再忽快忽慢。
+- **有线连接**：iPhone 收下开始请求却一直不打开 CarPlay 时，DiPlay 会自动重新连接；点“断开连接”后不再一直等待；已经自行恢复的连接不再被重试断开。
+- **麦克风与音乐**：在没有安卓自带 Opus 编码器的车机上使用麦克风时，DiPlay 不再闪退；通话或短暂打断后，音乐会恢复播放。
+- **无线连接与比亚迪车机**：无线 CarPlay 无法启动时会显示原因；CarPlay 结束后，DiPlay 会把仪表交还给原车；从 DiYou 桌面卡片打开时不再闪退；Android 10 以上的比亚迪车机可使用“隐藏比亚迪来电弹窗（实验性）”。
+- **安装与语言**：DiPlay 可安装在 Android 7.0 上，并新增意大利语。
+- **新选项（默认关闭）**：临时显示系统栏（5 秒）、黑色圆角遮罩、方向盘播放／暂停按钮、双击触发 Siri、导入车机热点详情（实验性）、桌面悬浮球（实验性）、车辆原厂音乐律动。
 
-[0.2.20 完整说明](docs/RELEASE-NOTES-0.2.20.md)包含贡献链接及功能限制；构建和验证信息见[验证记录](docs/VALIDATION.md)。Android 7.1–8.1 尚需实车验证，不宣称所有车型的连接、音频或 Siri 问题均已解决。可选功能请停车后测试。
+[0.2.21 完整说明](docs/RELEASE-NOTES-0.2.21.md)包含贡献链接及功能限制；构建和验证信息见[验证记录](docs/VALIDATION.md)。Android 7.0–8.1 尚需实车验证，不宣称所有车型的连接、音频或 Siri 问题均已解决。可选功能请停车后测试。
 
-### 请提供 0.2.20 的新诊断报告
+### 请提供 0.2.21 的新诊断报告
 
-1. 更新到 **0.2.20**，复现问题并记录发生时间。开机／自动启动问题发生后，可手动打开 DiPlay 导出。
-2. 打开“**设置 → 诊断 → 保存诊断报告**”。Android 10+ 通常保存到 **Downloads/DiPlay**；Android 7.1–9 会请求存储权限并同样保存到该位置，也可点“选择保存位置”。如选择器或公共存储不可用，应用会使用专用外部或私有目录，并在确认中说明目的地。
+1. 更新到 **0.2.21**，复现问题并记录发生时间。开机／自动启动问题发生后，可手动打开 DiPlay 导出。
+2. 打开“**设置 → 诊断 → 保存诊断报告**”。Android 10+ 通常保存到 **Downloads/DiPlay**；Android 7.0–9 会请求存储权限并同样保存到该位置，也可点“选择保存位置”。如选择器或公共存储不可用，应用会使用专用外部或私有目录，并在确认中说明目的地。
 3. 使用确认中的**查看报告／分享**；没有分享应用时，可在报告视图中选择并复制文本。检查 `.txt` 并删除隐私信息，再附到匹配的[现有问题](https://github.com/shihabal3amri/DiPlay/issues)，或[新建问题](https://github.com/shihabal3amri/DiPlay/issues/new/choose)。报告不会自动上传，请勿公开热点密码或私有认证文件。
 4. 注明车型／车机、DiLink/Android/完整固件版本、iPhone/iOS、USB／车机热点／Wi-Fi Direct／同一局域网、相关设置、复现步骤、预期与实际结果及故障时间。
 
@@ -38,6 +41,6 @@ Wi-Fi Direct 现支持 Android 7.1–9 的旧版建组路径，使用系统返�
 
 历史记录：[0.2.17](docs/RELEASE-NOTES-0.2.17.md)、[0.2.16](docs/RELEASE-NOTES-0.2.16.md)、[0.2.15](docs/RELEASE-NOTES-0.2.15.md)、[0.2.14](docs/RELEASE-NOTES-0.2.14.md)、[0.2.13](docs/RELEASE-NOTES-0.2.13.md)、[0.2.12](docs/RELEASE-NOTES-0.2.12.md)、[0.2.11](docs/RELEASE-NOTES-0.2.11.md)、[安装与连接](docs/INSTALL.md)。
 
-这是公开预览版，**未经 Apple 认证**。APK 使用从公开 Carlinkit 固件中提取的既有实验性配件身份，并非为 DiPlay 新签发的 MFi 身份；其中的私钥可被提取，未来 iOS 是否继续接受及其公开分发适用性尚未确定。Android 签名密钥和配件身份不进入 Git 或源代码压缩包；本项目的 `mobile` 本地构建默认内置 `.private/runtime-assets/offline-mfi/` 中的身份素材，该目录被 Git 忽略；新检出或 CI 环境需先在本地配置素材。部分车机仍可能卡顿或无法应用图标大小设置。
+这是公开预览版，**未经 Apple 认证**。上游公开 APK 使用从公开 Carlinkit 固件中提取的既有实验性配件身份，并非为 DiPlay 新签发的 MFi 身份；其中的私钥可被提取，未来 iOS 是否继续接受及其公开分发适用性尚未确定。Android 签名密钥和配件身份不进入 Git 或源代码压缩包；本项目的 `mobile` 本地构建默认内置 `.private/runtime-assets/offline-mfi/` 中的身份素材，该目录被 Git 忽略；新检出可用显式源码验证模式构建不含素材的包，车机 standalone 包仍需配置素材，详见构建指南。部分车机仍可能卡顿或无法应用图标大小设置。
 
 标准导航小组件需要支持 Android 小组件的启动器；比亚迪内置主页不接受任意小组件。悬浮地图和嵌入地图需要启用“CarPlay 仪表地图”。应用及网站源代码包含英语、简体中文、繁体中文（台湾）、阿拉伯语、俄语、乌克兰语、西班牙语和日语。应用的香港／澳门及 Hant 选择使用台湾译文，不宣称提供独立地区翻译。[繁体中文说明](README.zh-TW.md)提供安装、设置、隐私和构建指南。源代码、构建说明及许可证随版本提供。

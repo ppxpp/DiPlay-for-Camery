@@ -1,6 +1,9 @@
 package com.shilapi.xcertplay
 
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.os.Build
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -143,6 +146,27 @@ class CarPlayHostSettingsTest {
         } finally {
             AirPlayPersistence.clearCustomAirPlayIcon(activity)
         }
+    }
+
+    @Test
+    @Config(sdk = [28, 29, 32])
+    fun callPopupSwitchRequiresBydAndAndroid10() {
+        val description = activity.getString(R.string.settings_hide_byd_call_popup_description)
+        setField("settingsMenuCategoryKey", "vehicle")
+        assertFalse(CarHotspotSetup.isBydHeadUnit(activity))
+        val otherMenu = invoke("buildSettingsMenu") as View
+        assertFalse(views(otherMenu).filterIsInstance<Switch>().any { it.contentDescription == description })
+        shadowOf(activity.packageManager).installPackage(PackageInfo().apply {
+            packageName = "com.byd.carsettings"
+            applicationInfo = ApplicationInfo().apply {
+                packageName = "com.byd.carsettings"
+                flags = ApplicationInfo.FLAG_SYSTEM
+            }
+        })
+        assertTrue(CarHotspotSetup.isBydHeadUnit(activity))
+        val bydMenu = invoke("buildSettingsMenu") as View
+        assertEquals(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+            views(bydMenu).filterIsInstance<Switch>().any { it.contentDescription == description })
     }
 
     @Test fun disabledGesturePersistsAndDoesNotOpenTheMenu() {
@@ -604,6 +628,63 @@ class CarPlayHostSettingsTest {
         assertTrue(field("handshakeResetInProgress") as Boolean)
     }
 
+    // #848: a fresh install keeps the default car hotspot mode, and a driver on USB never sets it up.
+    @Test fun savingWorksWhileTheUnusedCarHotspotIsNotSetUp() {
+        AirPlayPersistence.saveWirelessEnabled(activity, false)
+        AirPlayPersistence.saveWirelessHotspotMode(activity, WirelessHotspotMode.MANUAL)
+        AirPlayPersistence.saveManualHotspotSsid(activity, "")
+        invoke("loadPersistedSettings")
+        attachController()
+        invoke("openSettingsMenu")
+        resolutionSlider().progress = 0
+        saveButton().performClick()
+        assertFalse("Save and reconnect left the menu open", field("menuOpen") as Boolean)
+        assertEquals(CarPlayDisplayScale.MIN_TENTHS, AirPlayPersistence.loadDisplayScaleTenths(activity))
+        assertEquals(1, field("restartGeneration"))
+    }
+
+    // Switching to wireless puts the hotspot to use, so its details are checked although nobody touched them.
+    @Test fun switchingToWirelessChecksTheUnsetHotspot() {
+        AirPlayPersistence.saveWirelessEnabled(activity, false)
+        AirPlayPersistence.saveWirelessHotspotMode(activity, WirelessHotspotMode.MANUAL)
+        AirPlayPersistence.saveManualHotspotSsid(activity, "")
+        invoke("loadPersistedSettings")
+        attachController()
+        invoke("openSettingsMenu")
+        setField("wirelessEnabled", true)
+        saveButton().performClick()
+        assertTrue("Save stored wireless CarPlay without a hotspot", field("menuOpen") as Boolean)
+        assertEquals("connection", field("settingsMenuCategoryKey"))
+        val message = field("manualHotspotErrorView") as TextView
+        assertEquals(View.VISIBLE, message.visibility)
+        assertEquals(activity.getString(R.string.hotspot_ssid_is_required), message.text.toString())
+        assertFalse(AirPlayPersistence.loadWirelessEnabled(activity))
+        assertEquals(0, field("restartGeneration"))
+    }
+
+    @Test fun aRejectedHotspotEditOpensTheConnectionPageWithItsMessage() {
+        AirPlayPersistence.saveWirelessHotspotMode(activity, WirelessHotspotMode.MANUAL)
+        AirPlayPersistence.saveManualHotspotSsid(activity, "Car hotspot")
+        AirPlayPersistence.saveManualHotspotPassphrase(activity, "password1")
+        AirPlayPersistence.saveManualHotspotSecurity(activity, ManualHotspotSecurity.WPA2)
+        invoke("loadPersistedSettings")
+        attachController()
+        invoke("openSettingsMenu")
+        views(menu()).filterIsInstance<Button>().first { it.text == activity.getString(R.string.settings_more) }
+            .performClick()
+        setField("manualHotspotSsid", "")
+        saveButton().performClick()
+        assertTrue(field("menuOpen") as Boolean)
+        assertEquals("connection", field("settingsMenuCategoryKey"))
+        assertEquals(View.VISIBLE, views(menu()).first { it.tag == "connection" }.visibility)
+        assertEquals(View.GONE, views(menu()).first { it.tag == "more" }.visibility)
+        val message = field("manualHotspotErrorView") as TextView
+        assertEquals(View.VISIBLE, message.visibility)
+        assertEquals(activity.getString(R.string.hotspot_ssid_is_required), message.text.toString())
+        assertEquals("Car hotspot", AirPlayPersistence.loadManualHotspotSsid(activity))
+        assertEquals(0, field("restartGeneration"))
+    }
+
     @Test fun failedStartupWhileMenuIsOpenRecoversOnCancel() {
         attachController()
         invoke("openSettingsMenu")
@@ -631,6 +712,57 @@ class CarPlayHostSettingsTest {
         assertEquals(View.VISIBLE, (field("wifiRecoveryButton") as View).visibility)
         assertEquals(0, field("restartGeneration"))
         assertFalse(field("reconnectScheduled") as Boolean)
+    }
+
+    // #873: a second CarPlay mode request failed while the iPhone was already switching, the switch
+    // completed and the same attempt reached its control loop; the retry then tore that session down.
+    @Test fun aRetryDoesNotTearDownAnAttemptThatRecoveredAfterItsFailure() {
+        attachController()
+        report(CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
+        assertTrue(field("reconnectScheduled") as Boolean)
+        report(CarPlayStatus.RunningControl)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(0, field("restartGeneration"))
+        assertFalse(field("reconnectScheduled") as Boolean)
+    }
+
+    @Test fun aRetryStillRestartsAnAttemptThatDidNotRecover() {
+        attachController()
+        report(CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
+        report(CarPlayStatus.WaitingForIphone)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(1, field("restartGeneration"))
+    }
+
+    // A loss after the recovery, inside the retry's delay, is dropped because a retry is pending,
+    // so that retry has to restart: otherwise nothing would reconnect.
+    @Test fun aRetryStillRestartsWhenTheRecoveredAttemptFailsAgain() {
+        attachController()
+        report(CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
+        report(CarPlayStatus.RunningControl)
+        report(CarPlayStatus.Failed("USBMUX write transferred -1 of 218 bytes"))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(1, field("restartGeneration"))
+    }
+
+    @Test fun aRetryStillRestartsWhenTheRecoveredAttemptsControlEnds() {
+        attachController()
+        report(CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
+        report(CarPlayStatus.RunningControl)
+        report(CarPlayStatus.ControlEnded)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(1, field("restartGeneration"))
+    }
+
+    @Test fun aRetryStillRestartsWhenTheRecoveredAttemptLosesItsTransport() {
+        attachController()
+        report(CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
+        report(CarPlayStatus.RunningControl)
+        val listener = activity.javaClass.getDeclaredMethod("createSessionListener", Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }.invoke(activity, 0) as AirPlaySessionListener
+        listener.onTransportError("transport lost")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(1, field("restartGeneration"))
     }
 
     @Test fun savingWirelessAfterWifiResetFailureStillRequiresManualRecovery() {
@@ -938,6 +1070,8 @@ class CarPlayHostSettingsTest {
     }
 
     private fun menu() = field("settingsMenu") as View
+    private fun saveButton() = views(menu()).filterIsInstance<Button>()
+        .single { it.text == activity.getString(R.string.save_and_reconnect) }
     private fun resolutionSlider() = views(menu()).filterIsInstance<SeekBar>()
         .first { it.max == CarPlayDisplayScale.MAX_PERCENT - CarPlayDisplayScale.MIN_PERCENT }
     private fun gestureButton() = views(menu()).filterIsInstance<Button>()
