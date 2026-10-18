@@ -10,7 +10,7 @@ export const site = {
 
   // 待填：三篇飞书文档链接，站内只放链接、不放正文，内容后续在飞书里更新
   docs: {
-    install: '',
+    install: 'https://my.feishu.cn/wiki/DrNzwzq6miBWFUk6t1gcYSVwn3g',
     features: '',
     knownIssues: ''
   },
