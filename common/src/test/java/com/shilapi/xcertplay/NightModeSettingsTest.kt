@@ -54,6 +54,12 @@ class NightModeSettingsTest {
         assertScheduleVisible(false)
     }
 
+    @Test fun freshDisplaySettingsSelectLargeCarPlaySize() {
+        renderSettings()
+        assertTrue(button(R.string.carplay_size).text.toString()
+            .endsWith(activity.getString(R.string.option_size_large)))
+    }
+
     @Test fun savedModesShowAmbientSettingsOnlyForAmbientLight() {
         for (mode in CarPlayNightMode.entries) {
             AirPlayPersistence.saveCarPlayNightMode(activity, mode)

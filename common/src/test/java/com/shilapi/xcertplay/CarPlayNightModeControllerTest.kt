@@ -47,6 +47,34 @@ class CarPlayNightModeControllerTest {
         }
     }
 
+    @Test fun camryUsesSystemFallbackOnlyUntilTheFirstVehicleState() {
+        val f = Fixture()
+        f.controller.configure(CarPlayNightMode.CAMRY, false)
+        f.controller.systemChanged(true)
+        assertTrue(f.controller.night)
+        f.controller.camryChanged(false)
+        assertFalse(f.controller.night)
+        f.controller.systemChanged(true)
+        assertFalse(f.controller.night)
+        f.controller.camryChanged(true)
+        assertTrue(f.controller.night)
+        assertEquals(listOf(true, false, true), f.output)
+    }
+
+    @Test fun manualModesIgnoreVehicleChangesAndCamryReplaysTheLatestState() {
+        val f = Fixture()
+        f.controller.configure(CarPlayNightMode.DAY, false)
+        f.controller.camryChanged(true)
+        assertFalse(f.controller.night)
+        f.controller.configure(CarPlayNightMode.CAMRY, false)
+        assertTrue(f.controller.night)
+        f.controller.configure(CarPlayNightMode.NIGHT, true)
+        f.controller.camryChanged(false)
+        assertTrue(f.controller.night)
+        f.controller.configure(CarPlayNightMode.CAMRY, true)
+        assertFalse(f.controller.night)
+    }
+
     @Test fun stableOnChangeReadingTransitionsOnlyAfterFiveSeconds() {
         val f = Fixture()
         f.light.emit(19f)

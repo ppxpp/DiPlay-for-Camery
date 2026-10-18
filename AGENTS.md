@@ -23,6 +23,17 @@ The full CI command from `.github/workflows/android.yml` remains available when 
 
 Set `ANDROID_HOME` or `local.properties` if Gradle cannot find the SDK.
 
+## Camry adaptation regressions
+
+For changes to the vehicle adaptation or an upstream integration, the shared local/CI entry point is
+`scripts/check_vehicle_adaptation.sh`. Add `--with-wecarflow-baseline` when the private WeCarFlow
+baseline and decompiled tree are available. This builds a source-only validation APK, not an
+installable CarPlay package. Keep focused checks available for routine debugging.
+
+The protected behaviors, test boundaries and physical acceptance checklist are documented in
+[the adaptation regression guide](docs/vehicle-adaptation/2026-10-18-1112-凯美瑞适配防回归说明与实车验收清单.md).
+Keep process notes and test progress out of README files.
+
 ## Adding or moving a setting
 
 The Settings screen is grouped by driver goal, not by implementation.
