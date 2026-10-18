@@ -1,7 +1,31 @@
 # DiPlay
 
-> **Camry adaptation branch:** This fork includes the verified Pioneer/Camry integration and `wecarflow/` bridge. It retains API 23 compatibility work and shared local signing; the upstream BYD support statement below describes the upstream project.
+## 凯美瑞车机适配版（本仓库重点）
 
+> **本仓库重点维护丰田凯美瑞先锋车机的 CarPlay 适配。** 在 DiPlay 上游功能的基础上，针对原车的连接方式、声音通道、方向盘按键和日夜模式做专门处理，并与原车爱趣听（WeCarFlow）协同工作。
+
+本分支应用名为 **DiPlay-凯美瑞A导航**，包名为 `com.gtmc.app.fengyunyx.b819`，目前已完整合入上游 **v0.2.21**。目标是让 CarPlay 融入原车的操作习惯：可以用原车按键切歌、跟随车机切换白天和黑夜，并减少两个音乐应用争抢声音的情况。
+
+### 凯美瑞适配做了什么
+
+| 适配内容 | 对日常使用的作用与当前进度 |
+| --- | --- |
+| 先锋车机连接 | 保留先锋固件所需的有线连接与数据传输处理，接入上游连接超时和重试修复；升级后的稳定性仍需实车回归。 |
+| 原车声音通道 | 分别处理 CarPlay 音乐、导航提示和通话的声音需求，配合车机自己的音源管理；MODE 切换后回到爱趣听无声的问题仍待闭环验证。 |
+| 方向盘按键与爱趣听协同 | 通过 `wecarflow/` 中的独立桥接服务处理前后曲按键和播放冲突。DiPlay 启动时只拉起所需桥接逻辑，避免同时启动原播放器业务；重启车机后的效果仍需回归。 |
+| CarPlay 音乐使用提醒 | 保护策略生效时，打开爱趣听会提示优先使用 CarPlay 音乐。关闭提示不解除保护；勾选“本次不再提示”后，爱趣听主进程重启前不再弹出。 |
+| 白天／黑夜同步 | 已在真实车机上走通，CarPlay 可以跟随原车昼夜状态切换；日夜测试悬浮窗和设置入口已删除。 |
+| 页面切换与交互 | 已缩短切到后台时等待画面资源释放的时间，减少界面被拖住的机会；流畅度、画面恢复及长时间运行仍需实车确认。 |
+
+### 两个应用怎样配合
+
+**DiPlay** 负责连接 iPhone、显示 CarPlay、播放声音和接收触控；**WeCarFlow 桥接**负责对接原车按键、播放状态和冲突保护。CarPlay 连接并启用保护后，原车控制应交给 CarPlay，避免爱趣听与 iPhone 同时播放。只关闭提醒窗口，不会改变这套保护规则。
+
+本分支保留 Android 6.0（API23）兼容处理及 DiPlay／WeCarFlow 共用本地签名。已完成的适配针对当前凯美瑞先锋车机，不代表所有凯美瑞年款、车机固件或其他丰田车型都已验证。**电话对方听不见、MODE 回切无声和交互流畅度，仍是后续实车验证重点。**
+
+详细记录见[本轮调试进度与后续计划](docs/vehicle-adaptation/2026-10-18-0753-车机调试进度与v0.2.21合入计划.md)、[DiPlay 与 WeCarFlow 协同说明](docs/vehicle-adaptation/2026-10-16-2238-DiPlay与WeCarFlow冲突处理及弹窗说明.md)及 [WeCarFlow 项目说明](wecarflow/README.md)。
+
+**下方保留上游项目介绍。** 其中比亚迪支持范围、`com.shihab.diplay` 包名、官方下载及问题反馈入口均属于上游；凯美瑞适配包与上游原版有区别，请结合本节及适配记录阅读。
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
