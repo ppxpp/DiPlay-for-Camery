@@ -16,6 +16,8 @@ internal object OwnScreenStart {
     private const val TAG = "DiPlay"
 
     fun start(activity: Activity, intent: Intent, log: (String) -> Unit = { Log.w(TAG, it) }): Boolean {
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(activity,
+            "UI_ROUTE open from=${activity.javaClass.simpleName} to=${intent.component?.className?.substringAfterLast('.')} action=${intent.action} page=${intent.getStringExtra("page")}")
         val screen = intent.component?.className?.substringAfterLast('.') ?: "screen"
         try {
             activity.startActivity(intent)

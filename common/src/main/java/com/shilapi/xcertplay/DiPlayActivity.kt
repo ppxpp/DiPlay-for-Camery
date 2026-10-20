@@ -205,6 +205,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var pendingWireless = false
     private var bluetoothSettingsVisited = false
     private var initialLaunch = true
+    private var forwardingToProjection = false
     private var disclaimerAcknowledged = false
     private var notificationTransport = true
     private var exportInProgress = false
@@ -378,6 +379,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
+            "UI_ROUTE home create action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.vehicle.runtime.VehicleMediaRuntime.prepareCompanion(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
@@ -391,7 +394,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
-        if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
+        if (savedInstanceState == null && isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
+            forwardingToProjection = true
             openProjection(); finish(); return
         }
         scheduleBackgroundUpdateChecks()
@@ -452,6 +456,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
+        forwardingToProjection = false
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
+            "UI_ROUTE home new-intent action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         connectionSettingsReturnCategory = null
         // A re-tap on the launcher icon before consent still has to pass the gate, not resume projection.
         if (isLauncherIntent(intent) && !disclaimerAcknowledged && !Disclaimer.acceptedForCurrentVersion(this)) {
@@ -459,8 +466,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
         // CarPlay carry a "page" extra, which isLauncherIntent rejects.
-        if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            page = "home"; render(); openProjection(); return
+        if (isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
+            forwardingToProjection = true
+            com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE home redirect-to-host without-render action=${intent.action}")
+            openProjection(); return
         }
         page = intent.getStringExtra("page") ?: "home"; render()
         automaticVehicleValidationStarted = false
@@ -558,6 +567,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onResume() {
         super.onResume()
+        if (forwardingToProjection) return
         if (setupError == null) {
             com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
                 wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
@@ -5811,7 +5821,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else open()
     }
     private fun openProjection() {
-        OwnScreenStart.start(this, Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        val projection = Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        if (forwardingToProjection) projection.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        OwnScreenStart.start(this, projection)
+        if (forwardingToProjection) overridePendingTransition(0, 0)
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {

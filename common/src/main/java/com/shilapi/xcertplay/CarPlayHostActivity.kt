@@ -833,6 +833,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val startupNs = System.nanoTime()
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_STARTUP host create")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
         NavigationWidgetUpdater.attach(applicationContext)
@@ -844,10 +846,15 @@ class CarPlayHostActivity : ComponentActivity() {
         if (isIphoneUsbAttachment(intent)) {
             AirPlayPersistence.saveWirelessEnabled(this, false)
         }
+        com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
+            wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
+            hasSession = { CarPlayBackgroundSession.hasSession() },
+            log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
         if (runCatching { DiPlayBootstrap.ensure(this, AirPlayPersistence.loadMfiTarget(this)) }.isFailure) {
             OwnScreenStart.start(this, Intent(this, DiPlayActivity::class.java), ::appendLog)
             finish(); return
         }
+        CarPlayBackgroundSession.markHost(this)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
@@ -887,6 +894,19 @@ class CarPlayHostActivity : ComponentActivity() {
             })
         locationPermissionAvailable = hasFineLocationPermission()
         setContentView(buildContentView())
+        appendLog("UI_STARTUP content-created elapsedMs=${(System.nanoTime() - startupNs) / 1_000_000L}")
+        val startupDecor = window.decorView
+        startupDecor.viewTreeObserver.addOnDrawListener(object : android.view.ViewTreeObserver.OnDrawListener {
+            private var reported = false
+            override fun onDraw() {
+                if (reported) return
+                reported = true
+                appendLog("UI_STARTUP first-draw elapsedMs=${(System.nanoTime() - startupNs) / 1_000_000L}")
+                startupDecor.post {
+                    if (startupDecor.viewTreeObserver.isAlive) startupDecor.viewTreeObserver.removeOnDrawListener(this)
+                }
+            }
+        })
         applyFullscreenMode()
         onBackPressedDispatcher.addCallback(
             this,
@@ -1159,6 +1179,7 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE host new-intent action=${intent.action} controller=${controller != null}")
         if (isIphoneUsbAttachment(intent)) {
             if (wirelessEnabled) {
                 if (menuOpen) cancelSettingsEdits()
@@ -1949,6 +1970,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        CarPlayBackgroundSession.clearHost(this)
         stopObservingCamryNight?.invoke()
         stopObservingCamryNight = null
         PioneerDebugIntegration.detachHost(this)
@@ -2169,10 +2191,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 setMargins(0, dp(12), dp(12), 0)
             })
         }
-        settingsMenu = buildSettingsMenu().apply { visibility = View.GONE }
-        root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
-        safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
-        root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
+        // Settings and the safe-area editor are built only when opened, after the connection UI is visible.
         videoView = video
         smoothVideo = AirPlayPersistence.loadSmoothVideo(this)
         directVideoOutput = AirPlayPersistence.loadDirectVideoOutput(this)
@@ -5205,6 +5224,11 @@ class CarPlayHostActivity : ComponentActivity() {
             appendLog("Safe area editor is unavailable before display layout")
             return
         }
+        if (safeAreaEditor == null) {
+            val root = videoView?.parent as? FrameLayout ?: return
+            safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
+            root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
+        }
         val editorView = safeAreaEditorView ?: return
         val initial = AirPlayPersistence.loadSafeAreaRect(this, size.width, size.height)
             ?: AirPlaySafeArea.default(size.width, size.height)
@@ -6219,7 +6243,11 @@ class CarPlayHostActivity : ComponentActivity() {
         // Reuse the prepared controls until settings changed. Cancelled edits explicitly invalidate
         // them before restoring fields, so stale slider/text values cannot reappear.
         val rebuild = settingsMenuNeedsRebuild || settingsMenuRenderedState != settingsMenuRenderState()
-        settingsMenu?.takeIf { rebuild }?.let { previous ->
+        if (settingsMenu == null) {
+            val root = videoView?.parent as? FrameLayout ?: return
+            settingsMenu = buildSettingsMenu().apply { visibility = View.GONE }
+            root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
+        } else settingsMenu?.takeIf { rebuild }?.let { previous ->
             val parent = previous.parent as ViewGroup
             val index = parent.indexOfChild(previous)
             parent.removeView(previous)
@@ -7140,6 +7168,10 @@ internal fun statusBarHiddenByAnotherWindow(display: CarPlaySessionDisplay, widt
 
 /** Process-local hand-off for keeping the CarPlay session alive while no Activity is visible. */
 internal object CarPlayBackgroundSession {
+    @Volatile private var hostActivity: java.lang.ref.WeakReference<CarPlayHostActivity>? = null
+    fun markHost(activity: CarPlayHostActivity) { hostActivity = java.lang.ref.WeakReference(activity) }
+    fun clearHost(activity: CarPlayHostActivity) { if (hostActivity?.get() === activity) hostActivity = null }
+    fun hasHost(): Boolean = hostActivity?.get()?.let { !it.isFinishing && !it.isDestroyed } == true
     @Volatile var active = false
     @Volatile var callPopupReady = false
     private var stopAction: (((() -> Unit)) -> Unit)? = null
