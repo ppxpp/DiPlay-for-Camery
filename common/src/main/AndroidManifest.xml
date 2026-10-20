@@ -58,6 +58,7 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_apk_paths" />
         </provider>
+        <activity android:name="com.shilapi.xcertplay.NavigationHudLabActivity" android:exported="false" />
         <activity android:name="com.shilapi.xcertplay.GatewayDeviceActivity"
             android:exported="false" android:hardwareAccelerated="false"
             android:theme="@style/Theme.Xcertplay" />

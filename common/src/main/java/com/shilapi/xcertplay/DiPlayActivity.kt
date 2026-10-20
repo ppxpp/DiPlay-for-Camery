@@ -1824,6 +1824,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(button(getString(R.string.settings_pioneer_lan_debug), false) {
                 startActivity(Intent(this, com.shilapi.xcertplay.pioneer.PioneerDebugActivity::class.java))
             }, matchButton(10, 60))
+            card.addView(button(getString(R.string.navigation_hud_lab), false) {
+                startActivity(Intent(this, NavigationHudLabActivity::class.java))
+            }, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
             card.addView(button(getString(R.string.settings_report_on_phone), false) { openBackup(SettingsCategory.DIAGNOSTICS) }, matchButton(10, 60))
             val destination = getString(R.string.reports_save_to_downloads_diplay)
