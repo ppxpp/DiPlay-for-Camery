@@ -22,7 +22,7 @@ class PioneerDebugActivity : Activity() {
             status.text = "${PioneerDebugService.addresses().joinToString("\n")}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n" +
                 "TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n" +
                 "VPN 已授权：${runCatching { android.net.VpnService.prepare(this@PioneerDebugActivity) == null }.getOrDefault(false)}\n" +
-                "${PioneerDebugRuntime.lastCommand}\n${PioneerDebugRuntime.snapshot().toString(2)}"
+                "${PioneerDebugRuntime.lastCommand}\nUSB授权验证暂停=${PioneerUsbPermissionProbe.holdsRequests(this@PioneerDebugActivity)}\n${PioneerDebugRuntime.snapshot().toString(2)}"
             handler.postDelayed(this, 1_000)
         }
     }
@@ -45,6 +45,23 @@ class PioneerDebugActivity : Activity() {
         button("启动有线连接") { PioneerDebugRuntime.request(this, "start-wired") }
         button("重试 VPN 授权（手动 ADB 授权后使用）") { PioneerDebugRuntime.request(this, "retry-vpn") }
         button("停止 CarPlay，保留 TCP 调试") { PioneerDebugRuntime.request(this, "stop") }
+        fun permissionProbe(action: String) {
+            Thread({
+                val result = runCatching { PioneerUsbPermissionProbe.run(applicationContext, action).toString(2) }
+                    .getOrElse { "USB授权验证失败：${it.message}" }
+                runOnUiThread {
+                    android.app.AlertDialog.Builder(this).setTitle("USB授权验证 · $action")
+                        .setMessage(result).setPositiveButton("关闭", null).show()
+                }
+            }, "usb-permission-probe-ui").apply { isDaemon = true; start() }
+        }
+        button("USB授权验证：查询当前权限") { permissionProbe("STATUS") }
+        button("USB授权验证：暂停DiPlay授权请求（先停止CarPlay）") { permissionProbe("HOLD") }
+        button("USB授权验证：只读检查高权限能力") { permissionProbe("INSPECT") }
+        button("USB授权验证：单次授予当前iPhone访问权") { permissionProbe("GRANT") }
+        button("USB授权验证：清除当前iPhone的DiPlay默认关联") { permissionProbe("CLEAR_DEFAULT") }
+        button("USB授权验证：关闭测试，恢复正常授权流程") { permissionProbe("OFF") }
+        column.addView(TextView(this).apply { text = "授权验证只支持已验证先锋固件及唯一iPhone。测试暂停会跨重启保留；已有权限不撤销，系统自行显示的USB应用选择窗口不受此开关控制。测试完请关闭。" })
         button("打开系统 VPN 设置") { startActivity(Intent(android.provider.Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         button("USB 适配：自动识别") { PioneerUsbPolicy.setMode(this, "AUTO") }
         button("USB 适配：启用（下次连接生效）") { PioneerUsbPolicy.setMode(this, "ON") }

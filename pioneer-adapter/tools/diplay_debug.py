@@ -60,6 +60,9 @@ def main():
     parser.add_argument("--timeout", type=float, default=45)
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
+    permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
+    permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT"], default="STATUS")
+    permission.add_argument("--node", help="多台Apple设备时指定status显示的node")
     audio_source = commands.add_parser("audio-source", help="读取先锋音源或执行FM/爱趣听切换实验")
     audio_source.add_argument("--mode", choices=["STATUS", "FM", "WECARFLOW", "OFF", "NEXT", "BT"], default="STATUS")
     commands.add_parser("update-storage", help="读取更新缓存与可用空间")
@@ -141,6 +144,9 @@ def main():
             if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
             if args.cmd == "video-gesture": fields = {"kind": args.kind}
             if args.cmd == "host-ui": fields = {"action": args.action}
+            if args.cmd == "usb-permission-probe":
+                fields = {"action": args.action}
+                if args.node is not None: fields["node"] = args.node
             if args.cmd == "video-tap": fields = {"x": args.x, "y": args.y}
             if args.cmd == "toast": fields = {"text": args.text}
             if args.cmd == "usb-tx-batch": fields = {"frames": args.frames}

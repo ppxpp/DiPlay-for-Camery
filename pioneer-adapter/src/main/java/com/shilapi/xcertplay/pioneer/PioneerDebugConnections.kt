@@ -44,7 +44,7 @@ internal class PioneerDebugConnections(private val handle: (Socket, JSONObject) 
                         header.write(next)
                     }
                     val request = JSONObject(header.toString("UTF-8"))
-                    val isBulk = request.getString("cmd") in setOf("update", "export", "runtime", "video-snapshot", "logs")
+                    val isBulk = request.getString("cmd") in setOf("update", "export", "runtime", "video-snapshot", "logs", "usb-permission-probe")
                     val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - accepted)
                     val deadline = timer.schedule({ close(socket) },
                         ((if (isBulk) 120_000L else 10_000L) - elapsed).coerceAtLeast(0), TimeUnit.MILLISECONDS)

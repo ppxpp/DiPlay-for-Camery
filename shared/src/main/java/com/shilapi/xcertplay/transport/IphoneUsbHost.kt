@@ -122,6 +122,10 @@ class IphoneUsbHost(
     ): PermissionRequest {
         requireConfiguredDevice(device)
         if (usbManager.hasPermission(device)) return PermissionRequest.AlreadyGranted(device)
+        if (com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.holdsRequests(appContext)) {
+            onDiagnostic("USB_PERMISSION_PROBE holdRequests=true; silent grant, ADB fallback and permission dialog suppressed; stop before probing")
+            return PermissionRequest.Requested(device)
+        }
         if (attemptSilentGrant && IphoneUsbSilentGrant.grant(appContext, usbManager, device, silentGrantDiagnostic)) {
             runCatching { onDiagnostic("USB permission route=direct-system-grant; verified=true") }
             return PermissionRequest.AlreadyGranted(device)

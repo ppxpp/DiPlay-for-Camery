@@ -26,7 +26,7 @@ import java.net.Socket
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/** usbcheck-compatible JSON-line protocol. No shell, root, or automatic VPN authorization. */
+/** Fixed JSON-line diagnostics; no arbitrary shell or automatic VPN authorization. */
 class PioneerDebugService : Service() {
     @Volatile private var closed = false
     @Volatile private var listener: ServerSocket? = null
@@ -142,6 +142,8 @@ class PioneerDebugService : Service() {
                 send(socket, reply.put("format", "png"), bytes)
             }
             "status" -> send(socket, status().put("ok", true))
+            "usb-permission-probe" -> send(socket, reply.put("probe", PioneerUsbPermissionProbe.run(
+                this, request.optString("action", "STATUS"), request.optString("node").takeIf { it.isNotBlank() })))
             "video-settings" -> {
                 val settings = PioneerDebugRuntime.videoSettings?.invoke(request) ?: error("Open DiPlay first")
                 send(socket, reply.put("settings", settings).put("message", "设置下次连接生效；当前会话不变"))
@@ -397,6 +399,7 @@ class PioneerDebugService : Service() {
                 else if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
+            .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
             .put("pioneerWiredSession", JSONObject().apply {
                 val session = PioneerWiredSession.current
                 put("active", session != null).put("adaptationActive", session?.verifiedDevice == true)
@@ -480,6 +483,15 @@ class PioneerDebugService : Service() {
             fun add(name: String, data: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(data); zip.closeEntry() }
             add("status.json", status().toString(2).toByteArray())
             add("network.json", networkDiagnostics().toString(2).toByteArray())
+            add("usb-permission-probe.json", PioneerUsbPermissionProbe.status(this).toString(2).toByteArray())
+            File(filesDir, "usb-permission-probe").listFiles().orEmpty().filter { it.isDirectory }
+                .sortedByDescending { it.lastModified() }.take(12).forEach { directory ->
+                    for (name in listOf("request.json", "result.json", "app-report.json")) {
+                        val record = File(directory, name)
+                        if (record.isFile && record.length() in 1..32768)
+                            add("usb-permission-probe/${directory.name}/$name", record.readBytes())
+                    }
+                }
             add("environment.txt", "android=${Build.VERSION.RELEASE}\nmodel=${Build.MODEL}\ndevice=${Build.DEVICE}\n".toByteArray())
             for (dir in listOf(File(filesDir, "logs"), File(filesDir, "pioneer-debug"))) {
                 dir.listFiles()?.filter { it.isFile && it.name.endsWith(".log") }?.forEach {
