@@ -61,7 +61,7 @@ def main():
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
     permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
-    permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT"], default="STATUS")
+    permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT"], default="STATUS")
     permission.add_argument("--node", help="多台Apple设备时指定status显示的node")
     audio_source = commands.add_parser("audio-source", help="读取先锋音源或执行FM/爱趣听切换实验")
     audio_source.add_argument("--mode", choices=["STATUS", "FM", "WECARFLOW", "OFF", "NEXT", "BT"], default="STATUS")

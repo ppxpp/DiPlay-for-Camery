@@ -2122,13 +2122,50 @@ class CarPlayController(
         debugLog("wired iPhone not listed by Android; USB devices=[$listed]")
     }
 
+    private val usbRootGrantAttempts = mutableSetOf<String>()
+    private val pendingUsbRootGrants = mutableSetOf<String>()
+
     private fun requestIphonePermission(device: UsbDevice) {
         mainHandler.post { doRequestIphonePermission(device) }
     }
 
-    private fun doRequestIphonePermission(device: UsbDevice, allowAdbFallback: Boolean = true) {
+    private fun doRequestIphonePermission(device: UsbDevice, allowAdbFallback: Boolean = true, allowRootGrant: Boolean = true) {
         if (closed) return
         if (usbAdbGrantKey(device) in pendingUsbAdbGrants) return
+        val rootKey = "$permissionPollGeneration:${usbAdbGrantKey(device)}"
+        if (rootKey in pendingUsbRootGrants) return
+        if (allowRootGrant && !requireUsbManager().hasPermission(device) && config.transport == CarPlayTransport.WIRED &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() &&
+            !com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.holdsRequests(appContext) &&
+            usbRootGrantAttempts.add(rootKey)) {
+            pendingUsbRootGrants.add(rootKey)
+            val expectedPhase = phase
+            val expectedGeneration = permissionPollGeneration
+            onStatus(CarPlayStatus.RequestingIphonePermission)
+            connectionDiagnostic("USB permission route=PIONEER_ROOT starting node=${device.deviceName}")
+            executor.execute {
+                val result = runCatching {
+                    com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.grantForConnection(appContext, device) {
+                        !closed && phase == expectedPhase && permissionPollGeneration == expectedGeneration
+                    }
+                }
+                mainHandler.post {
+                    pendingUsbRootGrants.remove(rootKey)
+                    if (closed || phase != expectedPhase || permissionPollGeneration != expectedGeneration) return@post
+                    val live = requireUsbManager().deviceList[device.deviceName]
+                    if (live == null || live.deviceId != device.deviceId) {
+                        connectionDiagnostic("USB permission route=PIONEER_ROOT stale attachment; rediscover")
+                        checkIphoneAvailability()
+                        return@post
+                    }
+                    connectionDiagnostic("USB permission route=PIONEER_ROOT result=" +
+                        (result.getOrNull()?.optString("verdict") ?: result.exceptionOrNull()?.javaClass?.simpleName))
+                    // The app process rechecks permission; failure continues through existing consent routes.
+                    doRequestIphonePermission(live, allowAdbFallback, allowRootGrant = false)
+                }
+            }
+            return
+        }
         try {
             when (val request = iphoneHost.requestPermission(device, allowAdbFallback)) {
                 is IphoneUsbHost.PermissionRequest.AlreadyGranted -> {

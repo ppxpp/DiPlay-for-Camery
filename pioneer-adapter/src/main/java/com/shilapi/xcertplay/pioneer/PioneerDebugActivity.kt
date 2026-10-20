@@ -59,6 +59,7 @@ class PioneerDebugActivity : Activity() {
         button("USB授权验证：暂停DiPlay授权请求（先停止CarPlay）") { permissionProbe("HOLD") }
         button("USB授权验证：只读检查高权限能力") { permissionProbe("INSPECT") }
         button("USB授权验证：单次授予当前iPhone访问权") { permissionProbe("GRANT") }
+        button("USB授权验证：将当前iPhone默认关联到DiPlay") { permissionProbe("SET_DEFAULT") }
         button("USB授权验证：清除当前iPhone的DiPlay默认关联") { permissionProbe("CLEAR_DEFAULT") }
         button("USB授权验证：关闭测试，恢复正常授权流程") { permissionProbe("OFF") }
         column.addView(TextView(this).apply { text = "授权验证只支持已验证先锋固件及唯一iPhone。测试暂停会跨重启保留；已有权限不撤销，系统自行显示的USB应用选择窗口不受此开关控制。测试完请关闭。" })
