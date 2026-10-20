@@ -48,3 +48,7 @@ release-signing.properties
 # Explicitly supplied head-unit boot launcher companion APKs
 !/boot-launcher/开机启动（A）替换车机微信.apk
 !/boot-launcher/开机启动（A）替换车机微信_开关版.apk
+
+# Generated Python bytecode
+__pycache__/
+*.py[cod]
