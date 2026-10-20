@@ -89,6 +89,7 @@ import com.shilapi.xcertplay.airplay.AirPlaySafeArea
 import com.shilapi.xcertplay.airplay.AirPlaySession
 import com.shilapi.xcertplay.airplay.AirPlaySessionListener
 import com.shilapi.xcertplay.airplay.CarPlayMediaEngine
+import com.shilapi.xcertplay.airplay.AudioPacketCapture
 import com.shilapi.xcertplay.airplay.SafeAreaRect
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.location.AndroidCarPlayLocationProvider
@@ -5775,8 +5776,12 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun audioCaptureDirectory(): File? {
+        val directory = File(filesDir, AUDIO_CAPTURE_DIRECTORY)
+        // Apply the retention cap even when debugging is already off, so an old backlog is
+        // reduced on the next CarPlay session instead of staying on the head unit forever.
+        AudioPacketCapture.prune(directory)
         if (!File(filesDir, AUDIO_CAPTURE_MARKER).isFile) return null
-        return File(filesDir, AUDIO_CAPTURE_DIRECTORY)
+        return directory
     }
 
     private fun scheduleDisplaySize(width: Int, height: Int) {
