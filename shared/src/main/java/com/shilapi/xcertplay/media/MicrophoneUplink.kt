@@ -88,9 +88,9 @@ internal class MicrophoneUplink(
             return false
         }
 
-        if (config.audioType == "telephony") {
-            vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, onDiagnostic)
-        }
+        // Every negotiated input stream needs the Pioneer hardware gate, including Siri
+        // and app recording. Audio type only selects processing, not microphone ownership.
+        vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, onDiagnostic)
         val source = when {
             vehicleMicrophoneLease != null -> MediaRecorder.AudioSource.MIC
             config.audioType == "telephony" -> telephonyMicrophoneSource(
