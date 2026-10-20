@@ -10,7 +10,7 @@ public class NativeNcmFirewallTest {
     private static class Fixture implements NativeNcmFirewall.Runner {
         final Map<String, List<String>> chains = new LinkedHashMap<>();
         final List<String> journal = new ArrayList<>();
-        int inserts, deletes; boolean ignoreInsert, ignoreDelete, uncertain, stopped, corruptCheck, guardFails;
+        int inserts, deletes, dumps; boolean ignoreInsert, ignoreDelete, uncertain, stopped, corruptCheck, guardFails;
         NativeNcmFirewall firewall;
         Fixture() {
             chains.put("CARNET_IN", new ArrayList<>(Collections.singletonList("-A CARNET_IN -j DROP")));
@@ -23,7 +23,7 @@ public class NativeNcmFirewallTest {
             String action = args[3], chain = args[4];
             List<String> rules = chains.get(chain);
             if (rules == null) return new NativeNcmFirewall.Result(1, "chain missing");
-            if (action.equals("-S")) return new NativeNcmFirewall.Result(0, "-N " + chain + "\n" + String.join("\n", rules));
+            if (action.equals("-S")) { dumps++; return new NativeNcmFirewall.Result(0, "-N " + chain + "\n" + String.join("\n", rules)); }
             String line = "-A " + chain + " " + String.join(" ", Arrays.copyOfRange(args, action.equals("-I") ? 6 : 5, args.length));
             if (action.equals("-C")) return new NativeNcmFirewall.Result(corruptCheck ? 2 : rules.contains(line) ? 0 : 1, "");
             if (action.equals("-I")) {
@@ -43,6 +43,21 @@ public class NativeNcmFirewallTest {
         assertEquals(Collections.singletonList("-A CARNET_IN -j DROP"), f.chains.get("CARNET_IN"));
         assertEquals("none:false", f.journal.get(f.journal.size() - 1));
     }
+    @Test public void optimizedInstallUsesFourSnapshotsAndFinalVerifyStillDetectsTampering() throws Exception {
+        Fixture f = new Fixture();
+        f.firewall.install();
+        assertEquals(4, f.dumps);
+        String original = f.chains.get("CARNET_IN").get(0);
+        f.chains.get("CARNET_IN").set(0, original.replace("-j ACCEPT", "-j DROP"));
+        assertThrows(IOException.class, f.firewall::verify);
+    }
+
+    @Test public void finalVerificationRejectsFailedExactMatchWithoutFurtherMutation() throws Exception {
+        Fixture f = new Fixture(); f.firewall.install(); f.corruptCheck = true;
+        assertThrows(IOException.class, f.firewall::verify);
+        assertEquals(4, f.inserts); assertEquals(0, f.deletes);
+    }
+
     @Test public void successExitWithoutRuleIsNotSuccess() throws Exception {
         Fixture f = new Fixture(); f.ignoreInsert = true;
         assertThrows(IOException.class, f.firewall::install);

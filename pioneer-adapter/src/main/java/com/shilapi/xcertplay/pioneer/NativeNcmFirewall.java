@@ -43,26 +43,28 @@ final class NativeNcmFirewall {
             guard.check();
             if (state(id, snapshots[id / 2]) != State.ABSENT) throw new IOException("FIREWALL_RULE_CONFLICT id=" + id);
             mutate(id, "-I");
-            snapshots[id / 2] = chain(id);
-            if (state(id, snapshots[id / 2]) != State.PRESENT) throw new IOException("FIREWALL_INSERT_UNCONFIRMED id=" + id);
+            // A matching -C proves the complete rule after this insert. The full snapshots below
+            // still prove head position and uniqueness; repeating a chain dump here only
+            // duplicates that work while delaying detection of a missing insert.
+            if (runner.run(arguments(name, token, id, "-C")).exit != 0)
+                throw new IOException("FIREWALL_INSERT_UNCONFIRMED id=" + id);
             guard.check();
         }
+        // The caller verifies complete match after network setup, so install does not duplicate
+        // the same chain snapshots and -C checks here.
         installed = ownedLines(chain(0), chain(2), token);
-        verify();
     }
 
     void verify() throws Exception {
         guard.check();
-        Map<Integer, String> current = ownedLines(chain(0), chain(2), token);
+        String input = chain(0), output = chain(2);
+        Map<Integer, String> current = ownedLines(input, output, token);
         if (installed == null || !installed.equals(current)) throw new IOException("FIREWALL_RULE_CHANGED");
         // The dump alone cannot prove that the complete intended match is still installed.
-        for (int id = 0; id < 4; id++) if (state(id, id < 2 ? cachedInput(current) : cachedOutput(current)) != State.PRESENT)
+        for (int id = 0; id < 4; id++) if (state(id, id < 2 ? input : output) != State.PRESENT)
             throw new IOException("FIREWALL_RULE_CHANGED id=" + id);
         guard.check();
     }
-
-    private String cachedInput(Map<Integer, String> lines) { return lines.get(0) + "\n" + lines.get(1); }
-    private String cachedOutput(Map<Integer, String> lines) { return lines.get(2) + "\n" + lines.get(3); }
 
     List<String> restore() {
         List<String> errors = new ArrayList<>();
