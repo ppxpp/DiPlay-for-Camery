@@ -103,6 +103,9 @@ internal class AudioFocusCoordinator(
         val focusStream = audioRouting.focusStream(attributes)
         if (closed || (!enabled && focusStream == null) || manager == null ||
             (channel == AudioChannel.NAVIGATION && focusStream == null)) return
+        // Pioneer speech uses an independent MIX focus request, but still needs TAI_AUDIO
+        // selected when Siri/navigation is the first sound after connection.
+        if (focusStream != null) ensureVehicleSource()
         if (audioRouting.independentSpeechFocus(attributes)) {
             independentSpeechTracks.add(track)
             if (independentSpeechRequest == null) {
@@ -117,9 +120,6 @@ internal class AudioFocusCoordinator(
             }
             return
         }
-        if (channel == AudioChannel.MEDIA && focusStream != null) {
-            audioRouting.selectMediaSource(report)
-        }
         active[track] = Entry(channel, attributes)
         recoveryOnly = false
         recoveryEpoch++
@@ -127,6 +127,11 @@ internal class AudioFocusCoordinator(
         applyMediaVolume(track, active.getValue(track))
         // The isolated playback guard pauses only already registered player peers. Never send
         // ACTION_MEDIA_BUTTON here: Android cold-starts the original music Application for it.
+    }
+
+    @Synchronized
+    fun ensureVehicleSource() {
+        if (!closed && audioRouting.available) audioRouting.selectMediaSource(report)
     }
 
     /** Retry only on an externally confirmed source return; never selects a native source. */
@@ -317,7 +322,7 @@ class AndroidMediaSink(
     fun hasMediaAudio(): Boolean = synchronized(mediaAudioTypes) { mediaAudioTypes.isNotEmpty() }
 
     fun canRecoverVehicleMedia(): Boolean = microphoneUplinks.isEmpty() &&
-        audioRenderers.keys.none { it.audioType in setOf("telephony", "speechRecognition", "alert") }
+        audioRenderers.keys.none { it.audioType.lowercase() in setOf("telephony", "speechrecognition", "alert") }
 
     fun recoverVehicleMediaFocus(): Boolean = canRecoverVehicleMedia() && audioFocusCoordinator.recoverVehicleMedia()
 
@@ -2089,11 +2094,15 @@ private class AudioRenderer(
             createTrack()
             diagnosticStage = "focus"
             requestAudioFocus()
+            var lastAudioInputNs = System.nanoTime()
             while (running) {
                 // Report Settings changes from this worker, never from the UI thread, also between prompts.
                 applyNavigationAttenuation()
                 diagnosticStage = "packet"
                 queue.poll(AUDIO_POLL_MILLIS, TimeUnit.MILLISECONDS)?.let {
+                    val now = System.nanoTime()
+                    if (now - lastAudioInputNs >= 500_000_000L) audioFocusCoordinator.ensureVehicleSource()
+                    lastAudioInputNs = now
                     com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
                     val decoding = System.nanoTime()
                     handle(it)
