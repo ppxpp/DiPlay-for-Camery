@@ -112,9 +112,18 @@ class IphoneUsbHost(
         usbManager.deviceList.values.map(Ch341UsbHost::describe).sorted()
 
     @Throws(IphoneUsbException::class)
-    fun requestPermission(device: UsbDevice, allowAdbFallback: Boolean = true): PermissionRequest {
+    fun requestPermission(
+        device: UsbDevice,
+        allowAdbFallback: Boolean = true,
+        attemptSilentGrant: Boolean = true,
+        silentGrantDiagnostic: (String) -> Unit = {},
+    ): PermissionRequest {
         requireConfiguredDevice(device)
         if (usbManager.hasPermission(device)) return PermissionRequest.AlreadyGranted(device)
+        if (attemptSilentGrant && IphoneUsbSilentGrant.grant(appContext, usbManager, device, silentGrantDiagnostic)) {
+            runCatching { onDiagnostic("USB permission route=direct-system-grant; verified=true") }
+            return PermissionRequest.AlreadyGranted(device)
+        }
 
         val ui = UsbPermissionActivityProbe.inspect(appContext)
         if (ui.state != UsbPermissionActivityProbe.State.UNKNOWN) {
