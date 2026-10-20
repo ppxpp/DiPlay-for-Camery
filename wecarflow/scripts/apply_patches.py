@@ -99,12 +99,14 @@ def main():
     args = parser.parse_args()
     from playback_hooks import patch_playback
     from instrument_hooks import patch_instrument
+    from playlist_pagination import patch_pagination
     target = args.apktool_dir.resolve()
     patches = patch_playback(target)
     instrument = patch_instrument(target)
     if patches.keys() & instrument.keys():
         raise RuntimeError('Overlapping patch ownership')
     patches.update(instrument)
+    patches = patch_pagination(target, patches)
     manifest, peers = patch_manifest((target/'AndroidManifest.xml').read_text())
     patches['AndroidManifest.xml'] = manifest
     application_path = 'smali/com/tencent/wecarflow/FlowApplication.smali'

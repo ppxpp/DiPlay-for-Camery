@@ -24,7 +24,9 @@ e8c1671fc005527de3bb49b6733069c701cd5f86c5ec851e79b29aa09bcf7111
 
 基线APK可通过 `WECARFLOW_BASE_APK` 指定。上述私有输入已随本次迁移复制到 `.private/`，`.private/` 与 `.signing/` 都不提交 Git，不依赖旧项目的相对路径。
 
-`release.json` 管理 WeCarFlow 独立版本。正式产物在 `release/`，附 SHA-256、证书摘要、基线摘要及版本 JSON。
+`release.json` 管理 WeCarFlow 独立版本。正式产物在 `release/`，只交付 APK 本身；SHA-256、证书摘要仅打印在构建日志，不再生成 `.idsig` 与元数据 `.json` 附属文件。
+
+交付 APK 固定命名 `爱趣听_[版本]_DiPlay适配_[BUG修复]_[时间年月日].apk`（由 `scripts/repack.py` 自动生成，不再使用 `wecarflow-` 前缀，也不再带 `carplay.N` 轮次段）：`[版本]` 为 `v{versionName}`，仅当 `release.json` 显式保留 `patchRevision` 时才追加该适配标签；`[BUG修复]` 来自 `release.json` 的 `bugFix` 字段，每次带修复出包时更新，无修复说明时省略该段；`[时间年月日]` 为构建日本地日期 `YYYYMMDD`，同日重复构建覆盖同名产物。`productName`/`bugFix` 均在 `release.json` 维护。
 
 ## 结构
 

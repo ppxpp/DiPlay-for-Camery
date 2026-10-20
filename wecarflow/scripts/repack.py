@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from apply_patches import ROOT, BASE_SHA, sdk_tools
 
 PRIVATE = ROOT/'.private'
@@ -86,12 +87,38 @@ def cert(apksigner, apk):
     return sorted(matches)
 
 
-def output_path():
+def release_inputs():
+    """Named per the delivery convention: 爱趣听_[版本]_DiPlay适配_[BUG修复]_[时间年月日].apk"""
     release = json.loads((ROOT/'release.json').read_text())
-    # Android's network-facing versionName must retain the original numeric format.
-    revision = ('_'+release['patchRevision']) if release.get('patchRevision') else ''
-    abi = ('_'+release['targetAbi']) if release.get('targetAbi') else ''
-    return ROOT/'release'/f"{release['artifactName']}_v{release['versionName']}{revision}_{release['versionCode']}{abi}_signed.apk"
+    product = release.get('productName', '爱趣听')
+    version = 'v'+release['versionName']
+    if release.get('patchRevision'):
+        version += '_'+release['patchRevision']
+    parts = [product, version, 'DiPlay适配']
+    fix = release.get('bugFix')
+    if fix:
+        fix = re.sub(r'[\s/]+', '-', fix)
+        if re.search(r'[*?"<>|:]', fix):
+            raise RuntimeError('release.json bugFix label contains forbidden filename characters')
+        parts.append(fix)
+    return parts, release
+
+
+def output_path(date=None):
+    parts, _ = release_inputs()
+    stamp = date or time.strftime('%Y%m%d')
+    return (ROOT/'release')/('_'.join(parts+[stamp])+'.apk')
+
+
+def latest_output():
+    """Builds are stamped with the local date; install/print fall back to the newest artifact."""
+    expected = output_path()
+    if expected.exists():
+        return expected
+    parts, _ = release_inputs()
+    pattern = '_'.join(parts)+'*_*.apk'
+    candidates = sorted((ROOT/'release').glob(pattern), key=lambda p: p.stat().st_mtime)
+    return candidates[-1] if candidates else expected
 
 
 def build():
@@ -154,16 +181,11 @@ def build():
     if reference.is_file() and actual != cert(bt/'apksigner', reference):
         print('NOTE: signing differs from the legacy reference. Compare the installed certificate; '
               'the already migrated vehicle supports in-place updates. No automatic uninstall.')
+    # The deliverable is the APK alone; digests and certificate go to the build log only.
     shutil.copy2(candidate, result)
-    if candidate.with_suffix('.apk.idsig').exists():
-        shutil.copy2(candidate.with_suffix('.apk.idsig'), Path(str(result)+'.idsig'))
-    metadata = {'apk': result.name, 'sha256': sha256(result), 'certificateSha256': actual,
-                'signingKeystore': str(keystore), 'signingAlias': alias, 'baselineSha256': BASE_SHA,
-                'version': json.loads((ROOT/'release.json').read_text()),
-                'deviceVerified': False}
-    result.with_suffix('.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2)+'\n')
+    digest = sha256(result)
     print('OUTPUT:', result)
-    print('SHA-256:', metadata['sha256'])
+    print('SHA-256:', digest)
     print('Shared keystore certificate:', actual[0])
 
 
@@ -172,16 +194,17 @@ def main():
     parser.add_argument('mode', choices=['build', 'install', 'all', 'print-output'], nargs='?', default='build')
     args = parser.parse_args()
     if args.mode == 'print-output':
-        print(output_path()); return
+        print(latest_output()); return
     if args.mode in ['build', 'all']:
         build()
     if args.mode in ['install', 'all']:
         # No implicit uninstall, downgrade, data deletion or network rule changes.
-        if not output_path().exists():
+        artifact = latest_output()
+        if not artifact.exists():
             raise RuntimeError('Build the signed APK first')
         _, bt = sdk_tools()
-        run(bt/'apksigner', 'verify', output_path())
-        run('adb', 'install', '-r', output_path())
+        run(bt/'apksigner', 'verify', artifact)
+        run('adb', 'install', '-r', artifact)
 
 if __name__ == '__main__':
     main()

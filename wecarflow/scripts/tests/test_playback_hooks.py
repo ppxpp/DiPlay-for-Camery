@@ -16,7 +16,22 @@ class PlaybackHooksTests(unittest.TestCase):
         self.assertTrue(patches)
         baseline = root.parent / 'build' / 'baseline'
         if baseline.exists():
-            self.assertEqual(patches, hooks.patch_playback(baseline))
+            # The reference tree may carry the later pagination layer; removing that
+            # exact layer must leave the playback-only output identical to baseline.
+            spec = importlib.util.spec_from_file_location('playlist_pagination', MODULE.parent / 'playlist_pagination.py')
+            pagination = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(pagination)
+            stripped = dict(patches)
+            for name, (response, list_getter, total_getter) in pagination.RESPONSE_HANDLERS.items():
+                path = hooks.PREFIX + name
+                match = hooks._method(stripped[path], f'public a({response}I)V')
+                body = match.group()
+                insertion = pagination.GATE_ANCHOR + '\n' + pagination._total_code(response, list_getter, total_getter) + '\n'
+                if insertion in body:
+                    body = body.replace(insertion, pagination.GATE_ANCHOR, 1)
+                    body = body.replace('    .locals 2\n', '    .locals 1\n', 1)
+                stripped[path] = stripped[path][:match.start()] + body + stripped[path][match.end():]
+            self.assertEqual(stripped, hooks.patch_playback(baseline))
         # The guard must leave volume, pause, stop and focus method bodies intact.
         preserved = {
             'play/k.smali': ['public q()V', 'public r()V', 'public b()V', 'public w()V'],

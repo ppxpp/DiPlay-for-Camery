@@ -79,3 +79,14 @@
 回调 `.locals 0` 只有在原方法没有显式 v 寄存器引用时才允许增加至 1；原 p 参数寄存器保持对应意义。构造捕获使用 invoke-static/range，避免较多参数导致 p0 的物理寄存器超过普通 invoke 编码范围。
 
 验证同时针对未修改 build/baseline 与当前已有初版补丁工作目录，生成结果一致，再次应用不重复，暂停/停止/音量/焦点主体保持逐字一致。未覆盖的原生迟到任务、永久 listener 在断开后才产生的新任务，以及同一 Thumb 对象同时承载旧/新 prepare 的竞态需实机验证。
+
+## 歌单分页修复（scripts/playlist_pagination.py）
+
+用户反馈"歌单/收藏 100 首只有前 20 首循环播放"。基线行为：歌单与收藏请求条数写死为 `limit=0x14`（`PlayListRequstBean` 构造、`d1/b/c.getLikeSongs`），队列只装第一页；原生补页只在播到首/尾且 `x0/m.o()`（`isNeedPagination = total > size`）成立时触发，而 total 取自 `BaseAlbumBean.getTotal()`，仅部分 UI 入口在构造 album bean 时写入。入口没写 total 或被初版 `carplayguard` 门禁丢弃迟到分页回调时，播放回绕到第 1 首，永远只循环 20 首。
+
+修复层基于 playback_hooks 之后的文本（`apply_patches.py` 在 instrument 合并后调用 `patch_pagination(target, patches)`），不改变 addList/offset 计算：
+
+- `x0/e` 追加 public `carplayguardGetAlbum()`，只读返回 LiveData a 中的当前 album bean。
+- `x0/m$l`（歌单）、`x0/m$h`（收藏）类型化成功回调在既有 callback origin 门禁之后、原生入队之前，把本次响应的 `getTotal()/getTotalCount()` 写入 album bean `setTotal`；返回空页时收敛为 `x0/m.e()List.size()`，停止空转请求。bean 为 null 时跳过。
+
+效果：total 不再依赖 UI 入口初值，每次到尾部按原生 `offset+=0x14` 机制续页，直到队列达到 total 或返回空页。`.locals 1`→`.locals 2` 仅在原方法体不引用 v1 时进行；已含 `# carplayguard playlist pagination` 标记的方法保持逐字不变，重复应用幂等；锚点漂移整体失败。验证：`python3 -m unittest discover -s scripts/tests`（含与 build/baseline 的一致性对比）及 `./scripts/repack.sh build`。保护期间回调仍被门禁丢弃的边界不变，解除后由用户下一次到尾部操作续页；真机验证收藏 100 首连续播放需实机确认。
