@@ -21,7 +21,7 @@ internal class ConnectionProgressHistory(context: Context) {
         val wireless = config.transport == CarPlayTransport.WIRELESS
         val proxy = wireless && config.wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI && config.remoteRfcommGateway != null
         val link = if (wireless) "wireless-${config.wirelessHotspotMode.name}-${if (proxy) "proxy" else "native"}"
-            else "usb-${if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
+            else "usb-${if (config.nativeNcmEnabled) "native-ncm" else if (config.optimizedLwipEnabled) "lwip-optimized" else if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
         val profile = "$link-${config.mfiTarget.name}"
         val samples = read(profile)
         val baseline = if (samples.isEmpty()) null else ConnectionTiming(

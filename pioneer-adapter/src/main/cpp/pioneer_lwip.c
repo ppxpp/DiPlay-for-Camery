@@ -1,4 +1,5 @@
 #include <jni.h>
+#include "pioneer_ntb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -281,9 +282,7 @@ JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_crea
  debug_port=debug;peer_known=0;active=1;frames_in=frames_out=0;refresh_at=0;stats_at=0;packet_budget=48;
  note("LWIP_READY IPv6 raw Ethernet; loopback=127.0.0.1 peerAlias=127.0.0.2");poll_link();
 }
-JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_input(JNIEnv *env,jobject self,jbyteArray data) {
- (void)self;if(!active)return;int n=(*env)->GetArrayLength(env,data);if(n<54||n>65535)return;
- struct pbuf *p=pbuf_alloc(PBUF_RAW,n,PBUF_RAM);if(!p)return;(*env)->GetByteArrayRegion(env,data,0,n,(jbyte*)p->payload);
+static void accept_ethernet(struct pbuf *p, int n) {
  unsigned char *b=p->payload;
  if(packet_budget>0){note("LWIP_PACKET_IN next=%u icmp=%u bytes=%d dstHost=%d",b[20],n>54?b[54]:0,n,memcmp(b+38,netif_ip6_addr(&link_netif,0)->addr,16)==0);packet_budget--;}
  if(b[12]==0x86&&b[13]==0xdd&&b[22]==0xfe&&(b[23]&0xc0)==0x80){
@@ -302,6 +301,60 @@ JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_inpu
   }
  }
  frames_in++;if(ethernet_input(p,&link_netif)!=ERR_OK)pbuf_free(p);
+}
+JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_input(JNIEnv *env,jobject self,jbyteArray data) {
+ (void)self;if(!active)return;int n=(*env)->GetArrayLength(env,data);if(n<54||n>65535)return;
+ struct pbuf *p=pbuf_alloc(PBUF_RAW,n,PBUF_RAM);if(!p)return;(*env)->GetByteArrayRegion(env,data,0,n,(jbyte*)p->payload);
+ accept_ethernet(p,n);
+}
+static struct pn_stream ntb_input;
+static uint16_t ntb_sequence;
+static uint64_t ntb_error_window;
+static unsigned ntb_window_errors;
+static int accept_ntb_frame(void *context, const unsigned char *data, size_t size) {
+ (void)context;if(size<54||size>65535)return 0;
+ struct pbuf *p=pbuf_alloc(PBUF_RAW,(u16_t)size,PBUF_RAM);if(!p)return -1;
+ if(pbuf_take(p,data,(u16_t)size)!=ERR_OK){pbuf_free(p);return -1;}
+ accept_ethernet(p,(int)size);return 0;
+}
+JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_configureOptimized(JNIEnv *env,jobject self,jint packet_size) {
+ (void)env;(void)self;pn_stream_init(&ntb_input,(unsigned)packet_size);ntb_sequence=0;ntb_error_window=mono_ns();ntb_window_errors=0;
+}
+JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_inputNtb(JNIEnv *env,jobject self,jobject buffer,jint length) {
+ (void)self;unsigned char *data=(*env)->GetDirectBufferAddress(env,buffer);jlong cap=(*env)->GetDirectBufferCapacity(env,buffer);
+ if(!active||!data||length<0||length>cap)return -1;
+ uint64_t previous=ntb_input.errors;int count=pn_feed(&ntb_input,data,(size_t)length,accept_ntb_frame,NULL);
+ if(ntb_input.errors!=previous){
+  uint64_t now=mono_ns();if(now-ntb_error_window>10000000000ULL){ntb_error_window=now;ntb_window_errors=0;}
+  ntb_window_errors+=(unsigned)(ntb_input.errors-previous);
+  note("LWIP_NTB_RESYNC errors=%llu copiedBytes=%llu",(unsigned long long)ntb_input.errors,(unsigned long long)ntb_input.copied_bytes);
+  if(ntb_window_errors>=16)return -3;
+ }
+ return count;
+}
+JNIEXPORT jlongArray JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_outputNtb(JNIEnv *env,jobject self,jobject buffer,jint maximum) {
+ (void)self;unsigned char *out=(*env)->GetDirectBufferAddress(env,buffer);jlong cap=(*env)->GetDirectBufferCapacity(env,buffer);
+ if(!active||!out||cap<16384||maximum<1||maximum>8){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/lang/IllegalArgumentException"),"Invalid direct NTB output buffer");return NULL;}
+ if(!qhead)return NULL;
+ struct pn_frame spans[8];unsigned count=0;size_t payload=0;struct frame *f=qhead;
+ while(f&&count<(unsigned)maximum){
+  spans[count].data=f->data;spans[count].size=(size_t)f->size;
+  /* Compute against a scratch-free size bound before copying any output. */
+  size_t estimate=12+8+4*(count+2);
+  for(unsigned i=0;i<=count;i++){estimate=(estimate+3)&~(size_t)3;estimate+=spans[i].size;}
+  if(estimate>PN_OUT_LIMIT)break;
+  payload+=spans[count].size;count++;f=f->next;
+ }
+ if(!count){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/io/IOException"),"Ethernet frame exceeds optimized NTB limit");return NULL;}
+ size_t bytes=pn_build(out,(size_t)cap,spans,count,ntb_sequence);
+ if(!bytes){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/io/IOException"),"Could not build optimized NTB");return NULL;}
+ jlong values[4]={(jlong)bytes,(jlong)count,(jlong)payload,(jlong)qhead->queued_ns};
+ jlongArray result=(*env)->NewLongArray(env,4);if(!result)return NULL;
+ (*env)->SetLongArrayRegion(env,result,0,4,values);if((*env)->ExceptionCheck(env))return NULL;
+ ntb_sequence++;
+ for(unsigned i=0;i<count;i++){f=qhead;qhead=f->next;qcount--;qbytes-=f->size;timed(&output_age,mono_ns()-f->queued_ns,0);free(f);}
+ if(!qhead)qtail=NULL;
+ return result;
 }
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_poll(JNIEnv *env,jobject self){(void)env;(void)self;poll_link();}
 JNIEXPORT jbyteArray JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_output(JNIEnv *env,jobject self){(void)self;if(!qhead)return NULL;struct frame *f=qhead;qhead=f->next;if(!qhead)qtail=NULL;qcount--;qbytes-=f->size;timed(&output_age,mono_ns()-f->queued_ns,0);jbyteArray a=(*env)->NewByteArray(env,f->size);if(a)(*env)->SetByteArrayRegion(env,a,0,f->size,(jbyte*)f->data);free(f);return a;}

@@ -34,6 +34,7 @@ class NcmUsbBridge internal constructor(
     private var lastNetworkValue = -1
     private val descriptorMac = descriptorHostMac?.copyOf()
     val hostMac: ByteArray? get() = descriptorMac?.copyOf()
+    val inputPacketSize: Int get() = inEndpoint.maxPacketSize.takeIf { it > 0 } ?: USB_PACKET_SIZE
     private val stateLock = Any()
     private val readLock = Any()
     private val writeLock = Any()
@@ -140,6 +141,48 @@ class NcmUsbBridge internal constructor(
             "NCM_TX transferred=$transferred expected=${block.size} frames=${frames.size} frameBytes=${frames.sumOf { it.size }} timeoutMs=$writeTimeout failure=$classification") }
         WriteResult(transferred, block.size, classification, writing - started, System.nanoTime() - writing, detail?.get(1) ?: 0, detail?.get(2) ?: 0)
     }
+    /** Already assembled in Native; the pool owner retains the buffer through every write/retry. */
+    fun sendDirectNtbMeasured(buffer: ByteBuffer, length: Int, frameCount: Int, timeoutMillis: Int): WriteResult = synchronized(writeLock) {
+        checkOpen()
+        require(buffer.isDirect && length in 28..16384 && length <= buffer.capacity() && frameCount in 1..8 && timeoutMillis > 0)
+        check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) { "Optimized lwIP requires verified Pioneer USB" }
+        val timeout = if (!bulkOutAccepted) minOf(timeoutMillis, NOT_READY_WRITE_TIMEOUT_MILLIS) else timeoutMillis
+        val writing = System.nanoTime()
+        val detail = com.shilapi.xcertplay.pioneer.PioneerUsbNative.bulkWriteDirect(
+            connection.fileDescriptor, outEndpoint.address, buffer, length, timeout)
+        val transferred = detail[0].toInt()
+        val failure = when {
+            transferred == length -> WriteFailure.NONE
+            transferred > 0 -> WriteFailure.PARTIAL
+            transferred == -110 || transferred == 0 -> WriteFailure.TIMEOUT
+            transferred == -19 || transferred == -9 || transferred == -108 -> WriteFailure.DISCONNECTED
+            transferred == -32 -> WriteFailure.STALL
+            transferred == -12 -> WriteFailure.MEMORY
+            else -> WriteFailure.UNKNOWN
+        }
+        if (transferred <= 0 && !bulkOutAccepted) notReadyFrames += frameCount
+        if (transferred > 0 && !bulkOutAccepted) {
+            bulkOutAccepted = true
+            runCatching { onDiagnostic("NCM direct bulk-out ready after $notReadyFrames unaccepted frames") }
+        }
+        if (failure == WriteFailure.NONE) repeat(frameCount) { traffic.sent() }
+        if (writeDiagnosticBudget-- > 0) runCatching { onDiagnostic(
+            "NCM_TX_DIRECT transferred=$transferred expected=$length frames=$frameCount timeoutMs=$timeout failure=$failure") }
+        WriteResult(transferred, length, failure, 0, System.nanoTime() - writing, detail[1], detail[2])
+    }
+
+    /** Synchronous borrow of the USB DirectByteBuffer; consumer must copy/consume before returning. */
+    fun recvDirectChunk(timeoutMillis: Long, consume: (ByteBuffer, Int) -> Int): Int? = synchronized(readLock) {
+        require(timeoutMillis > 0)
+        checkOpen()
+        check(frames.isEmpty() && bufferedSize == 0) { "Cannot switch NCM receive paths within a connection" }
+        readChunk(timeoutMillis) { buffer, length ->
+            val count = consume(buffer, length)
+            check(count >= 0) { "Optimized NCM parser failed rc=$count" }
+            traffic.receivedNative(count)
+        }
+    }
+
     /** Only the OUT endpoint; caller serializes with the single USB writer. */
     fun recoverOutHalt(): Int = synchronized(writeLock) {
         checkOpen()
@@ -393,7 +436,7 @@ class NcmUsbBridge internal constructor(
         return frame
     }
 
-    private fun readChunk(timeoutMillis: Long): Int? {
+    private fun readChunk(timeoutMillis: Long, consume: ((ByteBuffer, Int) -> Unit)? = null): Int? {
         checkOpen()
         var acceptedFallback: UsbReadQueueResult? = null
         val request = try {
@@ -449,7 +492,8 @@ class NcmUsbBridge internal constructor(
             val transferred = directReadBuffer.position()
             if (transferred <= 0) return null
             directReadBuffer.flip()
-            directReadBuffer.get(readBuffer, 0, transferred)
+            if (consume != null) consume(directReadBuffer, transferred)
+            else directReadBuffer.get(readBuffer, 0, transferred)
             return transferred
         } catch (error: IphoneUsbException) {
             throw error

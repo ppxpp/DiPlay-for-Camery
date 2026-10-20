@@ -21,6 +21,8 @@ data class MicrophoneConfig(
      * rule. The report's "Audio: rtp clock" line measures the iPhone's own clock for each stream.
      */
     val opusClockRate: Int = OPUS_CAPTURE_RATE,
+    val bindAddress: InetAddress? = null,
+    val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
 ) {
     val samplesPerPacket: Int
         get() = if (codec == AudioCodecKind.OPUS) {

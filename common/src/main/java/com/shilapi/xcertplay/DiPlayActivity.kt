@@ -558,6 +558,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onResume() {
         super.onResume()
+        if (setupError == null) {
+            com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
+                wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
+                hasSession = { CarPlayBackgroundSession.hasSession() },
+                log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
+        }
         WheelKeyService.restoreIfNeeded(this)
         applyFullscreenMode()
         // Returning from another activity can bring the head unit's own density back.
@@ -1888,6 +1894,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.USB_CONNECTION,
             getString(R.string.settings_usb_connection), R.drawable.ic_dp_connection) { card ->
+            if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.entries
+                choice(card, getString(R.string.settings_wired_backend), listOf(
+                    getString(R.string.settings_wired_backend_lwip), getString(R.string.settings_native_ncm),
+                    getString(R.string.settings_wired_backend_optimized)),
+                    modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
+                    markReconnectNeeded()
+                }
+                card.addView(label(getString(R.string.settings_wired_backend_description), 14, MUTED))
+            }
             val currents = UsbChargingCurrent.entries
             choice(card, getString(R.string.settings_usb_charging), listOf(
                 getString(R.string.settings_usb_charging_normal),

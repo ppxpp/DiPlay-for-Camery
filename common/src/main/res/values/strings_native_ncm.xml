@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">Native NCM (experimental)</string>
+    <string name="settings_native_ncm_description">On: use the system USB network. Off: use the existing connection method. Applies at the next connection. If connection fails, switch manually; neither method falls back automatically.</string>
+    <string name="settings_wired_backend">Wired connection method</string>
+    <string name="settings_wired_backend_lwip">Original lwIP</string>
+    <string name="settings_wired_backend_optimized">Optimized lwIP (experimental)</string>
+    <string name="settings_wired_backend_description">Choose one of three methods. Applies at the next connection. If it fails, switch manually; no method falls back automatically.</string>
+</resources>

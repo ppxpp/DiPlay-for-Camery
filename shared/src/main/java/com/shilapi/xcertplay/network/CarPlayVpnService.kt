@@ -54,6 +54,7 @@ class CarPlayVpnService : VpnService() {
         val media: AirPlayMediaHandler,
         val additionalAddresses: List<InetAddress> = emptyList(),
         val listenerIdentity: AirPlayListenerIdentity? = null,
+        val nativeBinding: NativeNcmBinding? = null,
     )
 
     private val binder = LocalBinder()
@@ -67,6 +68,8 @@ class CarPlayVpnService : VpnService() {
     private var lwipBridge: PioneerLwipBridge? = null
     private var lwipControlPort: java.io.Closeable? = null
     private var tun: ParcelFileDescriptor? = null
+    private var nativeLease: NativeNcmLease? = null
+    private var pioneerSession: com.shilapi.xcertplay.pioneer.PioneerWiredSession.Session? = null
     private var attachGeneration = 0
 
     /** The exception chain behind the latest [AttachResult.Failed], for the diagnostic log. */
@@ -86,6 +89,7 @@ class CarPlayVpnService : VpnService() {
         mfi: MfiAuthenticator?,
         listener: AirPlaySessionListener,
         media: AirPlayMediaHandler,
+        optimizedLwip: Boolean = false,
     ): AttachResult {
         if (active.get()) {
             Log.i(TAG, "replacing stale NCM/VPN attachment")
@@ -94,6 +98,8 @@ class CarPlayVpnService : VpnService() {
         active.set(true)
         val generation = ++attachGeneration
         return try {
+            if (optimizedLwip || com.shilapi.xcertplay.pioneer.PioneerWiredBackend.explicitLwip(this))
+                check(com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) { "Selected lwIP backend is unavailable; switch manually" }
             val address = InetAddress.getByName(linkLocal)
             if (address !is Inet6Address || !address.isLinkLocalAddress) {
                 throw IllegalArgumentException("linkLocal must be a link-local IPv6 literal")
@@ -101,10 +107,13 @@ class CarPlayVpnService : VpnService() {
             require(hostMac.size == 6) { "hostMac must be 6 bytes" }
 
             if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
+                pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
+                    if (optimizedLwip) com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.LWIP_OPTIMIZED
+                    else com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.LWIP)
                 val rawBridge = PioneerLwipBridge(ncm, hostMac, address.address,
                     diagnosticPath = java.io.File(filesDir, "pioneer-debug/lwip-native.log").absolutePath,
                     log = { listener.onDebugLog(it) },
-                    onError = { onTransportError(generation, listener, it) })
+                    onError = { onTransportError(generation, listener, it) }, optimized = optimizedLwip)
                 lwipBridge = rawBridge
                 rawBridge.start()
                 startAirPlayServer(generation, AirPlayAttachment(
@@ -155,6 +164,32 @@ class CarPlayVpnService : VpnService() {
             releaseLocked()
             lastAttachFailure = attachFailure(error)
             AttachResult.Failed(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    /** Takes ownership of the kernel network lease without establishing a VPN/TUN. */
+    @Synchronized
+    internal fun attachNative(
+        lease: NativeNcmLease, config: AirPlayConfig, identity: AirPlayIdentity,
+        pairings: PairingStore, mfi: MfiAuthenticator?, listener: AirPlaySessionListener,
+        media: AirPlayMediaHandler,
+    ): AttachResult {
+        if (active.get()) return if (nativeLease === lease) AttachResult.AlreadyStarted
+            else AttachResult.Failed("Previous connection is still active; disconnect before starting native NCM")
+        active.set(true)
+        val generation = ++attachGeneration
+        nativeLease = lease
+        return try {
+            pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
+                com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.NATIVE_NCM)
+            startAirPlayServer(generation, AirPlayAttachment(lease.binding.localAddress,
+                config.copy(pinInboundPorts = false), identity, pairings, mfi, listener, media,
+                nativeBinding = lease.binding))
+            AttachResult.Started
+        } catch (error: Exception) {
+            runCatching { releaseLocked() }.onFailure(error::addSuppressed)
+            lastAttachFailure = attachFailure(error)
+            AttachResult.Failed("Native NCM: ${error.message}")
         }
     }
 
@@ -248,7 +283,9 @@ class CarPlayVpnService : VpnService() {
         generation: Int,
         replacement: AirPlayAttachment,
     ) {
-        val servers = if (replacement.additionalAddresses.isEmpty()) {
+        val servers = if (replacement.nativeBinding != null) {
+            listOf(bindNativeListener(replacement.nativeBinding, replacement.config.port))
+        } else if (replacement.additionalAddresses.isEmpty()) {
             listOf(AirPlayPortSelector.bind(replacement.address, replacement.config.port) { busy, bound ->
                 Log.w(TAG, "AirPlay port $busy is in use; listening on $bound instead")
             })
@@ -274,6 +311,15 @@ class CarPlayVpnService : VpnService() {
                 start()
             }
         }
+    }
+
+    private fun bindNativeListener(binding: NativeNcmBinding, preferredPort: Int): ServerSocket {
+        for (port in (listOf(preferredPort) + AirPlayPortSelector.FALLBACK_PORTS + 0).distinct()) {
+            val server = ServerSocket()
+            try { binding.bind(server, port); return server }
+            catch (_: java.net.BindException) { /* binding already closed this attempt */ }
+        }
+        throw java.net.BindException("Native NCM has no available listener port")
     }
 
     private fun acceptLoop(
@@ -304,6 +350,11 @@ class CarPlayVpnService : VpnService() {
                         runtime.tcpAccepted = true
                         runtime.milestone(runtime.sessionId, "airplay-control-accepted")?.let(current.listener::onDebugLog)
                     }
+                    if (current.nativeBinding != null && runCatching { current.nativeBinding.validateAccepted(socket) }.isFailure) {
+                        socket.close()
+                        return@synchronized null
+                    }
+                    pioneerSession?.let { com.shilapi.xcertplay.pioneer.PioneerWiredSession.controlAccepted(it.id) }
                     val internalPeer = isInternalAirPlayPeer(socket.inetAddress, socket.localAddress)
                     current.listenerIdentity?.let { owner ->
                         current.listener.onTcpAccepted(AirPlayTcpAccepted(
@@ -324,6 +375,12 @@ class CarPlayVpnService : VpnService() {
                             // default interface method existed; do not silently inherit its no-op.
                             override fun onScreenFrameOutput(session: AirPlaySession, type: Int) {
                                 current.listener.onScreenFrameOutput(session, type)
+                            }
+
+                            override fun onTransportError(message: String) {
+                                if (current.nativeBinding != null)
+                                    this@CarPlayVpnService.onTransportError(generation, current.listener, IOException(message))
+                                else current.listener.onTransportError(message)
                             }
 
                             override fun onSessionActive(session: AirPlaySession) {
@@ -348,9 +405,10 @@ class CarPlayVpnService : VpnService() {
                             }
                         },
                         media = current.media,
+                        nativeBinding = current.nativeBinding,
                     ).also(::addSession)
                 }
-                session.start()
+                session?.start()
             }
         } catch (error: IOException) {
             if (active.get()) {
@@ -424,6 +482,11 @@ class CarPlayVpnService : VpnService() {
         bridge = null
         tun?.close()
         tun = null
+        val native = nativeLease
+        native?.close()
+        nativeLease = null
+        pioneerSession?.close()
+        pioneerSession = null
     }
 
     companion object {

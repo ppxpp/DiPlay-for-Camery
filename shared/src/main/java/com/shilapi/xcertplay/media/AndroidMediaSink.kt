@@ -1039,6 +1039,7 @@ private class VideoDecoder(
     private var parking: ParkingOutput? = null
     private var lastConfig: VideoJob.Config? = null
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.sessionId
     private val interactionProbe = if (streamType == MAIN_SCREEN_TYPE && statsLabel == null &&
         com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active) VideoInteractionProbe(lwipSession) else null
     private val firstRenderCallback = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -1787,6 +1788,7 @@ private class VideoDecoder(
                 }
                 if (shown && !renderedFrameLogged) {
                     renderedFrameLogged = true
+                    if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerWiredSession.firstFrame(pioneerSession)
                     if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
                         .milestone(lwipSession, "first-frame-release")?.let { report(it) }
                     report("first frame rendered")

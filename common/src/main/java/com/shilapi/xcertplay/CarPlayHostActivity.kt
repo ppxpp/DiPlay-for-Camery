@@ -214,6 +214,8 @@ class CarPlayHostActivity : ComponentActivity() {
         wirelessBluetoothDeviceAddress = DiPlayPreferences.phoneAddress(this),
         remoteRfcommGateway = if (wirelessEnabled) RemoteGatewaySettings.loadSelected(this, wirelessHotspotMode) else null,
         transport = if (wirelessEnabled) CarPlayTransport.WIRELESS else CarPlayTransport.WIRED,
+        nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this),
+        optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.optimizedEnabled(this),
         wirelessHotspotMode = wirelessHotspotMode,
         wifiP2pPreferredChannel = AirPlayPersistence.loadWifiP2pPreferredChannel(this),
         manualHotspotSsid = manualHotspotSsid,
@@ -1041,9 +1043,10 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun requestVpnConsent() {
         if (awaitingVpnConsent) return
-        if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
+        if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this) ||
+            com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
             vpnReady = true // This backend has no system VPN prerequisite.
-            appendLog("LWIP selected: system VPN consent not required")
+            appendLog("Selected wired backend requires no system VPN consent")
             maybeStartCarPlay()
             return
         }
@@ -6057,15 +6060,15 @@ class CarPlayHostActivity : ComponentActivity() {
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || startupRetryStopped) return
         if (reconnectScheduled) return
         if (com.shilapi.xcertplay.pioneer.LocalConnectionExperiments.WIRED_RECOVERY_BUDGET &&
-            !wirelessEnabled && com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
+            !wirelessEnabled && com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this)) {
             val now = System.nanoTime()
             if (pioneerRecoveryStartedNs == 0L) {
                 pioneerRecoveryStartedNs = now
                 val budgetStart = now
                 mainHandler.postDelayed({
                     val playing = activeAirPlaySession != null &&
-                        com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active &&
-                        com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.firstFrameNs != 0L
+                        com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive &&
+                        com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.firstFrame == true
                     if (!playing && pioneerRecoveryStartedNs == budgetStart && !startupRetryStopped &&
                         !shuttingDown.get() && CarPlayBackgroundSession.isOwner(this))
                         stopPioneerRecovery("USB CarPlay recovery exceeded 120 seconds")

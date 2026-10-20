@@ -95,13 +95,31 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
         val directory = File(context.filesDir, "vehicle-pal-sdk").apply { mkdirs() }
         val optimized = File(context.codeCacheDir, "vehicle-pal-opt").apply { mkdirs() }
         val dex = File(directory, "pal-$digest.dex")
+        File(directory, "pal.tmp").delete()
         if (!dex.exists()) {
             val temporary = File(directory, "pal.tmp")
-            temporary.outputStream().use { it.write(bytes) }
-            check(temporary.renameTo(dex)) { "PAL dex install failed" }
+            try {
+                temporary.outputStream().use { it.write(bytes) }
+                check(temporary.renameTo(dex)) { "PAL dex install failed" }
+            } finally {
+                temporary.delete()
+            }
         }
+        pruneOldPalDex(directory, dex)
         dex.setReadOnly()
         return DexClassLoader(dex.absolutePath, optimized.absolutePath, null, context.classLoader)
+    }
+
+    /** Keep only the DEX selected by the current bundled PAL asset. */
+    internal fun pruneOldPalDex(directory: File, current: File): Int {
+        var deleted = 0
+        directory.listFiles()
+            ?.filter {
+                it.isFile && it != current && it.name.startsWith("pal-") &&
+                    it.extension.equals("dex", ignoreCase = true)
+            }
+            ?.forEach { if (it.delete()) deleted += 1 }
+        return deleted
     }
 
     private fun register(loader: ClassLoader, managerClass: Class<*>) {

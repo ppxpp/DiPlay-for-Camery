@@ -22,6 +22,8 @@ class IapTunnel(
     private val readKey: ByteArray,
     bindAddress: InetAddress = InetAddress.getByName("0.0.0.0"),
     private val preferredPorts: IntArray? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val expectedPeer: InetAddress? = null,
 ) : Closeable {
     interface Listener {
         fun onOpen(remoteAddress: String?) {}
@@ -49,29 +51,31 @@ class IapTunnel(
         try { portLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(bound.localPort, false, lwipSession) }
         catch (error: Throwable) { close(); throw error }
         listener.onDebug("AirPlay iAP tunnel listener bound=${bound.localSocketAddress}")
-        val secondaryAddress = if (bindAddress is java.net.Inet6Address) {
-            InetAddress.getByName("0.0.0.0")
-        } else {
-            InetAddress.getByName("::")
-        }
-        val secondary = ServerSocket()
-        runCatching {
-            secondary.apply {
-                reuseAddress = true
-                bind(InetSocketAddress(secondaryAddress, bound.localPort))
+        if (nativeBinding == null) {
+            val secondaryAddress = if (bindAddress is java.net.Inet6Address) {
+                InetAddress.getByName("0.0.0.0")
+            } else {
+                InetAddress.getByName("::")
             }
-        }.onSuccess { secondary ->
-            servers += secondary
-            listener.onDebug(
-                "AirPlay iAP tunnel secondary listener bound=" +
-                    "${secondary.localSocketAddress}",
-            )
-        }.onFailure { error ->
-            safeClose(secondary)
-            listener.onDebug(
-                "AirPlay iAP tunnel secondary listener failed address=" +
-                    "$secondaryAddress port=${bound.localPort}: ${error.message}",
-            )
+            val secondary = ServerSocket()
+            runCatching {
+                secondary.apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(secondaryAddress, bound.localPort))
+                }
+            }.onSuccess { secondary ->
+                servers += secondary
+                listener.onDebug(
+                    "AirPlay iAP tunnel secondary listener bound=" +
+                        "${secondary.localSocketAddress}",
+                )
+            }.onFailure { error ->
+                safeClose(secondary)
+                listener.onDebug(
+                    "AirPlay iAP tunnel secondary listener failed address=" +
+                        "$secondaryAddress port=${bound.localPort}: ${error.message}",
+                )
+            }
         }
         servers.forEach { server ->
             threads += Thread({ accept(server) }, "airplay-iap-tunnel").apply {
@@ -83,6 +87,7 @@ class IapTunnel(
     }
 
     private fun bindAny(): ServerSocket {
+        if (nativeBinding != null) return ServerSocket().also { nativeBinding.bind(it) }
         if (preferredPorts != null) {
             for (port in preferredPorts) {
                 try {
@@ -138,6 +143,8 @@ class IapTunnel(
                 safeClose(accepted)
                 return
             }
+            try { nativeBinding?.validateAccepted(accepted, expectedPeer) }
+            catch (error: Exception) { if (!closed.get()) listener.onClosed(error); return }
             accepted.setSoLinger(true, 0)
             socket = accepted
             readCounter.set(0)

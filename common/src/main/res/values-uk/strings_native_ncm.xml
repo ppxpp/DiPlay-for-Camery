@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">Нативний NCM (експериментально)</string>
+    <string name="settings_native_ncm_description">Увімкнено: системна мережа USB. Вимкнено: поточний спосіб підключення. Застосовується під час наступного підключення. У разі збою перемкніть вручну; автоматичного переходу між способами немає.</string>
+    <string name="settings_wired_backend">Спосіб дротового підключення</string>
+    <string name="settings_wired_backend_lwip">Початковий lwIP</string>
+    <string name="settings_wired_backend_optimized">Оптимізований lwIP (експериментально)</string>
+    <string name="settings_wired_backend_description">Виберіть один із трьох способів. Застосовується під час наступного підключення. У разі збою перемкніть вручну; автоматичного переходу немає.</string>
+</resources>

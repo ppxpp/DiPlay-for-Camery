@@ -2,15 +2,15 @@ package com.shilapi.xcertplay.pioneer
 
 /** Playback defaults are independent of the optional debug service and its main-thread handler. */
 object PioneerPlaybackPolicy {
-    // Only the verified Pioneer wired lwIP path omits declarations so setNightMode takes effect.
+    // Both wired backends need the same iPhone appearance compatibility on this head unit.
     // Wireless and other firmware retain the upstream appearance declarations.
     val appearanceDeclarationsEnabled: Boolean
-        get() = !(PioneerUsbPolicy.matchesDevice() && PioneerLwipRuntime.active)
+        get() = !PioneerWiredSession.adaptationActive
 
     // Read on each media write so a diagnostic override can still change a running session.
     @Volatile var audioClockTrimOverride: Boolean? = null
         private set
     var audioClockTrimEnabled: Boolean
-        get() = audioClockTrimOverride ?: !(PioneerUsbPolicy.matchesDevice() && PioneerLwipRuntime.active)
+        get() = audioClockTrimOverride ?: !PioneerWiredSession.adaptationActive
         set(value) { audioClockTrimOverride = value }
 }

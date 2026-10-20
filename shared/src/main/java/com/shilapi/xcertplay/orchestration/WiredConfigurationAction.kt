@@ -9,7 +9,7 @@ package com.shilapi.xcertplay.orchestration
  * After one CarPlay mode request the same iPhone re-enumerated with configuration 6 and worked.
  * So a configuration without Apple Ethernet is used only after the mode request was tried.
  */
-internal enum class WiredConfigurationAction(val diagnostic: String) {
+enum class WiredConfigurationAction(val diagnostic: String) {
     USE("reuse-descriptors"),
     USE_WITHOUT_APPLE_ETHERNET("reuse-without-apple-ethernet"),
     REQUEST_TRANSITION("request-transition"),

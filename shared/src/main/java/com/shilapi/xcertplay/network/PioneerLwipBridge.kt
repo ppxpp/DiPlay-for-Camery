@@ -7,6 +7,7 @@ import com.shilapi.xcertplay.pioneer.PioneerTiming
 import com.shilapi.xcertplay.transport.NcmUsbBridge
 import java.io.Closeable
 import java.io.IOException
+import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -21,13 +22,20 @@ internal class PioneerLwipBridge(
     private val diagnosticPath: String,
     private val log: (String) -> Unit,
     private val onError: (Throwable) -> Unit,
+    private val optimized: Boolean = false,
 ) : Closeable {
-    private data class Output(val id: Long, val frame: ByteArray, val queuedNs: Long)
+    private data class Output(val id: Long, val frame: ByteArray?, val queuedNs: Long,
+        val direct: ByteBuffer? = null, val ntbBytes: Int = 0, val frameCount: Int = 1,
+        val frameBytes: Int = frame?.size ?: 0)
     private data class Completion(val packet: Output, val result: NcmUsbBridge.WriteResult, val retries: Int)
     private val running = AtomicBoolean(false)
     private val ready = CountDownLatch(1)
     private val output = ArrayBlockingQueue<Output>(64)
     private val completed = ArrayBlockingQueue<Completion>(64)
+    // At most 128 KiB of payload buffers. A slot returns only after the synchronous USB write.
+    private val directPool = ArrayBlockingQueue<ByteBuffer>(8).apply {
+        if (optimized) repeat(8) { add(ByteBuffer.allocateDirect(16384)) }
+    }
     private val queuedBytes = AtomicLong()
     private val txCount = AtomicLong()
     private val txBlocks = AtomicLong()
@@ -54,6 +62,8 @@ internal class PioneerLwipBridge(
                 session = PioneerLwipRuntime.begin()
                 com.shilapi.xcertplay.pioneer.PioneerDiagnostics.clear()
                 PioneerLwipNative.create(mac, address, PioneerDebugRuntime.port, diagnosticPath)
+                if (optimized) PioneerLwipNative.configureOptimized(ncm.inputPacketSize)
+                log("LWIP_DATAPATH optimized=$optimized rx=${if (optimized) "direct-native-ntb" else "java-frames"} tx=${if (optimized) "pooled-native-ntb" else "java-frames"}; automatic fallback disabled")
                 val clockBefore = System.nanoTime()
                 val nativeClock = PioneerLwipNative.clockNanos()
                 val clockAfter = System.nanoTime()
@@ -84,6 +94,17 @@ internal class PioneerLwipBridge(
                     var bytes = 0; var frames = 0
                     val receiveStart = System.nanoTime()
                     while (frames < 32 && bytes < 65536 && System.nanoTime() - receiveStart < 2_000_000) {
+                        if (optimized) {
+                            var count = 0
+                            val length = ncm.recvDirectChunk(PioneerDebugRuntime.lwipReceiveWaitMillis.toLong()) { buffer, size ->
+                                val before = System.nanoTime()
+                                count = PioneerLwipNative.inputNtb(buffer, size)
+                                inputTiming.record(System.nanoTime() - before)
+                                count
+                            } ?: break
+                            rx += count; frames += maxOf(1, count); bytes += length
+                            continue
+                        }
                         val frame = ncm.recv(PioneerDebugRuntime.lwipReceiveWaitMillis.toLong()) ?: break
                         val before = System.nanoTime(); PioneerLwipNative.input(frame)
                         inputTiming.record(System.nanoTime() - before)
@@ -105,11 +126,20 @@ internal class PioneerLwipBridge(
                     for (i in 0 until 32) {
                         if (output.remainingCapacity() == 0 || queuedBytes.get() >= 128 * 1024 ||
                             bytes >= 65536 || System.nanoTime() - sending > 2_000_000) break
-                        val packet = pending ?: PioneerLwipNative.output()?.let { Output(++requestId, it, System.nanoTime()) } ?: break
+                        val packet = pending ?: if (optimized) {
+                            val buffer = directPool.poll() ?: break
+                            val before = System.nanoTime()
+                            val limit = if (PioneerLwipRuntime.firstFrameNs == 0L) 1 else PioneerDebugRuntime.usbTxBatchFrames.coerceIn(1, 8)
+                            val metadata = try { PioneerLwipNative.outputNtb(buffer, limit) }
+                                catch (error: Throwable) { directPool.offer(buffer); throw error }
+                            buildTiming.record(System.nanoTime() - before)
+                            if (metadata == null) { directPool.offer(buffer); break }
+                            Output(++requestId, null, metadata[3], buffer, metadata[0].toInt(), metadata[1].toInt(), metadata[2].toInt())
+                        } else PioneerLwipNative.output()?.let { Output(++requestId, it, System.nanoTime()) } ?: break
                         // Count before publication; the consumer cannot make the byte counter negative.
-                        queuedBytes.addAndGet(packet.frame.size.toLong())
-                        if (!output.offer(packet)) { queuedBytes.addAndGet(-packet.frame.size.toLong()); pending = packet; break }
-                        pending = null; bytes += packet.frame.size
+                        queuedBytes.addAndGet(packet.frameBytes.toLong())
+                        if (!output.offer(packet)) { queuedBytes.addAndGet(-packet.frameBytes.toLong()); pending = packet; break }
+                        pending = null; bytes += packet.frameBytes
                     }
                     while (true) {
                         val c = completed.poll() ?: break
@@ -128,7 +158,7 @@ internal class PioneerLwipBridge(
                     loopTiming.record(System.nanoTime() - started)
                     if (System.nanoTime() - lastSummary >= 5_000_000_000L) {
                         val oldest = (inFlight ?: output.peek())?.let { (System.nanoTime() - it.queuedNs) / 1_000_000 } ?: 0
-                        PioneerLwipRuntime.summary = "sessionId=$session attemptId=${PioneerLwipRuntime.attemptId} framesRx=$rx framesTxCompleted=${txCount.get()} txBlocks=${txBlocks.get()} txBatchMax=${PioneerDebugRuntime.usbTxBatchFrames} outRetries=${retryCount.get()} txDepth=${output.size} txBytes=${queuedBytes.get()} txPeakBytes=$peakBytes txOldestMs=$oldest"
+                        PioneerLwipRuntime.summary = "sessionId=$session optimized=$optimized attemptId=${PioneerLwipRuntime.attemptId} framesRx=$rx framesTxCompleted=${txCount.get()} txBlocks=${txBlocks.get()} txBatchMax=${PioneerDebugRuntime.usbTxBatchFrames} outRetries=${retryCount.get()} txDepth=${output.size} txBytes=${queuedBytes.get()} txPeakBytes=$peakBytes txOldestMs=$oldest"
                         log("LWIP_STATUS ${PioneerLwipRuntime.summary}")
                         if (diagnostics) for (timing in listOf(loopTiming,inputTiming,pollTiming,queueTiming,buildTiming,writeTiming))
                             log("LWIP_TIMING sessionId=$session attemptId=${PioneerLwipRuntime.attemptId} ${timing.drain()}")
@@ -170,33 +200,34 @@ internal class PioneerLwipBridge(
                 val packet = output.poll(100, TimeUnit.MILLISECONDS) ?: continue
                 inFlight = packet
                 val packets = ArrayList<Output>(8).apply { add(packet) }
-                var frameBytes = packet.frame.size
+                var frameBytes = packet.frameBytes
                 // Aggregation has been validated with active video; leave USB/NCM bring-up unchanged.
                 val limit = if (PioneerLwipRuntime.firstFrameNs == 0L) 1 else
                     PioneerDebugRuntime.usbTxBatchFrames.coerceIn(1, 8)
                 // Never wait to fill a batch: preserve FIFO and bound the complete NTB to 16KiB.
-                while (packets.size < limit) {
+                while (!optimized && packets.size < limit) {
                     val next = output.peek() ?: break
-                    val estimate = 24 + 4 * (packets.size + 1) + frameBytes + next.frame.size + 3 * packets.size
+                    val estimate = 24 + 4 * (packets.size + 1) + frameBytes + next.frameBytes + 3 * packets.size
                     if (estimate > 16_383) break
                     packets.add(checkNotNull(output.poll()))
-                    frameBytes += next.frame.size
+                    frameBytes += next.frameBytes
                 }
                 packets.forEach { queueTiming.record(System.nanoTime() - it.queuedNs) }
-                val frames = packets.map { it.frame }
+                val frames = if (optimized) emptyList() else packets.map { checkNotNull(it.frame) }
                 var failures = 0
                 var failureStart = 0L
                 var lastFailureLog = 0L
                 while (running.get()) {
                     // Caller timeout after readiness. NcmUsbBridge applies upstream's 20ms cap
                     // until the first complete OUT, including on the native path.
-                    val result = ncm.sendBatchMeasured(frames, 100)
+                    val result = if (optimized) ncm.sendDirectNtbMeasured(checkNotNull(packet.direct), packet.ntbBytes, packet.frameCount, 100)
+                        else ncm.sendBatchMeasured(frames, 100)
                     buildTiming.record(result.buildNs)
                     writeTiming.record(result.writeNs, !result.completed)
                     com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(session,"usb-native-copy",result.copyNs, !result.completed)
                     com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(session,"usb-ioctl",result.ioctlNs, !result.completed)
                     if (result.completed) {
-                        txCount.addAndGet(packets.size.toLong())
+                        txCount.addAndGet(packets.sumOf { it.frameCount }.toLong())
                         txBlocks.incrementAndGet()
                         check(completed.offer(Completion(packet,result,failures), 1, TimeUnit.SECONDS)) { "USB completion queue full" }
                         break
@@ -232,6 +263,7 @@ internal class PioneerLwipBridge(
                     Thread.sleep(20)
                 }
                 queuedBytes.addAndGet(-frameBytes.toLong()); inFlight = null
+                packet.direct?.let { check(directPool.offer(it)) { "Duplicate direct NTB buffer release" } }
             }
         } catch (error: Throwable) {
             if (running.get()) writerFailure.compareAndSet(null, error)

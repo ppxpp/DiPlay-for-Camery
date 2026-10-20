@@ -29,7 +29,9 @@ object PioneerConnectionTrace {
         val now = System.nanoTime()
         if (events.size >= 128) events.removeFirst()
         events.addLast("CONNECT_STAGE runId=$runId sessionId=${PioneerLwipRuntime.sessionId} " +
-            "lwipActive=${PioneerLwipRuntime.active} attemptId=${PioneerLwipRuntime.attemptId} stage=$stage atNs=$now elapsedMs=${(now-startNs)/1_000_000} $detail")
+            "lwipActive=${PioneerLwipRuntime.active} pioneerSessionId=${PioneerWiredSession.sessionId} " +
+            "backend=${PioneerWiredSession.current?.backend?.name ?: "NONE"} adaptationActive=${PioneerWiredSession.adaptationActive} " +
+            "attemptId=${PioneerLwipRuntime.attemptId} stage=$stage atNs=$now elapsedMs=${(now-startNs)/1_000_000} $detail")
     }
     @Synchronized fun snapshot(): List<String> = events.toList()
 }

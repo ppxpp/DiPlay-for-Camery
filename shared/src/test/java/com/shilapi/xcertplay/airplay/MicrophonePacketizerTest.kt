@@ -3,7 +3,13 @@ package com.shilapi.xcertplay.airplay
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+// Crypto selection consults Android's native-loader/logging APIs even for software encryption.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [25], manifest = Config.NONE)
 class MicrophonePacketizerTest {
     @Test
     fun packetUsesRtpHeaderAndInputKeyAad() {

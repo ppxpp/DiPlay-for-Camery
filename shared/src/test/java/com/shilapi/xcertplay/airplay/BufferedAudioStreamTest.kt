@@ -15,6 +15,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+// The crypto path uses PioneerDebugRuntime, whose Handler requires an Android runtime.
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [25], manifest = org.robolectric.annotation.Config.NONE)
 class BufferedAudioStreamTest {
     private val config = AirPlayConfig(
         deviceName = "test",

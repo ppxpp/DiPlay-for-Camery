@@ -46,7 +46,10 @@ internal class AirPlayIapTunnelStream(
                         "${cause?.message ?: "no detail"}",
                 )
                 val shouldCloseSession = markFailed(cause)
-                if (shouldCloseSession) session.close()
+                if (shouldCloseSession) {
+                    if (cause != null) session.nativeTransportFailed("iAP tunnel", cause)
+                    session.close()
+                }
             }
         },
     )

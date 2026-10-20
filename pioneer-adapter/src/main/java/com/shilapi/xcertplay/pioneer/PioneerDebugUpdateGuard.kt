@@ -19,7 +19,7 @@ object PioneerDebugUpdateGuard {
     internal fun requireIdle(state: JSONObject = PioneerDebugRuntime.snapshot()) {
         check(!state.has("hostStateError") && !state.optBoolean("hostStateTimeout") &&
             listOf("controllerRunning", "backgroundSession", "hostAttached").all { state.opt(it) == false } &&
-            !PioneerLwipRuntime.active) { "请先 stop 并等待会话状态明确空闲，再更新（未知状态不允许升级）" }
+            !PioneerWiredSession.active && !PioneerLwipRuntime.active) { "请先 stop 并等待会话状态明确空闲，再更新（未知状态不允许升级）" }
     }
 
     internal fun begin(): Any {

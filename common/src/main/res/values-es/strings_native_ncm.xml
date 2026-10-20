@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">NCM nativo (experimental)</string>
+    <string name="settings_native_ncm_description">Activado: usa la red USB del sistema. Desactivado: usa el método actual. Se aplica en la próxima conexión. Si falla, cambia manualmente; ningún método cambia automáticamente al otro.</string>
+    <string name="settings_wired_backend">Método de conexión por cable</string>
+    <string name="settings_wired_backend_lwip">lwIP original</string>
+    <string name="settings_wired_backend_optimized">lwIP optimizado (experimental)</string>
+    <string name="settings_wired_backend_description">Elige uno de los tres métodos. Se aplica en la próxima conexión. Si falla, cambia manualmente; no hay cambio automático.</string>
+</resources>

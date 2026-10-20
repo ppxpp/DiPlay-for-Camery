@@ -20,7 +20,10 @@ enum class VideoCodec { H264, H265 }
  * (avcC/hvcC) or a ChaCha20-Poly1305 sealed VideoFrame. The key is the DataStream output key
  * and the per-frame nonce is an 8-byte little-endian counter.
  */
-class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {}) : Closeable {
+class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {},
+    private val bindAddress: InetAddress? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val expectedPeer: InetAddress? = null) : Closeable {
     interface Listener {
         fun onCodec(codec: VideoCodec) {}
         fun onConfig(codecData: ByteArray) {}
@@ -47,7 +50,8 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
         this.listener = listener
         val bound = ServerSocket()
         bound.reuseAddress = true
-        bound.bind(InetSocketAddress(InetAddress.getByName("::"), 0))
+        if (nativeBinding != null) nativeBinding.bind(bound)
+        else bound.bind(InetSocketAddress(bindAddress ?: InetAddress.getByName("::"), 0))
         server = bound
         try { portLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(bound.localPort, false, lwipSession) }
         catch (error: Throwable) { bound.close(); throw error }
@@ -89,6 +93,7 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     private fun accept(bound: ServerSocket) {
         try {
             val accepted = bound.accept()
+            nativeBinding?.validateAccepted(accepted, expectedPeer)
             socket = accepted
             run(accepted)
         } catch (error: Exception) {

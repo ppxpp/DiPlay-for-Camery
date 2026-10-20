@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.pioneer.PioneerDebugRuntime
-import com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
+import com.shilapi.xcertplay.pioneer.PioneerWiredSession
 import com.shilapi.xcertplay.pioneer.PioneerUsbPolicy
 import java.io.Closeable
 import java.util.concurrent.Executors
@@ -44,7 +44,7 @@ internal class PioneerMediaSourceRecovery private constructor(
     private fun tick() {
         if (closed) return
         try {
-            val current = controller.activeSessionIdentity()?.takeIf { PioneerLwipRuntime.active }
+            val current = controller.activeSessionIdentity()?.takeIf { PioneerWiredSession.adaptationActive }
             if (current !== session) {
                 recoverySink?.cancelVehicleMediaRecovery()
                 recoverySink = null

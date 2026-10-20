@@ -72,6 +72,8 @@ class IphoneUsbHost(
     /** Optional diagnostic claim path; production retains the framework implementation. */
     private val diagnosticClaim: ((UsbDeviceConnection, UsbInterface) -> Boolean)? = null,
     private val diagnosticSetConfiguration: ((UsbDeviceConnection, UsbConfiguration) -> Boolean)? = null,
+    /** Preserve cdc_ncm; only USBMUX is claimed by this host in native-network mode. */
+    private val preserveNcmKernelDriver: Boolean = false,
 ) {
     private val appContext = context.applicationContext
 
@@ -311,7 +313,7 @@ class IphoneUsbHost(
                 )
             }
             claimedInterface = usbMux
-            return Iap2UsbSession(connection, endpoints.first, endpoints.second, onDiagnostic)
+            return Iap2UsbSession(connection, endpoints.first, endpoints.second, onDiagnostic, usbMux)
         } catch (error: Throwable) {
             if (claimedInterface != null) connection.releaseInterface(claimedInterface)
             connection.close()
@@ -328,6 +330,39 @@ class IphoneUsbHost(
         device: UsbDevice,
         configuration: UsbConfiguration,
     ): UsbDeviceConnection {
+        if (preserveNcmKernelDriver) {
+            // Reuse an active CarPlay configuration so cdc_ncm remains attached. A different
+            // active configuration may still need the ordinary USB configuration transition.
+            if (UsbVerdict.readActiveConfiguration(connection) == configuration.id) {
+                onDiagnostic("NATIVE_NCM_USB config=${configuration.id}; preserve kernel NCM, claim USBMUX only")
+                return connection
+            }
+            val active = UsbVerdict.readActiveConfiguration(connection)
+            val oldInterfaces = (0 until device.configurationCount).map(device::getConfiguration)
+                .filter { it.id == active }.flatMap { cfg -> (0 until cfg.interfaceCount).map(cfg::getInterface) }
+                .associateBy { it.id }
+            var selectedConnection = connection
+            try {
+                UsbConfigurationSelection.select(
+                    target = configuration.id,
+                    interfaceIds = oldInterfaces.keys.toList(),
+                    setConfiguration = { selectedConnection.setConfiguration(configuration) },
+                    activeConfiguration = { UsbVerdict.readActiveConfiguration(selectedConnection) },
+                    detach = { id -> claim(selectedConnection, oldInterfaces.getValue(id)) },
+                    reopen = {
+                        selectedConnection.close()
+                        selectedConnection = usbManager.openDevice(device)
+                            ?: throw IphoneUsbException.DeviceUnavailable("Could not reopen iPhone for native NCM")
+                    },
+                )
+                if (UsbVerdict.readActiveConfiguration(selectedConnection) != configuration.id)
+                    throw IphoneUsbException.DeviceUnavailable("Native NCM could not select CarPlay USB configuration")
+                return selectedConnection
+            } catch (error: Throwable) {
+                if (selectedConnection !== connection) selectedConnection.close()
+                throw error
+            }
+        }
         val interfaces = (0 until device.configurationCount).map(device::getConfiguration)
             .flatMap { config -> (0 until config.interfaceCount).map(config::getInterface) }
             .associateBy { it.id }
@@ -475,6 +510,7 @@ class Iap2UsbSession internal constructor(
     private val outEndpoint: UsbEndpoint,
     private val inEndpoint: UsbEndpoint,
     private val onDiagnostic: (String) -> Unit = {},
+    private val claimedInterface: UsbInterface? = null,
 ) : Closeable {
     private val stateLock = Any()
     private val readLock = Any()
@@ -566,6 +602,9 @@ class Iap2UsbSession internal constructor(
         }
         requestToCancel?.cancel()
         requests.close()
+        // Android keeps the interface marked as usbfs after the FD close on this vendor kernel.
+        // Explicitly release the single USBMUX claim so the next reconnect can force-claim it.
+        claimedInterface?.let { runCatching { connection.releaseInterface(it) } }
         connection.close()
     }
 

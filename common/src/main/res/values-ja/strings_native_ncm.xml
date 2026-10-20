@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">ネイティブ NCM（実験的機能）</string>
+    <string name="settings_native_ncm_description">オンではシステムの USB ネットワーク、オフでは従来の接続方式を使用します。次回の接続時に適用されます。失敗時は手動で切り替えてください。自動で別の方式には切り替わりません。</string>
+    <string name="settings_wired_backend">有線接続方式</string>
+    <string name="settings_wired_backend_lwip">従来の lwIP</string>
+    <string name="settings_wired_backend_optimized">最適化 lwIP（実験的機能）</string>
+    <string name="settings_wired_backend_description">3つの方式から選択します。次回の接続時に適用されます。失敗時は手動で切り替えてください。自動切り替えはありません。</string>
+</resources>

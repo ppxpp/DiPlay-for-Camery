@@ -1,0 +1,22 @@
+APK内置原生CDC-NCM模块说明
+
+cdc_ncm_0062.ko用于精确内核4.9.17-g2b63fe51。
+cdc_ncm_0132.ko用于精确内核4.9.17-gbd3a8122。
+加载器仍需同时核验固件指纹、模块摘要和原厂工具，不按文件名强制加载。
+
+模块来自固定NXP linux-imx a88711e7基线，采用GPL v2许可。
+私有CDC解析器保留原始作者Oliver Neukum的版权与GPL v2声明。
+本项目增加了模块内私有描述解析、描述范围检查和Apple通知端点前置判断。
+本版还包含 XS／iOS 18.5 精确配置的无通知端点兼容分支。
+该分支默认关闭，App 使用固定 apple_no_status_control=3 参数启用，
+驱动仍须逐字节核对采集到的配置6描述；未知无通知布局及 Apple Private 功能均拒绝。
+普通通知端点路径保持原有策略。两份模块按各自内核分别构建，不能跨内核通用。
+完整修订源码、构建命令和匹配证据位于项目：
+camry-lab-results/ncm-apk-integration-20261015/0062/
+camry-lab-results/native-ncm-bind-review-20261014/private-parser-r1/
+camry-lab-results/native-ncm-no-notification-20261015-r2/
+GPL v2全文见同目录COPYING。
+
+XS 新兼容分支尚无本轮实机验收。0062尚无本轮车上声音与稳定性验收；
+已核机器码对应不等于全部硬件场景通过。升级 APK 不会替换内核中已加载的旧模块，
+如提示模块版本不符，须先拔手机并由用户正常重启车机，再由 App 加载匹配模块。

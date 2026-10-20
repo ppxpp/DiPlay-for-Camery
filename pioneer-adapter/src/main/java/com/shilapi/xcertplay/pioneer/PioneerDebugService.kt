@@ -190,7 +190,7 @@ class PioneerDebugService : Service() {
                 val state = PioneerDebugRuntime.snapshot()
                 require(!state.optBoolean("controllerRunning") && !state.optBoolean("backgroundSession") &&
                     !state.optBoolean("hostAttached") && !state.optBoolean("hostStateTimeout") &&
-                    !state.has("hostStateError") && !PioneerLwipRuntime.active) { "Stop the session and wait for complete cleanup before USB reset" }
+                    !state.has("hostStateError") && !PioneerWiredSession.active && !PioneerLwipRuntime.active) { "Stop the session and wait for complete cleanup before USB reset" }
                 val manager = getSystemService(UsbManager::class.java)
                 val phone = manager.deviceList.values.singleOrNull { it.vendorId == 0x05ac && manager.hasPermission(it) }
                     ?: error("Expected one authorized iPhone")
@@ -234,7 +234,7 @@ class PioneerDebugService : Service() {
                 val state = PioneerDebugRuntime.snapshot()
                 require(!state.optBoolean("controllerRunning") && !state.optBoolean("backgroundSession") &&
                     !state.optBoolean("hostAttached") && !state.optBoolean("hostStateTimeout") &&
-                    !state.has("hostStateError") && !PioneerLwipRuntime.active) { "Stop and wait for complete cleanup before changing USB configuration mode" }
+                    !state.has("hostStateError") && !PioneerWiredSession.active && !PioneerLwipRuntime.active) { "Stop and wait for complete cleanup before changing USB configuration mode" }
                 PioneerUsbPolicy.setConfigurationMode(this, request.getString("mode"))
                 send(socket, reply.put("mode", PioneerUsbPolicy.configurationMode(this)).put("message", "下次连接生效；REINITIALIZE 为 lwip11 对照，REUSE 为实验"))
             }
@@ -258,9 +258,22 @@ class PioneerDebugService : Service() {
             }
             "network-backend" -> {
                 val mode = request.getString("mode")
-                require(mode in listOf("LWIP", "VPN")) { "mode must be LWIP or VPN" }
-                getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putString("network_backend", mode).commit()
-                send(socket, reply.put("mode", mode).put("message", "下次连接生效"))
+                val backend = PioneerWiredBackend.Mode.entries.firstOrNull { it.name == mode }
+                require(backend != null || mode == "VPN") { "mode must be LWIP, NATIVE_NCM, LWIP_OPTIMIZED or VPN" }
+                val state = PioneerDebugRuntime.snapshot()
+                require(!state.optBoolean("controllerRunning") && !state.optBoolean("backgroundSession") &&
+                    !state.optBoolean("hostAttached") && !state.optBoolean("hostStateTimeout") &&
+                    !state.has("hostStateError") && !PioneerWiredSession.active && !PioneerLwipRuntime.active) {
+                    "Stop the session and wait for complete cleanup before changing backend"
+                }
+                if (backend != null) PioneerWiredBackend.save(this, backend)
+                else {
+                    // Explicit legacy diagnostic choice, never a failure fallback.
+                    getSharedPreferences("pioneer-adapter", MODE_PRIVATE).edit()
+                        .remove("wired_backend").putBoolean("native_ncm_enabled", false).commit()
+                    getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putString("network_backend", mode).commit()
+                }
+                send(socket, reply.put("mode", mode).put("message", "手动选择已保存，下次连接生效；失败不会自动回退"))
             }
             "update-storage", "clear-update-cache" -> {
                 val updates = File(cacheDir, "pioneer-update")
@@ -332,6 +345,29 @@ class PioneerDebugService : Service() {
         }
     }
 
+    /** Read only bounded, fixed helper records; never expose lease tokens or peer identities. */
+    private fun nativeNcmLeaseDiagnostics(): JSONArray {
+        val root = File(filesDir, "native-ncm")
+        val records = root.listFiles().orEmpty().filter {
+            it.isDirectory && it.name.matches(Regex("[0-9a-f]{32}"))
+        }.sortedByDescending { File(it, "status.json").lastModified() }.take(8)
+        return JSONArray(records.map { directory ->
+            val summary = JSONObject()
+            runCatching {
+                val file = File(directory, "status.json")
+                check(file.length() in 1..8192) { "Helper status unavailable" }
+                val value = JSONObject(file.readText())
+                for (key in listOf("state", "mode", "updated", "interface", "index")) {
+                    if (value.has(key)) summary.put(key, value.get(key))
+                }
+                summary.put("error", PioneerDebugRuntime.redact(value.optString("error")).orEmpty())
+                summary.put("ageMs", android.os.SystemClock.elapsedRealtime() - value.optLong("updated", 0))
+                summary.put("stopRequested", File(directory, "stop").exists())
+            }.onFailure { summary.put("readError", it.javaClass.simpleName) }
+            summary
+        })
+    }
+
     fun status(): JSONObject {
         val consent = runCatching { VpnService.prepare(this) }
         val vpn = JSONObject().put("authorized", consent.isSuccess && consent.getOrNull() == null)
@@ -357,7 +393,17 @@ class PioneerDebugService : Service() {
             .put("usbMode", PioneerUsbPolicy.mode(this)).put("pioneerUsbEnabled", PioneerUsbPolicy.enabled(this))
             .put("matchedFirmware", PioneerUsbPolicy.matchesDevice()).put("devices", JSONArray(devices))
             .put("lastCommand", PioneerDebugRuntime.lastCommand)
-            .put("networkBackend", if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
+            .put("networkBackend", if (PioneerWiredBackend.nativeEnabled(this)) "NATIVE_NCM"
+                else if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
+                else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
+            .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
+            .put("pioneerWiredSession", JSONObject().apply {
+                val session = PioneerWiredSession.current
+                put("active", session != null).put("adaptationActive", session?.verifiedDevice == true)
+                put("backend", session?.backend?.name ?: "NONE").put("sessionId", session?.id ?: 0L)
+                put("firstFrame", session?.firstFrame == true)
+                put("controlAccepted", session?.controlAccepted == true)
+            })
             .put("lwipActive", PioneerLwipRuntime.active).put("lwipStatus", PioneerLwipRuntime.summary)
             .put("lwipQueues", JSONArray(PioneerDiagnostics.queues()))
             .put("lwipDiagnostics", PioneerDiagnostics.enabled)
