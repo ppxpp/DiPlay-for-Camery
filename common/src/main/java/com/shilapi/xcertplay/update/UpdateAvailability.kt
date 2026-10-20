@@ -10,6 +10,7 @@ internal object UpdateAvailability {
     private const val APK_NAME = "apk_name"
     private const val APK_URL = "apk_url"
     private const val CHECKSUMS_URL = "checksums_url"
+    private const val CHANNEL = "channel"
     private const val LAST_ATTEMPT_MILLIS = "last_attempt_millis"
     private const val BACKGROUND_CHECKS = "background_checks"
     private const val LAST_RESULT = "last_result"
@@ -29,8 +30,13 @@ internal object UpdateAvailability {
         preferences(context).edit().putBoolean(BACKGROUND_CHECKS, enabled).apply()
     }
 
-    fun available(context: Context, installedVersionCode: Long): UpdateRelease? {
+    fun available(context: Context, installedVersionCode: Long, channel: UpdateChannel): UpdateRelease? {
         val values = preferences(context)
+        val storedChannel = UpdateChannel.fromApiName(values.getString(CHANNEL, null))
+        if (storedChannel != channel) {
+            clear(context)
+            return null
+        }
         val release = UpdateRelease(
             tagName = values.getString(TAG, null) ?: return null,
             versionCode = values.getLong(VERSION_CODE, -1L),
@@ -45,13 +51,14 @@ internal object UpdateAvailability {
         return null
     }
 
-    fun save(context: Context, release: UpdateRelease) {
+    fun save(context: Context, release: UpdateRelease, channel: UpdateChannel) {
         preferences(context).edit()
             .putString(TAG, release.tagName)
             .putLong(VERSION_CODE, release.versionCode)
             .putString(APK_NAME, release.apkName)
             .putString(APK_URL, release.apkUrl)
             .putString(CHECKSUMS_URL, release.checksumsUrl)
+            .putString(CHANNEL, channel.apiName)
             .apply()
     }
 
@@ -62,7 +69,14 @@ internal object UpdateAvailability {
             .remove(APK_NAME)
             .remove(APK_URL)
             .remove(CHECKSUMS_URL)
+            .remove(CHANNEL)
             .apply()
+    }
+
+    /** A channel switch must not inherit the previous channel's 24-hour check cadence. */
+    fun resetForChannelChange(context: Context) {
+        clear(context)
+        preferences(context).edit().remove(LAST_ATTEMPT_MILLIS).apply()
     }
 
     fun shouldCheck(context: Context, nowMillis: Long): Boolean {
@@ -88,6 +102,7 @@ internal object UpdateAvailability {
         fun age(key: String) = values.getLong(key, 0L).takeIf { it > 0L }
             ?.let { "${(nowMillis - it).coerceAtLeast(0L) / 60_000} min ago" } ?: "never"
         return "Update check: background=${if (backgroundChecksEnabled(context)) "on" else "off"}; " +
+            "channel=${UpdateChannelStore.load(context).apiName}; " +
             "lastSuccess=${age(LAST_ATTEMPT_MILLIS)}; cachedRelease=${values.getString(TAG, null) ?: "none"}; " +
             "lastResult=${values.getString(LAST_RESULT, null) ?: "none"} (${age(LAST_RESULT_MILLIS)}); " +
             "lastInstall=${values.getString(LAST_INSTALL, null) ?: "none"} (${age(LAST_INSTALL_MILLIS)})"
@@ -95,5 +110,6 @@ internal object UpdateAvailability {
 
     internal fun clearAllForTest(context: Context) {
         preferences(context).edit().clear().commit()
+        UpdateChannelStore.clearForTest(context)
     }
 }

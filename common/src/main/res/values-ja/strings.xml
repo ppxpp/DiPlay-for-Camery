@@ -868,6 +868,16 @@
     <string name="settings_interface_size_auto">自動</string>
     <string name="settings_interface_size_hint">DiPlay自体の文字と操作部のサイズです。「自動」は画面密度が低い大画面で拡大します。CarPlayの表示には影響しません。</string>
     <string name="settings_update_flavor_note">この更新は DiPlay カムリAナビ適合版向けです。DiPlay オリジナル版の更新ではありません。</string>
+    <string name="settings_update_channel">更新チャンネル</string>
+    <string name="update_channel_stable">安定版</string>
+    <string name="update_channel_beta">ベータ版</string>
+    <string name="settings_update_beta_warning">ベータ版は不安定な場合があります。いつでも安定版に戻せますが、インストール済みのベータ版はダウングレードされません。</string>
+    <string name="settings_update_channel_busy">現在のダウンロードが完了してからチャンネルを切り替えてください。</string>
+    <string name="update_channel_unavailable">このチャンネルで利用できるリリースはありません。</string>
+    <string name="update_channel_switch_title">更新チャンネルを切り替え</string>
+    <string name="update_channel_switch_discard">チャンネルを切り替えると、ダウンロード済みの更新は破棄されます。続行しますか？</string>
+    <string name="update_channel_switch_confirm">切り替え</string>
+    <string name="update_available_home_beta">ベータ版の更新があります</string>
     <string name="update_check">更新を確認</string>
     <string name="update_checking">確認しています…</string>
     <string name="update_up_to_date">最新版です</string>

@@ -95,8 +95,11 @@ import com.shilapi.xcertplay.update.BackgroundUpdateScheduler
 import com.shilapi.xcertplay.update.UpdateApkExport
 import com.shilapi.xcertplay.update.UpdateAvailability
 import com.shilapi.xcertplay.update.UpdateCatalog
+import com.shilapi.xcertplay.update.UpdateChannel
+import com.shilapi.xcertplay.update.UpdateChannelStore
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import java.io.File
@@ -392,7 +395,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             openProjection(); finish(); return
         }
         scheduleBackgroundUpdateChecks()
-        availableUpdate = UpdateAvailability.available(this, installedVersionCode())
+        availableUpdate = UpdateAvailability.available(
+            this,
+            installedVersionCode(),
+            UpdateChannelStore.load(this),
+        )
         enforceInterfaceSize()
         refreshAppearance()
         rememberLaunchAppearance()
@@ -1037,7 +1044,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else right.addView(space(12))
         right.addView(label(getString(R.string.home_public_preview, version()), 12, MUTED).apply { letterSpacing = .08f })
         availableUpdate?.let { release ->
-            val message = getString(R.string.update_available_home)
+            val message = getString(
+                if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_home_beta
+                else R.string.update_available_home,
+            )
             val tint = { alpha: Int -> (WARNING and 0x00FFFFFF) or (alpha shl 24) }
             val chip = GradientDrawable().apply {
                 setColor(tint(0x26))
@@ -2657,6 +2667,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun updateRow(): View {
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
+        updateChannelControl(container)
+        if (UpdateChannelStore.load(this) == UpdateChannel.BETA) {
+            container.addView(label(getString(R.string.settings_update_beta_warning), 14, MUTED).apply {
+                setPadding(0, 0, 0, dp(8))
+            })
+        }
         container.addView(label(getString(R.string.settings_update_flavor_note), 14, MUTED).apply {
             setPadding(0, 0, 0, dp(8))
         })
@@ -2681,27 +2697,110 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         return container
     }
 
+    private fun updateChannelControl(parent: LinearLayout) {
+        val channels = UpdateChannel.entries
+        val current = UpdateChannelStore.load(this)
+        val labels = channels.map { getString(it.labelRes) }
+        val busy = updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING
+        val title = getString(R.string.settings_update_channel)
+        val control = button("$title · ${labels[current.ordinal]}", false) {}
+        control.isEnabled = !busy
+        control.setOnClickListener {
+            if (busy) return@setOnClickListener
+            var pending = channels.indexOf(current)
+            appDialogBuilder()
+                .setTitle(title)
+                .setMessage(getString(R.string.settings_update_beta_warning))
+                .setSingleChoiceItems(labels.toTypedArray(), pending) { _, index -> pending = index }
+                .setPositiveButton(getString(R.string.save)) { _, _ ->
+                    val selected = channels[pending]
+                    if (selected != UpdateChannelStore.load(this)) switchUpdateChannel(selected)
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+        }
+        parent.addView(control, matchButton(0, 60))
+        if (busy) {
+            parent.addView(label(getString(R.string.settings_update_channel_busy), 13, MUTED).apply {
+                setPadding(0, dp(8), 0, 0)
+            })
+        }
+        parent.addView(space(12))
+    }
+
+    private fun switchUpdateChannel(channel: UpdateChannel) {
+        val hasDownloadedUpdate = updateFile != null || updateStage == UpdateStage.READY ||
+            updateSavedUri != null || updateSavedPath != null
+        if (hasDownloadedUpdate) {
+            appDialogBuilder()
+                .setTitle(getString(R.string.update_channel_switch_title))
+                .setMessage(getString(R.string.update_channel_switch_discard))
+                .setPositiveButton(getString(R.string.update_channel_switch_confirm)) { _, _ ->
+                    applyUpdateChannel(channel)
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+            return
+        }
+        applyUpdateChannel(channel)
+    }
+
+    private fun applyUpdateChannel(channel: UpdateChannel) {
+        discardDownloadedUpdate()
+        UpdateChannelStore.save(this, channel)
+        updateGeneration += 1
+        availableUpdate = null
+        updateRelease = null
+        updateMessage = null
+        updateProgress = null
+        updateStage = UpdateStage.IDLE
+        UpdateAvailability.resetForChannelChange(this)
+        checkForUpdates()
+    }
+
+    private fun discardDownloadedUpdate() {
+        updateFile?.parentFile?.deleteRecursively()
+        updateFile = null
+        updateSavedUri?.let { uri -> runCatching { contentResolver.delete(uri, null, null) } }
+        updateSavedPath?.let { path -> runCatching { File(path).takeIf { it.isAbsolute }?.delete() } }
+        updateSavedUri = null
+        updateSavedPath = null
+    }
+
     private fun checkForUpdates() {
         updateStage = UpdateStage.CHECKING
         updateMessage = null
         val generation = ++updateGeneration
+        val channel = UpdateChannelStore.load(this)
         render()
         Thread({
-            val outcome = runCatching { latestRelease() }
+            val outcome = runCatching { latestRelease(channel) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
                 outcome.fold(
-                    { release ->
+                    { result ->
                         UpdateAvailability.recordAttempt(this, System.currentTimeMillis())
-                        availableUpdate = release
-                        if (release == null) {
-                            UpdateAvailability.clear(this)
-                            updateMessage = getString(R.string.update_up_to_date)
-                            updateStage = UpdateStage.IDLE
-                        } else {
-                            UpdateAvailability.save(this, release)
-                            updateRelease = release
-                            updateStage = UpdateStage.AVAILABLE
+                        when (result) {
+                            is UpdateLookupResult.Available -> {
+                                availableUpdate = result.release
+                                UpdateAvailability.save(this, result.release, channel)
+                                updateRelease = result.release
+                                updateStage = UpdateStage.AVAILABLE
+                            }
+                            UpdateLookupResult.UpToDate -> {
+                                availableUpdate = null
+                                updateRelease = null
+                                UpdateAvailability.clear(this)
+                                updateMessage = getString(R.string.update_up_to_date)
+                                updateStage = UpdateStage.IDLE
+                            }
+                            UpdateLookupResult.ChannelUnavailable -> {
+                                availableUpdate = null
+                                updateRelease = null
+                                UpdateAvailability.clear(this)
+                                updateMessage = getString(R.string.update_channel_unavailable)
+                                updateStage = UpdateStage.IDLE
+                            }
                         }
                         render()
                     },
@@ -2716,8 +2815,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }, "diplay-update-check").start()
     }
 
-    private fun latestRelease(): UpdateRelease? {
-        return UpdateReleaseLookup.latest(installedVersionCode(), userAgent())
+    private fun latestRelease(channel: UpdateChannel): UpdateLookupResult {
+        return UpdateReleaseLookup.latest(installedVersionCode(), userAgent(), channel)
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
@@ -2743,13 +2842,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateProgress = null
         updateMessage = null
         val generation = ++updateGeneration
+        val channel = UpdateChannelStore.load(this)
         render()
         Thread({
             // Each attempt owns its files, including across activity recreation.
             val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
             val outcome = runCatching {
                 // The cached release can be a day old. Download the newest one.
-                release = latestRelease() ?: throw IOException(getString(R.string.update_up_to_date))
+                release = when (val latest = latestRelease(channel)) {
+                    is UpdateLookupResult.Available -> latest.release
+                    UpdateLookupResult.UpToDate -> throw IOException(getString(R.string.update_up_to_date))
+                    UpdateLookupResult.ChannelUnavailable ->
+                        throw IOException(getString(R.string.update_channel_unavailable))
+                }
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
                 UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
                 val apkFile = File(directory, release.apkName)

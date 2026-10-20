@@ -106,6 +106,11 @@ node scripts/publish-update.mjs \
 
 The publisher computes SHA-256 and size, uploads the artifact and `SHA256SUMS.txt`, writes a version snapshot, then updates `latest.json` last. It does not read the previous manifest.
 
+The client's default update channel is embedded in the APK manifest. Build a beta artifact with
+`-PdiplayUpdateChannel=beta` (the release workflow passes the selected channel automatically);
+release builds without that property default to `stable`. A user's explicit in-app channel choice
+still overrides the build default.
+
 Use `--dry-run` to print the plan without writing R2.
 
 ## GitHub Actions

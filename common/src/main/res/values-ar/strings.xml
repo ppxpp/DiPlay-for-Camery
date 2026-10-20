@@ -703,6 +703,16 @@
     <string name="settings_interface_size_auto">تلقائي</string>
     <string name="settings_interface_size_hint">حجم النص وعناصر التحكم في شاشات DiPlay. يكبّرها الوضع التلقائي على الشاشات الكبيرة منخفضة الكثافة. لا يتأثر CarPlay.</string>
     <string name="settings_update_flavor_note">هذا التحديث مخصص لنسخة DiPlay كامري A مع الملاحة، وليس تحديثًا لإصدار DiPlay الأصلي.</string>
+    <string name="settings_update_channel">قناة التحديث</string>
+    <string name="update_channel_stable">الإصدار المستقر</string>
+    <string name="update_channel_beta">بيتا</string>
+    <string name="settings_update_beta_warning">قد تكون تحديثات بيتا غير مستقرة. يمكنك العودة إلى الإصدار المستقر في أي وقت؛ لن يتم تخفيض إصدار بيتا المثبت.</string>
+    <string name="settings_update_channel_busy">انتظر حتى يكتمل التنزيل الحالي قبل تغيير القناة.</string>
+    <string name="update_channel_unavailable">لا يوجد إصدار متاح لهذه القناة.</string>
+    <string name="update_channel_switch_title">تغيير قناة التحديث</string>
+    <string name="update_channel_switch_discard">سيؤدي تغيير القناة إلى تجاهل التحديث الذي تم تنزيله. هل تريد المتابعة؟</string>
+    <string name="update_channel_switch_confirm">تغيير</string>
+    <string name="update_available_home_beta">يتوفر تحديث بيتا</string>
     <string name="update_check">البحث عن تحديثات</string>
     <string name="update_checking">جارٍ البحث…</string>
     <string name="update_up_to_date">لديك آخر إصدار</string>

@@ -869,6 +869,16 @@
     <string name="settings_interface_size_auto">Automatic</string>
     <string name="settings_interface_size_hint">Size of text and controls on DiPlay\'s own screens. Automatic enlarges them on large screens with a low density. CarPlay is not affected.</string>
     <string name="settings_update_flavor_note">This update is for the DiPlay Camry A navigation adaptation, not an update for the original DiPlay.</string>
+    <string name="settings_update_channel">Update channel</string>
+    <string name="update_channel_stable">Stable</string>
+    <string name="update_channel_beta">Beta</string>
+    <string name="settings_update_beta_warning">Beta updates may be unstable. You can switch back to Stable at any time; an installed beta build is not downgraded.</string>
+    <string name="settings_update_channel_busy">Finish the current download before switching channels.</string>
+    <string name="update_channel_unavailable">No release is available for this channel.</string>
+    <string name="update_channel_switch_title">Switch update channel</string>
+    <string name="update_channel_switch_discard">Switching channels will discard the downloaded update. Continue?</string>
+    <string name="update_channel_switch_confirm">Switch</string>
+    <string name="update_available_home_beta">Beta update available</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking…</string>
     <string name="update_up_to_date">You\'re up to date</string>

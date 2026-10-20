@@ -44,16 +44,33 @@ internal class BackgroundUpdateWorker(context: Context, parameters: WorkerParame
         val installedVersionCode = PackageInfoCompat.getLongVersionCode(packageInfo)
         if (installedVersionCode <= 0L) return Result.success()
         val installedVersionName = packageInfo.versionName ?: "unknown"
+        val channel = UpdateChannelStore.load(applicationContext)
         return try {
-            val release = UpdateReleaseLookup.latest(
+            val result = UpdateReleaseLookup.latest(
                 installedVersionCode = installedVersionCode,
                 userAgent = "DiPlay/$installedVersionName",
+                channel = channel,
                 openConnection = network::openConnection,
             )
-            if (release == null) UpdateAvailability.clear(applicationContext)
-            else UpdateAvailability.save(applicationContext, release)
             UpdateAvailability.recordAttempt(applicationContext, now)
-            UpdateAvailability.recordResult(applicationContext, now, if (release == null) "up to date" else "found ${release.tagName}")
+            when (result) {
+                is UpdateLookupResult.Available -> {
+                    UpdateAvailability.save(applicationContext, result.release, channel)
+                    UpdateAvailability.recordResult(
+                        applicationContext,
+                        now,
+                        "found ${result.release.tagName} (${channel.apiName})",
+                    )
+                }
+                UpdateLookupResult.UpToDate -> {
+                    UpdateAvailability.clear(applicationContext)
+                    UpdateAvailability.recordResult(applicationContext, now, "up to date (${channel.apiName})")
+                }
+                UpdateLookupResult.ChannelUnavailable -> {
+                    UpdateAvailability.clear(applicationContext)
+                    UpdateAvailability.recordResult(applicationContext, now, "${channel.apiName} unavailable")
+                }
+            }
             Result.success()
         } catch (failure: Exception) {
             Log.i(TAG, "background update check failed", failure)

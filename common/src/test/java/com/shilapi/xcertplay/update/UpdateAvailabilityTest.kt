@@ -21,16 +21,22 @@ class UpdateAvailabilityTest {
 
     @Test fun persistsAReleaseThatIsNewerThanTheInstalledBuild() {
         val release = release("v0.3.0", 100L)
-        UpdateAvailability.save(context, release)
+        UpdateAvailability.save(context, release, UpdateChannel.STABLE)
 
-        assertEquals(release, UpdateAvailability.available(context, 99L))
+        assertEquals(release, UpdateAvailability.available(context, 99L, UpdateChannel.STABLE))
     }
 
     @Test fun removesAReleaseAfterTheAppCatchesUp() {
-        UpdateAvailability.save(context, release("v0.3.0", 100L))
+        UpdateAvailability.save(context, release("v0.3.0", 100L), UpdateChannel.STABLE)
 
-        assertNull(UpdateAvailability.available(context, 100L))
-        assertNull(UpdateAvailability.available(context, 101L))
+        assertNull(UpdateAvailability.available(context, 100L, UpdateChannel.STABLE))
+        assertNull(UpdateAvailability.available(context, 101L, UpdateChannel.STABLE))
+    }
+
+    @Test fun ignoresAndClearsAReleaseFromAnotherChannel() {
+        UpdateAvailability.save(context, release("v0.3.0-beta", 100L), UpdateChannel.BETA)
+
+        assertNull(UpdateAvailability.available(context, 99L, UpdateChannel.STABLE))
     }
 
     @Test fun backgroundChecksDefaultOnAndPersistTheChoice() {
@@ -41,16 +47,17 @@ class UpdateAvailabilityTest {
 
     @Test fun reportShowsStateWithRelativeAges() {
         assertEquals(
-            "Update check: background=on; lastSuccess=never; cachedRelease=none; lastResult=none (never); lastInstall=none (never)",
+            "Update check: background=on; channel=stable; lastSuccess=never; cachedRelease=none; " +
+                "lastResult=none (never); lastInstall=none (never)",
             UpdateAvailability.report(context, 10_000_000L),
         )
-        UpdateAvailability.save(context, release("v0.3.0", 100L))
+        UpdateAvailability.save(context, release("v0.3.0", 100L), UpdateChannel.STABLE)
         UpdateAvailability.recordAttempt(context, 10_000_000L - 5 * 60_000)
         UpdateAvailability.recordResult(context, 10_000_000L - 60_000, "no validated network (attempt 2)")
         UpdateAvailability.recordInstall(context, 10_000_000L - 2 * 60_000, "chooser uri=public installers=2")
         UpdateAvailability.saveBackgroundChecksEnabled(context, false)
         assertEquals(
-            "Update check: background=off; lastSuccess=5 min ago; cachedRelease=v0.3.0; " +
+            "Update check: background=off; channel=stable; lastSuccess=5 min ago; cachedRelease=v0.3.0; " +
                 "lastResult=no validated network (attempt 2) (1 min ago); " +
                 "lastInstall=chooser uri=public installers=2 (2 min ago)",
             UpdateAvailability.report(context, 10_000_000L),
@@ -65,6 +72,16 @@ class UpdateAvailabilityTest {
         assertFalse(UpdateAvailability.shouldCheck(context, now + UpdateAvailability.CHECK_INTERVAL_MILLIS - 1))
         assertTrue(UpdateAvailability.shouldCheck(context, now + UpdateAvailability.CHECK_INTERVAL_MILLIS))
         assertTrue(UpdateAvailability.shouldCheck(context, now - 1))
+    }
+
+    @Test fun channelChangeResetsTheBackgroundCheckCadence() {
+        val now = 10L * UpdateAvailability.CHECK_INTERVAL_MILLIS
+        UpdateAvailability.recordAttempt(context, now)
+        assertFalse(UpdateAvailability.shouldCheck(context, now + 1))
+
+        UpdateAvailability.resetForChannelChange(context)
+
+        assertTrue(UpdateAvailability.shouldCheck(context, now + 1))
     }
 
     private fun release(tag: String, versionCode: Long) = UpdateRelease(

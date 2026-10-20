@@ -703,6 +703,16 @@
     <string name="settings_interface_size_auto">Автоматически</string>
     <string name="settings_interface_size_hint">Размер текста и элементов управления на экранах DiPlay. В автоматическом режиме они увеличиваются на больших экранах с низкой плотностью. CarPlay не меняется.</string>
     <string name="settings_update_flavor_note">Это обновление для адаптации DiPlay для Camry A Navigation, а не обновление оригинального DiPlay.</string>
+    <string name="settings_update_channel">Канал обновлений</string>
+    <string name="update_channel_stable">Стабильная версия</string>
+    <string name="update_channel_beta">Бета-версия</string>
+    <string name="settings_update_beta_warning">Бета-версии могут быть нестабильными. Вернуться на стабильную версию можно в любое время; установленная бета-версия не будет понижена.</string>
+    <string name="settings_update_channel_busy">Дождитесь завершения текущей загрузки, чтобы сменить канал.</string>
+    <string name="update_channel_unavailable">Для этого канала нет доступных выпусков.</string>
+    <string name="update_channel_switch_title">Сменить канал обновлений</string>
+    <string name="update_channel_switch_discard">При смене канала загруженное обновление будет удалено. Продолжить?</string>
+    <string name="update_channel_switch_confirm">Сменить</string>
+    <string name="update_available_home_beta">Доступно обновление бета-версии</string>
     <string name="update_check">Проверить обновления</string>
     <string name="update_checking">Проверка…</string>
     <string name="update_up_to_date">У вас последняя версия</string>

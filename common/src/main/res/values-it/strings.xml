@@ -843,6 +843,16 @@
     <string name="settings_interface_size_auto">Automatica</string>
     <string name="settings_interface_size_hint">Dimensione di testo e controlli sulle schermate di DiPlay. Automatica li ingrandisce sugli schermi grandi con bassa densità. CarPlay non è interessato.</string>
     <string name="settings_update_flavor_note">Questo aggiornamento è per la versione DiPlay per Camry A Navigation, non è un aggiornamento della versione originale di DiPlay.</string>
+    <string name="settings_update_channel">Canale di aggiornamento</string>
+    <string name="update_channel_stable">Stabile</string>
+    <string name="update_channel_beta">Beta</string>
+    <string name="settings_update_beta_warning">Gli aggiornamenti beta possono essere instabili. Puoi tornare alla versione stabile in qualsiasi momento; una beta installata non viene declassata.</string>
+    <string name="settings_update_channel_busy">Attendi il completamento del download corrente prima di cambiare canale.</string>
+    <string name="update_channel_unavailable">Nessuna versione disponibile per questo canale.</string>
+    <string name="update_channel_switch_title">Cambia canale di aggiornamento</string>
+    <string name="update_channel_switch_discard">Cambiare canale eliminerà l\'aggiornamento scaricato. Continuare?</string>
+    <string name="update_channel_switch_confirm">Cambia</string>
+    <string name="update_available_home_beta">Aggiornamento beta disponibile</string>
     <string name="update_check">Controlla aggiornamenti</string>
     <string name="update_checking">Verifica in corso…</string>
     <string name="update_up_to_date">Sei aggiornato</string>
