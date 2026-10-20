@@ -22,7 +22,7 @@ public final class PioneerNativeNcmPrewarm {
     }
 
     public static void main(String[] args) {
-        if (Process.myUid() != 0 || args.length != 6) return;
+        if (Process.myUid() != 0 || (args.length != 6 && args.length != 7)) return;
         File result = null;
         String state = "FAILED";
         String error = "";
@@ -31,6 +31,9 @@ public final class PioneerNativeNcmPrewarm {
         String kernel = "";
         String machine = "";
         int sdk = 0;
+        JSONObject usbPermission = new JSONObject();
+        JSONObject warmWorker = new JSONObject();
+        PioneerNativeNcmWarmWorker worker = null;
         try {
             File candidate = new File(args[0]).getCanonicalFile();
             File directory = candidate.getParentFile();
@@ -45,14 +48,18 @@ public final class PioneerNativeNcmPrewarm {
             int appPid = Integer.parseInt(args[3]);
             long deadline = Long.parseLong(args[4]);
             File cancel = new File(candidate.getPath() + ".cancel");
-            NativeNcmModule.Guard guard = () -> {
-                if (android.os.SystemClock.elapsedRealtime() >= deadline || cancel.exists())
-                    throw new IllegalStateException("NCM_PREWARM_CANCELLED_OR_EXPIRED");
+            NativeNcmModule.Guard owner = () -> {
+                if (cancel.exists()) throw new IllegalStateException("NCM_PREWARM_CANCELLED_OR_EXPIRED");
                 String currentBoot = read(new File("/proc/sys/kernel/random/boot_id")).trim();
                 if (!boot.equals(currentBoot) || !boot.matches("[0-9a-f-]{36}") ||
                     Os.stat("/proc/" + appPid).st_uid != directoryStat.st_uid ||
                     !processStart(appPid).equals(appStart) || !apk.equals(System.getenv("CLASSPATH")))
                     throw new IllegalStateException("NCM_PREWARM_OWNER_CHANGED");
+            };
+            NativeNcmModule.Guard guard = () -> {
+                if (android.os.SystemClock.elapsedRealtime() >= deadline)
+                    throw new IllegalStateException("NCM_PREWARM_CANCELLED_OR_EXPIRED");
+                owner.check();
             };
             guard.check();
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IllegalStateException("UNSUPPORTED_PIONEER_FIRMWARE");
@@ -63,17 +70,34 @@ public final class PioneerNativeNcmPrewarm {
             machine = Os.uname().machine;
             sdk = Build.VERSION.SDK_INT;
             // Persist before the first module mutation; survives the ordinary app process dying.
-            write(result, "LOADING", "", firmware, fingerprint, kernel, machine, sdk, boot);
+            write(result, "LOADING", "", firmware, fingerprint, kernel, machine, sdk, boot, usbPermission, warmWorker);
             NativeNcmModule.ensureLoaded(apk, boot, guard);
             guard.check();
             PioneerNativeNcmHelper.verifyFirewallTools();
+            if (args.length == 7) {
+                if (!args[6].equals("USB_GRANT")) throw new IllegalArgumentException("Invalid prewarm action");
+                try { usbPermission = PioneerUsbPermissionHelper.grantDuringPrewarm(apk, directoryStat.st_uid, guard); }
+                catch (Exception unavailable) { usbPermission.put("code", "FAILED").put("error", unavailable.getClass().getSimpleName()); }
+            }
+            guard.check();
+            // Failure to open the optional task socket must not invalidate successful module loading.
+            try {
+                worker = new PioneerNativeNcmWarmWorker(directory, directoryStat.st_uid, appPid,
+                    appStart, apk, boot, owner);
+                warmWorker = worker.descriptor();
+            } catch (Exception unavailable) { if (worker != null) worker.close(); worker = null; }
             state = "READY";
         } catch (Throwable failure) {
             state = failureState(failure);
             error = failure.getClass().getSimpleName() + ": " + String.valueOf(failure.getMessage());
         }
-        if (result != null) try { write(result, state, error, firmware, fingerprint, kernel, machine, sdk, args[2]); }
-        catch (Throwable ignored) { }
+        if (result != null) try { write(result, state, error, firmware, fingerprint, kernel, machine, sdk, args[2], usbPermission, warmWorker); }
+        catch (Throwable ignored) { if (worker != null) { worker.close(); worker = null; } }
+        if (worker != null) {
+            try { if (state.equals("READY")) worker.serve(); }
+            catch (Throwable ignored) { }
+            finally { worker.close(); }
+        }
         System.exit(0);
     }
 
@@ -104,14 +128,16 @@ public final class PioneerNativeNcmPrewarm {
     }
 
     private static void write(File result, String state, String error, String firmware, String fingerprint,
-                              String kernel, String machine, int sdk, String boot) throws Exception {
+                              String kernel, String machine, int sdk, String boot, JSONObject usbPermission,
+                              JSONObject warmWorker) throws Exception {
         File directory = result.getParentFile();
         StructStat directoryStat = Os.lstat(directory.getPath());
         File temp = new File(directory, result.getName() + ".tmp");
         JSONObject value = new JSONObject().put("state", state).put("error", error)
             .put("pid", Process.myPid()).put("updated", android.os.SystemClock.elapsedRealtime())
             .put("boot", boot).put("firmware", firmware).put("fingerprint", fingerprint).put("kernel", kernel)
-            .put("machine", machine).put("sdk", sdk);
+            .put("machine", machine).put("sdk", sdk).put("usbPermission", usbPermission)
+            .put("warmWorker", warmWorker);
         try (FileOutputStream out = new FileOutputStream(Os.open(temp.getPath(),
                 OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600))) {
             out.write(value.toString().getBytes("UTF-8"));

@@ -27,6 +27,9 @@ public final class PioneerNativeNcmHelper {
     private NetdIdentity netd;
     private long firewallCheckedAt;
     private long launchDeadline;
+    private final long helperEntryMs = SystemClock.elapsedRealtime();
+    private final JSONObject preparationTiming = new JSONObject();
+    private void preparationStep(String name) throws Exception { preparationTiming.put(name, SystemClock.elapsedRealtime() - helperEntryMs); }
     private boolean cleaning, borrowed, networkMutated;
     private Set<String> originalOwners = Collections.emptySet();
 
@@ -36,6 +39,18 @@ public final class PioneerNativeNcmHelper {
         try { worker.run(new File(args[0])); }
         catch (Throwable error) { worker.statusQuietly(worker.journalOwned ? "RELEASE_FAILED" : "FAILED", message(error)); }
         finally { System.exit(0); } // This entry point runs only in the separate root app_process.
+    }
+
+    static boolean runReusable(File directory) {
+        PioneerNativeNcmHelper worker = new PioneerNativeNcmHelper();
+        try {
+            worker.run(directory);
+            String state = new JSONObject(read(new File(directory, "status.json"), 8192)).getString("state");
+            return !worker.unresolvedChild && (state.equals("CLOSED") || state.equals("FAILED"));
+        } catch (Throwable error) {
+            worker.statusQuietly(worker.journalOwned ? "RELEASE_FAILED" : "FAILED", message(error));
+            return false;
+        }
     }
 
     private void run(File dir) throws Exception {
@@ -99,6 +114,7 @@ public final class PioneerNativeNcmHelper {
     }
 
     private void configure() throws Exception {
+        preparationStep("configureStartMs");
         if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("Native NCM requires the verified Pioneer firmware family");
         int bus = request.getInt("bus"), device = request.getInt("device");
         File[] entries = new File("/sys/bus/usb/devices").listFiles();
@@ -116,6 +132,7 @@ public final class PioneerNativeNcmHelper {
         if (number(control, "bInterfaceClass", 16) != 2 || number(control, "bInterfaceSubClass", 16) != 13 ||
             number(data, "bInterfaceClass", 16) != 10) throw new IOException("USB function is not NCM");
         NativeNcmModule.ensureLoaded(request.getString("apk"), request.getString("boot"), this::guardCommand);
+        preparationStep("moduleReadyMs");
         File driver = new File(control, "driver");
         if (!driver.exists()) {
             // A previous user-space backend can leave the driver detached after usbfs closes.
@@ -135,6 +152,7 @@ public final class PioneerNativeNcmHelper {
         index = number(new File("/sys/class/net", name), "ifindex", 10);
         mac = read(new File("/sys/class/net/" + name + "/address"), 64).trim();
         verifyNetworkIdentity();
+        preparationStep("interfaceReadyMs");
         oldMtu = number(new File("/sys/class/net", name), "mtu", 10);
         oldUp = (Integer.parseInt(read(new File("/sys/class/net/" + name + "/flags"), 64).trim().replace("0x", ""), 16) & 1) != 0;
         oldIpv6Disabled = read(new File("/proc/sys/net/ipv6/conf/" + name + "/disable_ipv6"), 8).trim().equals("1");
@@ -153,6 +171,7 @@ public final class PioneerNativeNcmHelper {
             throw new IOException("Unowned NCM interface has existing local routes");
         verifyFirewallTools();
         netd = findNetd();
+        preparationStep("toolsAndOwnersReadyMs");
         firewall = new NativeNcmFirewall(name, token, this::executeCommand, () -> {
             guardCommand();
             validateIdentity(); verifyNetworkIdentity();
@@ -163,6 +182,7 @@ public final class PioneerNativeNcmHelper {
         });
         writeJournal("ACTIVE");
         firewall.install();
+        preparationStep("firewallReadyMs");
         firewallCheckedAt = SystemClock.elapsedRealtime();
         if (borrowed) { firewall.verify(); return; }
         networkMutated = true;
@@ -181,7 +201,9 @@ public final class PioneerNativeNcmHelper {
         if (!routes.contains("fe80::/64")) {
             addedRoute = true; command("/system/bin/ndc", "network", "route", "add", "local", name, "fe80::/64");
         }
+        preparationStep("networkConfiguredMs");
         firewall.verify();
+        preparationStep("verifiedMs");
         firewallCheckedAt = SystemClock.elapsedRealtime();
         if (!hasAddress()) throw new IOException("Native IPv6 address was not configured");
     }
@@ -515,6 +537,8 @@ public final class PioneerNativeNcmHelper {
         JSONObject value = new JSONObject().put("token", token).put("state", state).put("error", error)
             .put("address", address == null ? "" : address).put("mode", borrowed ? "BORROWED" : "CONFIGURED")
             .put("updated", SystemClock.elapsedRealtime())
+            .put("preparationTiming", preparationTiming)
+            .put("helperStartupMs", helperEntryMs - (request == null ? helperEntryMs : request.optLong("requestedAtMs", helperEntryMs)))
             .put("interface", name == null ? "" : name).put("index", index).put("mac", mac == null ? "" : mac);
         File temp = new File(directory, "status.tmp");
         try (FileOutputStream out = new FileOutputStream(temp)) { out.write(value.toString().getBytes("UTF-8")); if (!state.equals("READY")) out.getFD().sync(); }

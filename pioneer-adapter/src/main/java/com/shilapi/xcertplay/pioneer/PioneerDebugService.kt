@@ -258,6 +258,19 @@ class PioneerDebugService : Service() {
                 getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putBoolean("lwip_diagnostics", PioneerDiagnostics.enabled).apply()
                 send(socket, reply.put("mode", mode).put("message", "聚合计时开关立即生效；连接与错误日志继续保留"))
             }
+            "native-ncm-startup" -> {
+                require(PioneerUsbPolicy.matchesDevice())
+                fun choice(key: String): Boolean? = if (!request.has(key)) null else
+                    request.getString(key).also { require(it == "ON" || it == "OFF") } == "ON"
+                val warm = choice("warmWorker")
+                val prewarm = choice("prewarm")
+                if (warm != null || prewarm != null) PioneerDebugUpdateGuard.withCacheMaintenance {
+                    PioneerNativeNcmStartupPolicy.save(this, warm, prewarm)
+                }
+                send(socket, reply.put("warmWorker", PioneerNativeNcmStartupPolicy.warmWorkerEnabled(this))
+                    .put("prewarm", PioneerNativeNcmStartupPolicy.prewarmEnabled(this))
+                    .put("message", "仅调整NCM启动策略；预热开关须重启应用进程后对比，不重启车机、不切换后端"))
+            }
             "network-backend" -> {
                 val mode = request.getString("mode")
                 val backend = PioneerWiredBackend.Mode.entries.firstOrNull { it.name == mode }

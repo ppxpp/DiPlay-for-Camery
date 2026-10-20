@@ -256,6 +256,7 @@ class CarPlayController(
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
+    @Volatile private var usbResetInCurrentAttempt = false
     @Volatile private var wiredDeviceName: String? = null
     private val usbAdbGrantAttempts = mutableSetOf<String>()
     private val pendingUsbAdbGrants = mutableSetOf<String>()
@@ -558,6 +559,8 @@ class CarPlayController(
             executor.execute {
                 try {
                     com.shilapi.xcertplay.network.NativeNcmPreparation.awaitReady(appContext) { !closed }
+                    com.shilapi.xcertplay.network.NativeNcmLease.awaitReleased(appContext,
+                        isCurrent = { !closed }, log = ::connectionDiagnostic)
                     mainHandler.post { if (!closed) startPrepared() }
                 } catch (error: Throwable) {
                     if (!closed) fail(error)
@@ -2089,6 +2092,7 @@ class CarPlayController(
         pendingUsbAdbGrants.clear()
         phase = Phase.IPHONE
         reenumerationAttempts = 0
+        usbResetInCurrentAttempt = false
         onStatus(CarPlayStatus.DiscoveringIphone)
         checkIphoneAvailability()
     }
@@ -2241,8 +2245,16 @@ class CarPlayController(
                     Phase.REENUMERATION, Phase.IPHONE -> {
                         val configuration = IphoneCarPlayConfiguration.find(result.device)
                         val carPlayMode = configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true
-                        val sessionAlreadyStarted = WiredSessionMemory.startedOn(result.device.deviceName) ||
-                            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.startedOnThisBoot(appContext, result.device.deviceName)
+                        // Once this attempt has reset the stale enumeration, the ready CarPlay
+                        // configuration is the result of that reset. Remembering the old session
+                        // must not force a second mode transition and another 1-2 second wait.
+                        val sessionAlreadyStarted = WiredConfigurationAction.sessionNeedsTransition(usbResetInCurrentAttempt) {
+                            WiredSessionMemory.startedOn(result.device.deviceName) ||
+                                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.startedOnThisBoot(
+                                    appContext,
+                                    result.device.deviceName,
+                                )
+                        }
                         val action = WiredConfigurationAction.choose(
                             found = configuration != null,
                             carPlayMode = carPlayMode,
@@ -2383,6 +2395,7 @@ class CarPlayController(
                 finally { connection.close() }
             }
             connectionDiagnostic("USB_RECONNECT_RESET elapsedMs=$elapsed rc=${reset.getOrNull()} error=${reset.exceptionOrNull()?.javaClass?.simpleName}")
+            if (reset.isSuccess) usbResetInCurrentAttempt = true
             // ENODEV may be the expected detach; the new enumeration is the success criterion.
             mainHandler.post {
                 if (!closed && phase == Phase.REENUMERATION && attempt == reenumerationAttempts &&

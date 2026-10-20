@@ -13,7 +13,8 @@ object NativeNcmPreparation {
     fun prepareInBackground(context: Context, wireless: () -> Boolean, hasSession: () -> Boolean,
                             log: (String) -> Unit) {
         val app = context.applicationContext
-        val stillSelected = { PioneerUsbPolicy.enabled(app) && !wireless() && PioneerWiredBackend.nativeEnabled(app) }
+        val stillSelected = { PioneerUsbPolicy.enabled(app) && !wireless() && PioneerWiredBackend.nativeEnabled(app) &&
+            com.shilapi.xcertplay.pioneer.PioneerNativeNcmStartupPolicy.prewarmEnabled(app) }
         val eligible = { stillSelected() && !hasSession() && !PioneerWiredSession.active }
         gate.schedule(eligible, { task -> Thread(task, "native-ncm-prewarm").apply { isDaemon = true; start() } }) {
             try {

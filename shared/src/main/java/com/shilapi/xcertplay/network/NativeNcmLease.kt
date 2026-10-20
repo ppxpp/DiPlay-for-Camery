@@ -66,15 +66,20 @@ internal class NativeNcmLease private constructor(
             .put("bus", bus).put("device", number).put("product", device.productId)
             .put("configuration", config.id).put("control", function.control.id).put("data", function.data.id)
             .put("apk", context.applicationInfo.sourceDir)
-            .put("address", address).put("deadline", deadline).put("boot", bootIdentity()).toString())
+            .put("appPid", Process.myPid()).put("appStart", appProcessStart())
+            .put("address", address).put("requestedAtMs", SystemClock.elapsedRealtime()).put("deadline", deadline).put("boot", bootIdentity()).toString())
         renew()
         val dispatchError = java.util.concurrent.atomic.AtomicReference<Throwable?>()
         Thread({
             runCatching {
+                if (dispatchWarmWorker(context)) return@runCatching
                 val command = "CLASSPATH=${quote(context.applicationInfo.sourceDir)} /system/bin/app_process /system/bin " +
                     "com.shilapi.xcertplay.pioneer.PioneerNativeNcmHelper ${quote(directory.path)} </dev/null >/dev/null 2>&1 &"
                 invokeRoot(command)
-            }.onFailure(dispatchError::set)
+            }.onFailure {
+                log("NATIVE_NCM_DISPATCH_FAILED ${it.javaClass.simpleName}: ${it.message}")
+                dispatchError.set(it)
+            }
         }, "native-ncm-launch").apply { isDaemon = true; start() }
         while (SystemClock.elapsedRealtime() < deadline && isCurrent() && !Thread.currentThread().isInterrupted) {
             dispatchError.get()?.let { throw IOException("Pioneer native network service rejected launch", it) }
@@ -90,17 +95,23 @@ internal class NativeNcmLease private constructor(
                     check(iface.inetAddresses.toList().any { it.address.contentEquals(local.address) }) {
                         "Native NCM address not available"
                     }
+                    val discoveryStarted = SystemClock.elapsedRealtime()
                     val network = awaitNetwork(context, name, status.optString("mode") == "BORROWED")
+                    val discoveryMillis = SystemClock.elapsedRealtime() - discoveryStarted
                     check(status.optString("mode") != "BORROWED" || network != null) { "Managed NCM Android network is unavailable" }
                     val candidate = NativeNcmBinding(local, index, network)
+                    val routeStarted = SystemClock.elapsedRealtime()
                     awaitRoute(candidate)
+                    val routeMillis = SystemClock.elapsedRealtime() - routeStarted
                     binding = candidate
                     interfaceName = name
                     hostMac = status.getString("mac").split(':').map { it.toInt(16).toByte() }.toByteArray()
                     require(hostMac.size == 6)
                     log(
                         "NATIVE_NCM_ATTACHED interface=$name index=$index address=${local.hostAddress} " +
-                            "network=${network != null} route=CONFIRMED; manual backend, no VPN/lwIP",
+                            "network=${network != null} route=CONFIRMED; manual backend, no VPN/lwIP " +
+                            "networkDiscoveryMs=$discoveryMillis routeVerifyMs=$routeMillis " +
+                            "helperStartupMs=${status.optLong("helperStartupMs", -1)} preparationTiming=${status.optJSONObject("preparationTiming")}",
                     )
                     startTrafficDiagnostics(name)
                     heartbeat.scheduleWithFixedDelay({
@@ -133,9 +144,49 @@ internal class NativeNcmLease private constructor(
         throw IOException("Native NCM preparation cancelled or timed out; select the other backend manually if needed")
     }
 
+    /** Only a failed connect before submitting any bytes may use a newly launched root worker. */
+    private fun dispatchWarmWorker(context: Context): Boolean {
+        if (!com.shilapi.xcertplay.pioneer.PioneerNativeNcmStartupPolicy.warmWorkerEnabled(context)) {
+            log("NATIVE_NCM_WARM_DISPATCH disabled; launching native worker")
+            return false
+        }
+        val root = File(context.filesDir, "native-ncm")
+        val boot = bootIdentity()
+        val start = appProcessStart()
+        val candidates = root.listFiles().orEmpty().filter {
+            it.isFile && it.name.matches(Regex("prewarm-[0-9a-f-]{36}\\.json")) && it.length() in 1..8192
+        }.mapNotNull { runCatching { JSONObject(it.readText()) }.getOrNull() }
+            .filter {
+                val worker = it.optJSONObject("warmWorker")
+                it.optString("state") == "READY" && it.optString("boot") == boot &&
+                    worker?.optInt("appPid") == Process.myPid() && worker.optString("appStart") == start
+            }.sortedByDescending { it.optLong("updated") }
+        for (status in candidates) {
+            val name = status.getJSONObject("warmWorker").optString("socket")
+            if (!name.matches(Regex("diplay-ncm-[0-9a-f-]{36}"))) continue
+            android.net.LocalSocket().use { socket ->
+                try {
+                    socket.connect(android.net.LocalSocketAddress(name, android.net.LocalSocketAddress.Namespace.ABSTRACT))
+                } catch (_: IOException) { return@use }
+                socket.soTimeout = 2000
+                val peer = socket.peerCredentials
+                check(peer.uid == 0 && peer.pid == status.optInt("pid")) { "Native warm worker identity changed" }
+                if (closing.get() || !isCurrent()) throw IOException("Native warm dispatch cancelled")
+                // Once submitted, never dispatch a second helper, even if the ACK is lost.
+                com.shilapi.xcertplay.pioneer.NativeNcmWarmProtocol.submitTask(socket.outputStream, directory.canonicalPath)
+                com.shilapi.xcertplay.pioneer.NativeNcmWarmProtocol.requireAccepted(socket.inputStream)
+                log("NATIVE_NCM_WARM_DISPATCH accepted rootPid=${peer.pid}; reused prewarm process")
+                return true
+            }
+        }
+        log("NATIVE_NCM_WARM_DISPATCH unavailable; launching native worker")
+        return false
+    }
+
     /**
-     * A created local network can appear in ConnectivityManager a few hundred milliseconds after
-     * netd accepts it. Poll briefly so first connection does not depend on scheduler timing.
+     * Borrowed networks must become visible to ConnectivityManager before their sockets are bound.
+     * A CONFIGURED netd local network need not be exposed there at all. Inspect it once, then let
+     * awaitRoute prove app-UID routing instead of spending a second waiting for an optional object.
      */
     private fun awaitNetwork(context: Context, name: String, required: Boolean): android.net.Network? {
         val connectivity = context.getSystemService(android.net.ConnectivityManager::class.java)
@@ -143,8 +194,7 @@ internal class NativeNcmLease private constructor(
             if (required) throw IOException("Connectivity service unavailable for native NCM")
             return null
         }
-        val timeout = if (required) NETWORK_DISCOVERY_TIMEOUT_MILLIS else NETWORK_OPTIONAL_DISCOVERY_MILLIS
-        val end = SystemClock.elapsedRealtime() + timeout
+        val end = SystemClock.elapsedRealtime() + NETWORK_DISCOVERY_TIMEOUT_MILLIS
         do {
             if (closing.get() || !isCurrent()) throw IOException("Native NCM preparation cancelled")
             val matches = connectivity.allNetworks.orEmpty().filter {
@@ -152,6 +202,7 @@ internal class NativeNcmLease private constructor(
             }
             if (matches.size == 1) return matches.single()
             if (matches.size > 1) throw IOException("Multiple Android networks own the native NCM interface")
+            if (!required) return null
             renew()
             Thread.sleep(100)
         } while (SystemClock.elapsedRealtime() < end)
@@ -236,7 +287,6 @@ internal class NativeNcmLease private constructor(
     companion object {
         private const val PREPARE_TIMEOUT_MILLIS = 40_000L
         private const val NETWORK_DISCOVERY_TIMEOUT_MILLIS = 5_000L
-        private const val NETWORK_OPTIONAL_DISCOVERY_MILLIS = 1_000L
         private const val ROUTE_VERIFY_TIMEOUT_MILLIS = 3_000L
         private const val TRAFFIC_DIAGNOSTIC_MILLIS = 45_000L
         private const val TRAFFIC_DIAGNOSTIC_INTERVAL_MILLIS = 2_000L
@@ -259,7 +309,7 @@ internal class NativeNcmLease private constructor(
                 val processStart = File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19]
                 val command = "CLASSPATH=${quote(apk)} /system/bin/app_process " +
                     "/system/bin com.shilapi.xcertplay.pioneer.PioneerNativeNcmPrewarm " +
-                    "${quote(result.path)} ${quote(apk)} ${quote(boot)} ${Process.myPid()} $deadline ${quote(processStart)} " +
+                    "${quote(result.path)} ${quote(apk)} ${quote(boot)} ${Process.myPid()} $deadline ${quote(processStart)} ${if (com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.holdsRequests(context)) "" else "USB_GRANT"} " +
                     "</dev/null >/dev/null 2>&1 &"
                 val service = rootService() // A missing service cannot dispatch a delayed loader.
                 val pending = File(result.path + ".request")
@@ -278,7 +328,7 @@ internal class NativeNcmLease private constructor(
                     val status = runCatching { JSONObject(result.readText()) }.getOrNull()
                     when (status?.optString("state")) {
                         "READY" -> {
-                            log("NATIVE_NCM_PREWARM ready moduleLoaded=true elapsedMs=${status.optLong("updated") - started} " +
+                            log("NATIVE_NCM_PREWARM ready usbPermission=${status.optJSONObject("usbPermission")} moduleLoaded=true elapsedMs=${status.optLong("updated") - started} " +
                                 "firmware=${status.optString("firmware")} kernel=${status.optString("kernel")}")
                             return
                         }
@@ -322,6 +372,29 @@ internal class NativeNcmLease private constructor(
             }
         }
 
+        private class ReleasePending : IOException("Native NCM worker is still releasing the USB network")
+
+        /** Wait off the UI thread for an orderly release, without retrying the whole USB handshake. */
+        fun awaitReleased(context: Context, isCurrent: () -> Boolean, log: (String) -> Unit) {
+            val started = SystemClock.elapsedRealtime()
+            val deadline = started + 8_000
+            var waited = false
+            while (true) {
+                if (!isCurrent() || Thread.currentThread().isInterrupted)
+                    throw IOException("Native NCM release wait cancelled")
+                try {
+                    requireReleased(context)
+                    if (waited) log("NATIVE_NCM_RELEASE_FENCE ready elapsedMs=${SystemClock.elapsedRealtime() - started}")
+                    return
+                } catch (pending: ReleasePending) {
+                    if (SystemClock.elapsedRealtime() >= deadline) throw pending
+                    if (!waited) log("NATIVE_NCM_RELEASE_FENCE waiting for previous worker")
+                    waited = true
+                    Thread.sleep(50)
+                }
+            }
+        }
+
         /** Refuse either wired backend until the previous native worker has released its lease. */
         fun requireReleased(context: Context, currentBoot: String = bootIdentity()) {
             val root = File(context.filesDir, "native-ncm")
@@ -357,7 +430,7 @@ internal class NativeNcmLease private constructor(
             if (!lockFile.exists()) { checkJournals(); pruneCompleted(); return }
             java.io.RandomAccessFile(lockFile, "rw").use { file ->
                 file.channel.use { channel ->
-                    val lock = channel.tryLock() ?: throw IOException("Native NCM worker is still releasing the USB network")
+                    val lock = channel.tryLock() ?: throw ReleasePending()
                     try {
                         checkJournals()
                         pruneCompleted()
@@ -385,6 +458,9 @@ internal class NativeNcmLease private constructor(
         private fun bootIdentity(): String = runCatching {
             File("/proc/sys/kernel/random/boot_id").readText().trim().also { check(it.isNotEmpty()) }
         }.getOrDefault("unknown")
+
+        private fun appProcessStart(): String =
+            File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19]
 
         fun open(context: Context, device: UsbDevice, address: String, isCurrent: () -> Boolean,
                  log: (String) -> Unit, onError: (Throwable) -> Unit): NativeNcmLease {

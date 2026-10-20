@@ -60,6 +60,9 @@ def main():
     parser.add_argument("--timeout", type=float, default=45)
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
+    ncm_startup = commands.add_parser("native-ncm-startup", help="空闲时设置NCM预热/复用对照；预热开关重启应用后生效")
+    ncm_startup.add_argument("--warm-worker", dest="warmWorker", choices=["ON", "OFF"])
+    ncm_startup.add_argument("--prewarm", choices=["ON", "OFF"])
     permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
     permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT"], default="STATUS")
     permission.add_argument("--node", help="多台Apple设备时指定status显示的node")
@@ -141,6 +144,8 @@ def main():
                 time.sleep(1)
         else:
             fields = {"mode": args.mode} if args.cmd in ("audio-source", "usb-mode", "usb-configuration", "network-backend", "lwip-diagnostics", "phone-diagnostics", "native-crypto", "video-priority", "touch-coalescing", "async-session-logs", "freescale-reorder", "audio-clock-trim") else {}
+            if args.cmd == "native-ncm-startup":
+                fields = {key: getattr(args, key) for key in ("warmWorker", "prewarm") if getattr(args, key) is not None}
             if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
             if args.cmd == "video-gesture": fields = {"kind": args.kind}
             if args.cmd == "host-ui": fields = {"action": args.action}
