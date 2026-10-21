@@ -2728,6 +2728,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 updateSavedPath?.let { container.addView(label(getString(R.string.update_saved_to, it), 13, MUTED).apply { setPadding(0, dp(10), 0, 0) }) }
             }
         }
+        val clientId = StableClientId.get(this)
+        container.addView(
+            label(
+                clientId?.let { getString(R.string.settings_update_client_id, it) }
+                    ?: getString(R.string.settings_update_client_id_unavailable),
+                13,
+                MUTED,
+            ).apply { setPadding(0, dp(12), 0, 0) },
+        )
         return container
     }
 
@@ -2744,7 +2753,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             var pending = channels.indexOf(current)
             appDialogBuilder()
                 .setTitle(title)
-                .setMessage(getString(R.string.settings_update_flavor_note))
                 .setSingleChoiceItems(labels.toTypedArray(), pending) { _, index -> pending = index }
                 .setPositiveButton(getString(R.string.save)) { _, _ ->
                     val selected = channels[pending]

@@ -55,6 +55,14 @@ class UpdateChannelTest {
         assertTrue(UpdateClient.releasesUrl(UpdateChannel.BETA).endsWith("/android/beta/latest"))
     }
 
+    @Test fun theClientIdIsSentAsAnEncodedQueryParameter() {
+        assertTrue(
+            UpdateClient.releasesUrl(UpdateChannel.STABLE, "AbC123_-xy")
+                .endsWith("/android/stable/latest?id=AbC123_-xy"),
+        )
+        assertTrue(UpdateClient.releasesUrl(UpdateChannel.BETA, " ").endsWith("/android/beta/latest"))
+    }
+
     private fun appInfo() = requireNotNull(
         shadowOf(context.packageManager).getInternalMutablePackageInfo(context.packageName)?.applicationInfo,
     )

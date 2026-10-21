@@ -923,4 +923,6 @@
     <string name="settings_hotspot_interface">Interfaz del punto de acceso (opcional)</string>
     <string name="settings_hotspot_interface_description">Solo para unidades que ejecutan su punto de acceso en una interfaz de red que Android no informa como punto de acceso Wi-Fi, por ejemplo eth0.3 en algunas unidades Geely, Lynk &amp; Co y otros Qualcomm. Déjalo vacío para encontrarla automáticamente.</string>
     <string name="disclaimer_agree_swipe_hint">Aceptar y continuar\nDesliza a los lados</string>
+    <string name="settings_update_client_id">ID de cliente: %1$s</string>
+    <string name="settings_update_client_id_unavailable">ID de cliente no disponible</string>
 </resources>
