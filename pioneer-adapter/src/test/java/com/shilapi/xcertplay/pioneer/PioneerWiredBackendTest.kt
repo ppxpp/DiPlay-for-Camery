@@ -28,7 +28,7 @@ class PioneerWiredBackendTest {
         assertEquals(PioneerWiredBackend.Mode.NATIVE_NCM, PioneerWiredBackend.mode(context))
     }
 
-    @Test fun allThreeManualChoicesAreDistinctAndStable() {
+    @Test fun allFourManualChoicesAreDistinctAndStable() {
         for (mode in PioneerWiredBackend.Mode.entries) {
             PioneerWiredBackend.save(context, mode)
             assertEquals(mode, PioneerWiredBackend.mode(context))
@@ -46,5 +46,22 @@ class PioneerWiredBackendTest {
             assertTrue(PioneerLwipRuntime.enabled(context))
             assertEquals(mode, PioneerWiredBackend.mode(context))
         }
+    }
+    @Test fun explicitVpnNeverSelectsLwipAndKeepsVehicleAdaptation() {
+        context.getSharedPreferences("pioneer-debug", 0).edit().putString("network_backend", "LWIP").commit()
+        PioneerWiredBackend.save(context, PioneerWiredBackend.Mode.VPN)
+        assertFalse(PioneerWiredBackend.explicitLwip(context))
+        assertFalse(PioneerLwipRuntime.enabled(context))
+        assertFalse(PioneerWiredBackend.nativeEnabled(context))
+        assertTrue(PioneerWiredBackend.usesVehicleAdaptation(context))
+        assertEquals(PioneerWiredBackend.Mode.VPN, PioneerWiredBackend.mode(context))
+    }
+
+    @Test fun legacyDiagnosticVpnMigratesWithoutOverridingExplicitChoice() {
+        context.getSharedPreferences("pioneer-debug", 0).edit().putString("network_backend", "VPN").commit()
+        assertEquals(PioneerWiredBackend.Mode.VPN, PioneerWiredBackend.mode(context))
+        PioneerWiredBackend.save(context, PioneerWiredBackend.Mode.LWIP)
+        assertEquals(PioneerWiredBackend.Mode.LWIP, PioneerWiredBackend.mode(context))
+        assertTrue(PioneerLwipRuntime.enabled(context))
     }
 }

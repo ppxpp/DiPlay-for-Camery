@@ -15,19 +15,23 @@ import java.io.File
 
 /** Separate diagnostic page avoids edits to upstream settings layout and translation machinery. */
 class PioneerDebugActivity : Activity() {
+    private val pendingInstalls = mutableMapOf<Int, String>()
     private lateinit var status: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() {
             status.text = "${PioneerDebugService.addresses().joinToString("\n")}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n" +
                 "TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n" +
-                "VPN 已授权：${runCatching { android.net.VpnService.prepare(this@PioneerDebugActivity) == null }.getOrDefault(false)}\n" +
+                "VPN 预授权：${PioneerVpnPermissionGrant.status(this@PioneerDebugActivity).optBoolean("preconsented")}\n" +
                 "${PioneerDebugRuntime.lastCommand}\nUSB授权验证暂停=${PioneerUsbPermissionProbe.holdsRequests(this@PioneerDebugActivity)}\n${PioneerDebugRuntime.snapshot().toString(2)}"
             handler.postDelayed(this, 1_000)
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val codes = savedInstanceState?.getIntArray("installerCodes") ?: intArrayOf()
+        val paths = savedInstanceState?.getStringArrayList("installerPaths").orEmpty()
+        codes.zip(paths).forEach { (code, path) -> pendingInstalls[code] = path }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 20, 24, 20) }
         status = TextView(this).apply { textSize = 17f; setTextIsSelectable(true) }
         column.addView(TextView(this).apply { text = "DiPlay 车机调试（有线验证）"; textSize = 22f })
@@ -90,13 +94,39 @@ class PioneerDebugActivity : Activity() {
                 packageManager.queryIntentActivities(installer, 0).forEach { target ->
                     grantUriPermission(target.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                startActivity(installer)
+                installer.putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                val code = (4100..4115).firstOrNull { it !in pendingInstalls } ?: error("Too many pending installers")
+                pendingInstalls[code] = file.path
+                try { startActivityForResult(installer, code) }
+                catch (failure: Exception) { pendingInstalls.remove(code); throw failure }
             }
         }.onFailure {
             PioneerDebugRuntime.log(this, "APK installer unavailable: ${it.message}")
             Toast.makeText(this, "无法打开安装器：${it.message}", Toast.LENGTH_LONG).show()
         }
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putIntArray("installerCodes", pendingInstalls.keys.toIntArray())
+        outState.putStringArrayList("installerPaths", ArrayList(pendingInstalls.values))
+        super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("Uses the OEM package installer's activity result contract")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val path = pendingInstalls.remove(requestCode) ?: return
+        val app = applicationContext
+        Thread({
+            runCatching {
+                val file = File(path)
+                val removed = PioneerUpdateCache.finish(File(app.cacheDir, "pioneer-update"), file)
+                val uri = FileProvider.getUriForFile(app, "$packageName.pioneer-updates", file)
+                app.revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                PioneerDebugRuntime.log(app, "APK_INSTALL_FINISHED result=$resultCode cacheRemoved=$removed")
+            }.onFailure { PioneerDebugRuntime.log(app, "APK_INSTALL_CLEANUP_FAILED ${it.message}") }
+        }, "pioneer-apk-cleanup").apply { isDaemon = true; start() }
+    }
+
 }
 
 class PioneerUpdateProvider : FileProvider()

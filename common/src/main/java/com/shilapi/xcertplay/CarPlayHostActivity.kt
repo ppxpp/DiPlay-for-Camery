@@ -179,6 +179,12 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     // CH341 USB\VID_1A86&PID_5512&REV_0304 is the deployment-supplied bridge identity.
+    private var startupWiredBackend: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode? = null
+    private var vpnRootPending = false
+    private var vpnRootAttempted = false
+    @Volatile private var vpnRootGeneration = 0
+    private var vpnRootFailureDialog: android.app.AlertDialog? = null
+
     private fun createRuntimeConfig(): CarPlayRuntimeConfig = CarPlayRuntimeConfig(
         mfiTarget = mfiTarget,
         ch341Devices = if (mfiTarget == MfiTarget.USB_CH341) {
@@ -214,8 +220,9 @@ class CarPlayHostActivity : ComponentActivity() {
         wirelessBluetoothDeviceAddress = DiPlayPreferences.phoneAddress(this),
         remoteRfcommGateway = if (wirelessEnabled) RemoteGatewaySettings.loadSelected(this, wirelessHotspotMode) else null,
         transport = if (wirelessEnabled) CarPlayTransport.WIRELESS else CarPlayTransport.WIRED,
-        nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this),
-        optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.optimizedEnabled(this),
+        nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM,
+        optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED,
+        wiredBackend = startupWiredBackend,
         wirelessHotspotMode = wirelessHotspotMode,
         wifiP2pPreferredChannel = AirPlayPersistence.loadWifiP2pPreferredChannel(this),
         manualHotspotSsid = manualHotspotSsid,
@@ -886,7 +893,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 .put("vehicleNight", com.shilapi.xcertplay.pioneer.CamryDayNight.latestNight)
                 .put("microphoneProbe", com.shilapi.xcertplay.media.MicrophoneProbe.snapshot())
                 .put("diagnosticLogDropped", AsyncDiagnosticLog.droppedCount)
-        }, retryVpn = { requestStartupPrerequisites() }, videoGesture = ::startDebugVideoGesture, videoTap = ::debugVideoTap,
+        }, retryVpn = { if (!vpnRootPending) vpnRootAttempted = false; requestStartupPrerequisites() }, videoGesture = ::startDebugVideoGesture, videoTap = ::debugVideoTap,
             hostUi = ::debugHostUi,
             videoSnapshot = {
                 check(!debugGestureRunning) { "Wait for timed gesture to complete before capturing" }
@@ -1063,13 +1070,109 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun requestVpnConsent() {
         if (awaitingVpnConsent) return
-        if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this) ||
-            com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
-            vpnReady = true // This backend has no system VPN prerequisite.
+        val selected = if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this))
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this) else null
+        if (startupWiredBackend != selected) {
+            startupWiredBackend = selected
+            vpnRootGeneration++
+            vpnRootPending = false
+            vpnRootAttempted = false
+            vpnReady = false
+            vpnRootFailureDialog?.dismiss()
+        }
+        if (selected != null && selected != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
+            (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this) ||
+                com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this))) {
+            vpnReady = true
             appendLog("Selected wired backend requires no system VPN consent")
             maybeStartCarPlay()
             return
         }
+        if (selected == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
+            requestRootVpnConsent()
+            return
+        }
+        requestSystemVpnConsent()
+    }
+
+    private fun requestRootVpnConsent() {
+        if (vpnRootPending || vpnRootAttempted || vpnReady) { if (vpnReady) maybeStartCarPlay(); return }
+        vpnRootPending = true
+        vpnRootAttempted = true
+        vpnReady = false
+        vpnRootFailureDialog?.dismiss()
+        vpnRootFailureDialog = null
+        val generation = ++vpnRootGeneration
+        val app = applicationContext
+        val stillCurrent = {
+            !shuttingDown.get() && !wirelessEnabled && generation == vpnRootGeneration &&
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(app) &&
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(app) ==
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
+        }
+        setStatus(R.string.vpn_root_authorizing)
+        appendLog("VPN_ROOT_AUTH begin backend=VPN")
+        Thread({
+            var granted = false
+            var attempts = 0
+            var finalFailure: Throwable? = null
+            while (stillCurrent()) {
+                attempts++
+                val attempt = runCatching {
+                    com.shilapi.xcertplay.pioneer.PioneerVpnPermissionGrant.grantForConnection(
+                        app,
+                        stillCurrent,
+                    )
+                }
+                granted = attempt.getOrDefault(false)
+                if (granted) break
+                finalFailure = attempt.exceptionOrNull()
+                    ?: IllegalStateException("VPN_ROOT_AUTH_REJECTED")
+                if (attempts >= VPN_ROOT_AUTH_MAX_ATTEMPTS) break
+                val retryDelay = VPN_ROOT_RETRY_DELAYS_MS[attempts - 1]
+                val attemptNumber = attempts
+                val attemptFailure = finalFailure
+                runOnUiThread {
+                    if (stillCurrent()) {
+                        appendLog(
+                            "VPN_ROOT_AUTH attempt=$attemptNumber/${VPN_ROOT_AUTH_MAX_ATTEMPTS} " +
+                                "failed=${attemptFailure?.message}; retrying in ${retryDelay}ms",
+                        )
+                    }
+                }
+                try {
+                    Thread.sleep(retryDelay)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    finalFailure = IllegalStateException("VPN_ROOT_AUTH_INTERRUPTED")
+                    break
+                }
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || shuttingDown.get() || generation != vpnRootGeneration) return@runOnUiThread
+                vpnRootPending = false
+                if (wirelessEnabled || !com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(app) ||
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(app) != startupWiredBackend) return@runOnUiThread
+                vpnReady = granted
+                appendLog(
+                    "VPN_ROOT_AUTH completed granted=$vpnReady attempts=$attempts " +
+                        "lastError=${finalFailure?.message}",
+                )
+                if (vpnReady) maybeStartCarPlay() else {
+                    setStatus(R.string.vpn_root_failed)
+                    vpnRootFailureDialog?.dismiss()
+                    vpnRootFailureDialog = android.app.AlertDialog.Builder(this)
+                        .setMessage(R.string.vpn_root_failed)
+                        .setPositiveButton(R.string.vpn_manual_authorize) { _, _ -> requestSystemVpnConsent() }
+                        .setNeutralButton(R.string.retry_carplay_connection) { _, _ -> vpnRootAttempted = false; requestVpnConsent() }
+                        .setNegativeButton(android.R.string.cancel, null).show()
+                }
+            }
+        }, "diplay-vpn-root-consent").apply { isDaemon = true; start() }
+    }
+
+    private fun requestSystemVpnConsent() {
+        if (awaitingVpnConsent) return
         val consent = try {
             CarPlayVpnService.prepare(this)
         } catch (error: ActivityNotFoundException) {
@@ -1099,7 +1202,9 @@ class CarPlayHostActivity : ComponentActivity() {
         // A failed launch clears the pending state; a late result must not authorize that attempt.
         if (!awaitingVpnConsent) return
         awaitingVpnConsent = false
-        vpnReady = resultCode == RESULT_OK
+        vpnReady = resultCode == RESULT_OK &&
+            (startupWiredBackend != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN ||
+                runCatching { CarPlayVpnService.prepare(this) == null }.getOrDefault(false))
         if (vpnReady) {
             maybeStartCarPlay()
         } else {
@@ -1116,7 +1221,8 @@ class CarPlayHostActivity : ComponentActivity() {
         Log.w(TAG, diagnostic, error)
         appendLog(diagnostic)
         setStatus(R.string.vpn_authorization_unavailable)
-        if (!vpnAdbConsentTried) preConsentVpnOverAdb()
+        if (!vpnAdbConsentTried && startupWiredBackend !=
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) preConsentVpnOverAdb()
     }
 
     /** Without a consent dialog, the car's approved adb can allow the VPN instead (#604). */
@@ -1970,6 +2076,9 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        vpnRootGeneration++
+        vpnRootFailureDialog?.dismiss()
+        vpnRootFailureDialog = null
         CarPlayBackgroundSession.clearHost(this)
         stopObservingCamryNight?.invoke()
         stopObservingCamryNight = null
@@ -2096,6 +2205,10 @@ class CarPlayHostActivity : ComponentActivity() {
                 reconnectAttempts = 0
                 visibility = View.GONE
                 restartCarPlay(getString(R.string.connecting_to_your_iphone))
+                if (!wirelessEnabled && !vpnReady) {
+                    vpnRootAttempted = false
+                    requestStartupPrerequisites()
+                }
             }
             startupRetryButton = this
         }
@@ -5451,6 +5564,17 @@ class CarPlayHostActivity : ComponentActivity() {
                     callPopupSessionReady = false
                     updateCallPopupGuard()
                     startupRetryBudget.disconnected()
+                    if (message.contains("VPN_PERMISSION_REVOKED")) {
+                        startupRetryStopped = true
+                        vpnReady = false
+                        vpnRootAttempted = false
+                        startupRetryButton?.visibility = View.VISIBLE
+                        setStatus(R.string.vpn_root_failed)
+                        appendLog("VPN_PERMISSION_REVOKED; stopped automatic recovery")
+                        val revokedController = controller
+                        teardownExecutor.execute { revokedController?.close() }
+                        return@runOnUiThread
+                    }
                     if (menuOpen) {
                         recoveryPendingAfterMenu = true
                         return@runOnUiThread
@@ -6039,6 +6163,13 @@ class CarPlayHostActivity : ComponentActivity() {
             recreate()
             return
         }
+        if (!wirelessEnabled && controller == null &&
+            startupWiredBackend != (if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this))
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this) else null)) {
+            vpnReady = false
+            requestVpnConsent()
+            return
+        }
         val size = activeDisplaySize ?: return
         val transportReady = if (wirelessEnabled) wirelessPermissionsReady else vpnReady
         val locationReady = !locationReportingEnabled || locationPermissionAvailable
@@ -6601,6 +6732,7 @@ class CarPlayHostActivity : ComponentActivity() {
         check(!debugGestureRunning) { "Wait for timed gesture to finish" }
         val started = System.nanoTime()
         val result = when (action) {
+            "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE) == true
             "AUDIO_TAKE", "AUDIO_RELEASE" -> {
                 check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice())
                 val session = checkNotNull(activeAirPlaySession) { "No active CarPlay session" }
@@ -7108,6 +7240,8 @@ class CarPlayHostActivity : ComponentActivity() {
         const val RECONNECT_DELAY_MILLIS = 2_000L
         const val IAP_TUNNEL_RECONNECT_DELAY_MILLIS = 15_000L
         const val CONTROLLER_CLOSE_TIMEOUT_MILLIS = 4_000L
+        const val VPN_ROOT_AUTH_MAX_ATTEMPTS = 4
+        val VPN_ROOT_RETRY_DELAYS_MS = longArrayOf(750L, 1_500L, 3_000L)
         const val AUDIO_CAPTURE_MARKER = "audio-capture.enabled"
         const val AUDIO_CAPTURE_DIRECTORY = "audio-captures"
         const val PROTOCOL_TRACE_PREFIX = "TRACE "

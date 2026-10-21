@@ -550,6 +550,11 @@ class CarPlayController(
     fun start() {
         synchronized(this) { if (closed) return }
         if (!hasRequiredUsbService()) return
+        if (config.transport == CarPlayTransport.WIRED &&
+            config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+            com.shilapi.xcertplay.pioneer.PioneerVpnFirewallWarmup.start(appContext, ::connectionDiagnostic)
+        }
         if (config.transport == CarPlayTransport.WIRED && config.nativeNcmEnabled)
             com.shilapi.xcertplay.network.NativeNcmPreparation.connectionRequested()
         if (config.transport == CarPlayTransport.WIRED &&
@@ -3330,6 +3335,7 @@ class CarPlayController(
                 listener = listener,
                 media = media,
                 optimizedLwip = config.optimizedLwipEnabled,
+                wiredBackend = config.wiredBackend,
             )
         } catch (error: Throwable) {
             ncm.close()

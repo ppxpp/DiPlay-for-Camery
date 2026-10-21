@@ -36,7 +36,10 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28, 33], manifest = Config.NONE, shadows = [VpnScopeBuilderShadow::class])
 class CarPlayVpnScopeTest {
-    @Before fun resetVpnBoundary() { VpnScopeBoundary.reset() }
+    @Before fun resetVpnBoundary() {
+        VpnScopeBoundary.reset()
+        org.robolectric.shadows.ShadowVpnService.setPrepareResult(null)
+    }
 
     @Test fun allowlistRejectionNeverEstablishesAnUnrestrictedTunnel() {
         VpnScopeBoundary.allowFailure = PackageManager.NameNotFoundException("scope rejected")
@@ -92,14 +95,127 @@ class CarPlayVpnScopeTest {
         }
     }
 
+    @Test fun missingConsentStopsBeforeTunWithoutFallingBackToLwip() {
+        org.robolectric.shadows.ShadowVpnService.setPrepareResult(android.content.Intent("consent"))
+        withService { service ->
+            val result = attachWired(service, com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
+            assertTrue(result is CarPlayVpnService.AttachResult.Failed)
+            assertTrue(VpnScopeBoundary.calls.isEmpty())
+            assertReleased(service)
+        }
+    }
+
+    @Test
+    @Config(sdk = [25])
+    fun explicitVpnSnapshotUsesAdaptationAndIgnoresLaterLwipPreference() {
+        org.robolectric.shadows.ShadowBuild.setModel("SABRESD_MX6DQ")
+        org.robolectric.shadows.ShadowBuild.setDevice("tamago")
+        withService { service ->
+            val prefs = service.getSharedPreferences("pioneer-adapter", 0)
+            try {
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(service,
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP)
+                assertEquals(CarPlayVpnService.AttachResult.Failed("VpnService.establish returned null"),
+                    attachWired(service, com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN))
+                assertEquals(com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.VPN, VpnScopeBoundary.backendAtEstablish)
+                assertFalse(com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active)
+                assertNull(com.shilapi.xcertplay.pioneer.PioneerWiredSession.current)
+                assertEquals(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP,
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(service))
+                assertReleased(service)
+            } finally { prefs.edit().clear().commit() }
+        }
+    }
+
+    @Test fun revokeWithoutTunDoesNotStopWirelessAttachment() {
+        withService { service ->
+            assertEquals(CarPlayVpnService.AttachResult.Started, attachWireless(service))
+            service.onRevoke()
+            assertTrue(service.isAttached())
+            service.detach()
+            assertReleased(service)
+        }
+    }
+
+    @Test fun revokeClosesTunAndVehicleSessionAndReportsSpecificReason() {
+        withService { service ->
+            val notified = java.util.concurrent.CountDownLatch(1)
+            var reason = ""
+            val listener = object : AirPlaySessionListener {
+                override fun onTransportError(message: String) { reason = message; notified.countDown() }
+            }
+            assertEquals(CarPlayVpnService.AttachResult.Started,
+                service.attachWireless(InetAddress.getLoopbackAddress(), config, identity, PairingStore(), null,
+                    listener, object : AirPlayMediaHandler {}))
+            ReflectionHelpers.setField(service, "vpnRevokeListener", listener)
+            val pipes = ParcelFileDescriptor.createPipe()
+            val owner = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
+                com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.VPN, true)
+            try {
+                ReflectionHelpers.setField(service, "tun", pipes[0])
+                ReflectionHelpers.setField(service, "pioneerSession", owner)
+                service.onRevoke()
+                assertTrue(notified.await(3, java.util.concurrent.TimeUnit.SECONDS))
+                assertEquals("VPN_PERMISSION_REVOKED", reason)
+                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3)
+                while (ReflectionHelpers.getField<Any?>(service, "tun") != null && System.nanoTime() < deadline)
+                    Thread.yield()
+                synchronized(service) {
+                    assertNull(com.shilapi.xcertplay.pioneer.PioneerWiredSession.current)
+                    assertReleased(service)
+                }
+            } finally { pipes.forEach { it.close() }; owner.close() }
+        }
+    }
+
+    @Test fun revokeAfterGenericTeardownStillReportsOnceAndCannotCloseReplacement() {
+        withService { service ->
+            var revoked = 0
+            val listener = object : AirPlaySessionListener {
+                override fun onTransportError(message: String) {
+                    assertEquals("VPN_PERMISSION_REVOKED", message)
+                    assertFalse(service.isAttached())
+                    revoked++
+                }
+            }
+            ReflectionHelpers.setField(service, "vpnRevokeListener", listener)
+            service.detach() // Generic teardown won the race before onRevoke.
+            service.onRevoke()
+            service.onRevoke()
+            assertEquals(1, revoked)
+            assertEquals(CarPlayVpnService.AttachResult.Started, attachWireless(service))
+            service.onRevoke()
+            assertTrue(service.isAttached())
+            assertEquals(1, revoked)
+        }
+    }
+
+    @Test
+    @Config(sdk = [25])
+    fun usbAdaptationOffIgnoresLwipSnapshotAndUsesOrdinaryVpn() {
+        org.robolectric.shadows.ShadowBuild.setModel("SABRESD_MX6DQ")
+        org.robolectric.shadows.ShadowBuild.setDevice("tamago")
+        withService { service ->
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.setMode(service, "OFF")
+            try {
+                assertEquals(CarPlayVpnService.AttachResult.Failed("VpnService.establish returned null"),
+                    attachWired(service, com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP))
+                assertEquals(listOf("allow:${service.packageName}", "establish"), VpnScopeBoundary.calls)
+                assertNull(VpnScopeBoundary.backendAtEstablish)
+                assertReleased(service)
+            } finally { service.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }
+        }
+    }
+
     private fun withService(check: (CarPlayVpnService) -> Unit) {
         val controller = Robolectric.buildService(CarPlayVpnService::class.java).create()
         try { check(controller.get()) } finally { controller.destroy() }
     }
 
-    private fun attachWired(service: CarPlayVpnService): CarPlayVpnService.AttachResult =
+    private fun attachWired(service: CarPlayVpnService,
+        backend: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode? = null): CarPlayVpnService.AttachResult =
         service.attach(ncm(), "fe80::1234", ByteArray(6), config, identity, PairingStore(), null,
-            object : AirPlaySessionListener {}, object : AirPlayMediaHandler {})
+            object : AirPlaySessionListener {}, object : AirPlayMediaHandler {}, wiredBackend = backend)
 
     private fun attachWireless(service: CarPlayVpnService): CarPlayVpnService.AttachResult =
         service.attachWireless(InetAddress.getLoopbackAddress(), config, identity, PairingStore(), null,
@@ -136,11 +252,13 @@ object VpnScopeBoundary {
     val calls = mutableListOf<String>()
     var allowFailure: Exception? = null
     var establishFailure: Exception? = null
+    var backendAtEstablish: com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend? = null
 
     fun reset() {
         calls.clear()
         allowFailure = null
         establishFailure = null
+        backendAtEstablish = null
     }
 }
 
@@ -162,6 +280,7 @@ class VpnScopeBuilderShadow {
 
     @Implementation fun establish(): ParcelFileDescriptor? {
         VpnScopeBoundary.calls += "establish"
+        VpnScopeBoundary.backendAtEstablish = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.backend
         VpnScopeBoundary.establishFailure?.let { throw it }
         return null
     }

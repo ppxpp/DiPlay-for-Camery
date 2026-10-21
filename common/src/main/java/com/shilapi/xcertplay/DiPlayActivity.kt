@@ -1909,7 +1909,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.entries
                 choice(card, getString(R.string.settings_wired_backend), listOf(
                     getString(R.string.settings_wired_backend_lwip), getString(R.string.settings_native_ncm),
-                    getString(R.string.settings_wired_backend_optimized)),
+                    getString(R.string.settings_wired_backend_optimized), getString(R.string.settings_wired_backend_vpn)),
                     modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
                     markReconnectNeeded()

@@ -63,6 +63,8 @@ def main():
     ncm_startup = commands.add_parser("native-ncm-startup", help="空闲时设置NCM预热/复用对照；预热开关重启应用后生效")
     ncm_startup.add_argument("--warm-worker", dest="warmWorker", choices=["ON", "OFF"])
     ncm_startup.add_argument("--prewarm", choices=["ON", "OFF"])
+    vpn_permission = commands.add_parser("vpn-permission", help="先锋VPN授权状态、只读检查或root授权；写任务须先停止会话")
+    vpn_permission.add_argument("--action", choices=["STATUS", "INSPECT", "GRANT"], default="STATUS")
     permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
     permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT"], default="STATUS")
     permission.add_argument("--node", help="多台Apple设备时指定status显示的node")
@@ -73,7 +75,7 @@ def main():
     commands.add_parser("companion-status", help="读取WeCarFlow安装版本、保护服务进程与签名")
     commands.add_parser("restart-app", help="仅已知车机：结束本应用进程并定时重开，验证进程回收恢复")
     ui = commands.add_parser("host-ui", help="仅已知车机：应用内设置/前后台验证，不修改偏好")
-    ui.add_argument("--action", choices=["AUDIO_TAKE", "AUDIO_RELEASE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
+    ui.add_argument("--action", choices=["AUDIO_TAKE", "AUDIO_RELEASE", "MEDIA_PAUSE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
     video = commands.add_parser("video-settings", help="读取或修改视频设置，下次连接生效")
     video.add_argument("--fps", type=int, choices=[30, 60])
     video.add_argument("--resolution-percent", type=int, help="30..160，下次连接生效")
@@ -149,9 +151,9 @@ def main():
             if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
             if args.cmd == "video-gesture": fields = {"kind": args.kind}
             if args.cmd == "host-ui": fields = {"action": args.action}
-            if args.cmd == "usb-permission-probe":
+            if args.cmd in ("usb-permission-probe", "vpn-permission"):
                 fields = {"action": args.action}
-                if args.node is not None: fields["node"] = args.node
+                if getattr(args, "node", None) is not None: fields["node"] = args.node
             if args.cmd == "video-tap": fields = {"x": args.x, "y": args.y}
             if args.cmd == "toast": fields = {"text": args.text}
             if args.cmd == "usb-tx-batch": fields = {"frames": args.frames}

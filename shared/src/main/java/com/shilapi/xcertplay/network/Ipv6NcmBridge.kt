@@ -40,27 +40,69 @@ class Ipv6NcmBridge(
     private var inboundTcpLogBudget = 16
     private var outboundLogBudget = 24
     private val running = AtomicBoolean(false)
+    private var nativeHandle = 0L
+    private val nativePackets get() = com.shilapi.xcertplay.pioneer.PioneerVpnPacketNative
     private lateinit var ncmToTunThread: Thread
     private lateinit var tunToNcmThread: Thread
 
     fun start() {
         check(running.compareAndSet(false, true)) { "bridge is already started" }
-        ncmToTunThread = Thread(::runNcmToTun, "ncm-ipv6-in").apply {
-            isDaemon = true
-            start()
+        try {
+        if (neighborAddress != null && com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+            nativeHandle = nativePackets.create(tun.fd, hostMac, neighborAddress)
+            check(nativeHandle != 0L) { "VPN native packet context unavailable; no fallback" }
+            diagnostic("VPN_DATAPATH direct-native-ntb-tun double-buffered-rx; automatic fallback disabled")
         }
-        tunToNcmThread = Thread(::runTunToNcm, "ncm-ipv6-out").apply {
-            isDaemon = true
-            start()
+        ncmToTunThread = Thread({ if (nativeHandle != 0L) runNativeNcmToTun() else runNcmToTun() }, "ncm-ipv6-in").apply { isDaemon = true }
+        tunToNcmThread = Thread({ if (nativeHandle != 0L) runNativeTunToNcm() else runTunToNcm() }, "ncm-ipv6-out").apply { isDaemon = true }
+        ncmToTunThread.start()
+        tunToNcmThread.start()
+        } catch (error: Throwable) {
+            runCatching { close() }.onFailure(error::addSuppressed)
+            throw error
         }
     }
 
-    override fun close() {
-        if (!running.compareAndSet(true, false)) return
+    @Synchronized override fun close() {
+        if (!running.getAndSet(false) && nativeHandle == 0L) return
         ncm.close()
-        tun.close()
-        join(ncmToTunThread)
-        join(tunToNcmThread)
+        if (nativeHandle == 0L) tun.close() // Wake the legacy blocking FileInputStream reader.
+        if (::ncmToTunThread.isInitialized) join(ncmToTunThread)
+        if (::tunToNcmThread.isInitialized) join(tunToNcmThread)
+        if (nativeHandle != 0L) {
+            check((!::ncmToTunThread.isInitialized || !ncmToTunThread.isAlive) &&
+                (!::tunToNcmThread.isInitialized || !tunToNcmThread.isAlive)) { "VPN native I/O did not stop; context retained" }
+            nativePackets.close(nativeHandle)
+            nativeHandle = 0L
+            tun.close()
+        }
+    }
+
+    private fun runNativeNcmToTun() {
+        val reply = java.nio.ByteBuffer.allocateDirect(16384)
+        val metadata = LongArray(3)
+        val consume: (java.nio.ByteBuffer, Int) -> Int = { buffer, length ->
+            val count = nativePackets.inputNtb(nativeHandle, buffer, length, reply, metadata)
+            if (metadata[0] > 0) requireCompleteWrite(ncm.sendDirectNtbMeasured(reply,
+                metadata[0].toInt(), metadata[1].toInt(), WRITE_TIMEOUT_MILLIS, assignSequence = true))
+            count
+        }
+        try {
+            while (running.get()) ncm.recvDirectChunk(READ_TIMEOUT_MILLIS, consume)
+        } catch (error: Exception) { if (running.get()) onError(error) }
+    }
+
+    private fun runNativeTunToNcm() {
+        val output = java.nio.ByteBuffer.allocateDirect(16384)
+        try {
+            while (running.get()) {
+                val limit = if (com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.firstFrame == true)
+                    com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.usbTxBatchFrames.coerceIn(1, 8) else 1
+                val length = nativePackets.outputNtb(nativeHandle, output, 100, limit)
+                if (length > 0) requireCompleteWrite(ncm.sendDirectNtbMeasured(output,
+                    length, ((output.get(16).toInt() and 0xff) - 12) / 4, WRITE_TIMEOUT_MILLIS, assignSequence = true))
+            }
+        } catch (error: Exception) { if (running.get()) onError(error) }
     }
 
     private fun runNcmToTun() {
@@ -72,7 +114,7 @@ class Ipv6NcmBridge(
                 peerMac = ipv6.sourceMac
                 val neighborReply = neighborAddress?.let { PioneerNcmNeighborDiscovery.reply(frame, it, hostMac) }
                 if (neighborReply != null) {
-                    ncm.send(neighborReply, WRITE_TIMEOUT_MILLIS)
+                    sendFrame(neighborReply)
                     diagnostic("PIONEER_NDP_REPLY neighbor advertisement submitted bytes=${neighborReply.size}")
                     continue
                 }
@@ -141,13 +183,19 @@ class Ipv6NcmBridge(
                     )
                 }
                 val frame = EthernetIpv6Codec.build(hostMac, mac, ipv6)
-                ncm.send(frame, WRITE_TIMEOUT_MILLIS)
+                sendFrame(frame)
             }
         } catch (error: IOException) {
             if (running.get()) onError(error)
         } catch (error: RuntimeException) {
             if (running.get()) onError(error)
         }
+    }
+
+    private fun sendFrame(frame: ByteArray) {
+        // A failed ioctl may have delivered a prefix without reporting its length. Retain no
+        // silent drops and never blindly replay UDP/control packets with uncertain delivery.
+        requireCompleteWrite(ncm.sendMeasured(frame, WRITE_TIMEOUT_MILLIS))
     }
 
     private fun join(thread: Thread) {
@@ -186,7 +234,12 @@ class Ipv6NcmBridge(
     private fun ByteArray.u16(offset: Int): Int =
         ((this[offset].toInt() and 0xff) shl 8) or (this[offset + 1].toInt() and 0xff)
 
-    private companion object {
+    companion object {
+        internal fun requireCompleteWrite(result: NcmUsbBridge.WriteResult) {
+            if (!result.completed) throw IOException("VPN_NCM_WRITE_FAILED failure=${result.failure} " +
+                "transferred=${result.transferred} expected=${result.expected}; delivery unconfirmed, reconnect required")
+        }
+
         const val TAG = "xcertplay-usb"
         const val READ_TIMEOUT_MILLIS = 1_000L
         const val WRITE_TIMEOUT_MILLIS = 2_000

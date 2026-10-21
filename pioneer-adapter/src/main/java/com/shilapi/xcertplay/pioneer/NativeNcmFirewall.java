@@ -34,6 +34,13 @@ final class NativeNcmFirewall {
         this.name = name; this.token = token; this.runner = runner; this.guard = guard; this.journal = journal;
     }
 
+    /** Only for a fenced, dead-owner journal: delete and verify exact owned rules, never install. */
+    static List<String> recover(String name, String token, Runner runner, Journal journal) {
+        NativeNcmFirewall firewall = new NativeNcmFirewall(name, token, runner, () -> { }, journal);
+        firewall.attempted = true;
+        return firewall.restore();
+    }
+
     void install() throws Exception {
         guard.check();
         String[] snapshots = { chain(0), chain(2) };

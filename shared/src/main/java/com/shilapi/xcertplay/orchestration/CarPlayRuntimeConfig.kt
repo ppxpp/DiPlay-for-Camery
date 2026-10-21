@@ -73,6 +73,7 @@ class CarPlayRuntimeConfig(
     /** Snapshot of the manual wired selection; never changed by connection recovery. */
     val nativeNcmEnabled: Boolean = false,
     val optimizedLwipEnabled: Boolean = false,
+    val wiredBackend: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode? = null,
     val wirelessHotspotMode: WirelessHotspotMode = WirelessHotspotMode.WIFI_P2P,
     val manualHotspotSsid: String? = null,
     val manualHotspotPassphrase: String? = null,

@@ -3,8 +3,6 @@ package com.shilapi.xcertplay.pioneer
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import android.os.IBinder
-import android.os.Parcel
 import android.os.Process
 import android.os.SystemClock
 import android.system.Os
@@ -170,18 +168,5 @@ object PioneerUsbPermissionProbe {
     }
 
     private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
-    private fun dispatch(command: String) {
-        val binder = Class.forName("android.os.ServiceManager").getMethod("checkService", String::class.java)
-            .invoke(null, "pioneer.pfilesdoperator") as? IBinder ?: error("Pioneer root service unavailable")
-        val bytes = (command + '\u0000').toByteArray(Charsets.UTF_8)
-        require(bytes.size <= 4096)
-        val encoded = java.nio.ByteBuffer.allocate(((bytes.size + 3) and -4) + 12)
-            .order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(Process.myPid()).putInt(bytes.size).putInt(0).put(bytes).array()
-        val data = Parcel.obtain(); val reply = Parcel.obtain()
-        try {
-            data.unmarshall(encoded, 0, encoded.size); data.setDataPosition(0)
-            check(binder.transact(14, data, reply, 0) && reply.dataSize() == 4) { "Pioneer root dispatch rejected" }
-            reply.setDataPosition(0); check(reply.readInt() == 0) { "Pioneer root dispatch failed" }
-        } finally { data.recycle(); reply.recycle() }
-    }
+    private fun dispatch(command: String) = PioneerRootDispatcher.dispatch(command)
 }

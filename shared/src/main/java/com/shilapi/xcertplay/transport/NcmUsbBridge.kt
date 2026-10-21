@@ -68,8 +68,20 @@ class NcmUsbBridge internal constructor(
     private val directReadBuffer = ByteBuffer.allocateDirect(READ_CHUNK_BYTES)
     private var readRequest: UsbRequest? = null
     private var readQueued = false
+    // Optimized lwIP alone uses two independent buffers. A request's buffer is never requeued
+    // until its synchronous consumer returns; the other request remains submitted meanwhile.
+    private class ReadSlot(val request: UsbRequest) {
+        val buffer: ByteBuffer = ByteBuffer.allocateDirect(READ_CHUNK_BYTES)
+        var queued = false
+        var queuedNs = 0L
+        var session = 0L
+    }
+    private val directReads = ArrayList<ReadSlot>(2)
+    private val directOrder = ArrayDeque<ReadSlot>(2)
+    private var receivePath: Boolean? = null // true = optimized, false = original
     private val readQueuePolicy = UsbReadQueuePolicy.forCurrentPlatform()
     private val readRequests = UsbRequestQueue(connection, "ncm-read-reaper")
+    private val directWriteMetrics = LongArray(3) // writeLock owns this JNI scratch array
     private val traffic = NcmTrafficCounter()
     private val statusRunning = AtomicBoolean(statusEndpoint != null)
     private val statusThread = statusEndpoint?.let { endpoint ->
@@ -142,14 +154,21 @@ class NcmUsbBridge internal constructor(
         WriteResult(transferred, block.size, classification, writing - started, System.nanoTime() - writing, detail?.get(1) ?: 0, detail?.get(2) ?: 0)
     }
     /** Already assembled in Native; the pool owner retains the buffer through every write/retry. */
-    fun sendDirectNtbMeasured(buffer: ByteBuffer, length: Int, frameCount: Int, timeoutMillis: Int): WriteResult = synchronized(writeLock) {
+    fun sendDirectNtbMeasured(buffer: ByteBuffer, length: Int, frameCount: Int, timeoutMillis: Int, assignSequence: Boolean = false): WriteResult = synchronized(writeLock) {
         checkOpen()
         require(buffer.isDirect && length in 28..16384 && length <= buffer.capacity() && frameCount in 1..8 && timeoutMillis > 0)
         check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) { "Optimized lwIP requires verified Pioneer USB" }
+        if (assignSequence) {
+            // VPN's RX NDP replies and TX packets have separate owners. Assign wire sequence
+            // here, under the shared writer lock, rather than in their competing builders.
+            buffer.put(6, sequence.toByte()); buffer.put(7, (sequence ushr 8).toByte())
+            sequence = (sequence + 1) and 0xffff
+        }
         val timeout = if (!bulkOutAccepted) minOf(timeoutMillis, NOT_READY_WRITE_TIMEOUT_MILLIS) else timeoutMillis
         val writing = System.nanoTime()
-        val detail = com.shilapi.xcertplay.pioneer.PioneerUsbNative.bulkWriteDirect(
-            connection.fileDescriptor, outEndpoint.address, buffer, length, timeout)
+        com.shilapi.xcertplay.pioneer.PioneerUsbNative.bulkWriteDirect(
+            connection.fileDescriptor, outEndpoint.address, buffer, length, timeout, directWriteMetrics)
+        val detail = directWriteMetrics
         val transferred = detail[0].toInt()
         val failure = when {
             transferred == length -> WriteFailure.NONE
@@ -175,12 +194,8 @@ class NcmUsbBridge internal constructor(
     fun recvDirectChunk(timeoutMillis: Long, consume: (ByteBuffer, Int) -> Int): Int? = synchronized(readLock) {
         require(timeoutMillis > 0)
         checkOpen()
-        check(frames.isEmpty() && bufferedSize == 0) { "Cannot switch NCM receive paths within a connection" }
-        readChunk(timeoutMillis) { buffer, length ->
-            val count = consume(buffer, length)
-            check(count >= 0) { "Optimized NCM parser failed rc=$count" }
-            traffic.receivedNative(count)
-        }
+        selectReceivePath(true)
+        readPipelinedChunk(timeoutMillis, consume)
     }
 
     /** Only the OUT endpoint; caller serializes with the single USB writer. */
@@ -195,22 +210,37 @@ class NcmUsbBridge internal constructor(
             (0 until iface.endpointCount).any { iface.getEndpoint(it).address == outEndpoint.address }
         }
             ?: return@rebuild false
-        synchronized(stateLock) {
-            readRequest?.cancel()
-        }
-        if (readQueued) {
-            try {
-                val completed = readRequests.await(500)
-                if (completed == null || completed !== readRequest) return@rebuild false
-                readQueued = false
-            } catch (_: Exception) { return@rebuild false }
-        }
+        if (!cancelReadsForRebuild()) return@rebuild false
         val zero = com.shilapi.xcertplay.pioneer.PioneerUsbNative.setAlternate(connection.fileDescriptor, data.id, 0)
         val one = if (zero == 0) com.shilapi.xcertplay.pioneer.PioneerUsbNative.setAlternate(connection.fileDescriptor, data.id, data.alternateSetting) else zero
         runCatching { onDiagnostic("NCM_INTERFACE_REBUILD iface=${data.id} alt0=$zero alt1=$one") }
         bufferedSize = 0; optionalShortPacketPad = false; frames.clear(); frameTimes.clear(); queuedBytes = 0
         zero == 0 && one == 0
     } }
+
+    /** Caller owns readLock; cancelled completions must be reaped before changing USB alt. */
+    private fun cancelReadsForRebuild(): Boolean {
+        synchronized(stateLock) {
+            readRequest?.cancel()
+            directReads.filter { it.queued }.forEach { it.request.cancel() }
+        }
+        while (directOrder.isNotEmpty()) {
+            try {
+                val completed = readRequests.await(500)
+                val expected = directOrder.firstOrNull { it.request === completed } ?: return false
+                directOrder.remove(expected)
+                expected.queued = false
+            } catch (_: Exception) { return false }
+        }
+        if (readQueued) {
+            try {
+                val completed = readRequests.await(500)
+                if (completed == null || completed !== readRequest) return false
+                readQueued = false
+            } catch (_: Exception) { return false }
+        }
+        return true
+    }
 
     /** Frames to and from the iPhone so far, for a report line; see [NcmTrafficCounter]. */
     fun trafficSummary(airPlayPort: Int?): String = traffic.summary(airPlayPort)
@@ -223,6 +253,7 @@ class NcmUsbBridge internal constructor(
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         synchronized(readLock) {
             checkOpen()
+            selectReceivePath(false)
             if (frames.isNotEmpty()) return pollFrame()
 
             val deadline = System.nanoTime() + timeoutMillis * NANOS_PER_MILLISECOND
@@ -249,10 +280,10 @@ class NcmUsbBridge internal constructor(
                 return
             }
             closed = true
-            readRequest
+            listOfNotNull(readRequest) + directReads.map { it.request }
         }
-        // Wakes a reader blocked in requestWait(); it then observes the closed state.
-        runCatching { requestToClose?.cancel() }
+        // Cancel all queued requests before closing the reaper/FD, including optimized slots.
+        requestToClose.forEach { runCatching { it.cancel() } }
         statusThread?.let { thread ->
             thread.interrupt()
             try {
@@ -271,7 +302,7 @@ class NcmUsbBridge internal constructor(
             }
             readRequests.close()
             connection.close()
-            runCatching { requestToClose?.close() }
+            requestToClose.forEach { runCatching { it.close() } }
             check(readRequests.awaitStopped(1_000)) { "NCM read reaper did not stop" }
             cleanupComplete = true
         }
@@ -436,7 +467,74 @@ class NcmUsbBridge internal constructor(
         return frame
     }
 
-    private fun readChunk(timeoutMillis: Long, consume: ((ByteBuffer, Int) -> Unit)? = null): Int? {
+    private fun selectReceivePath(direct: Boolean) {
+        check(receivePath == null || receivePath == direct) { "Cannot switch NCM receive paths within a connection" }
+        receivePath = direct
+    }
+
+    private fun queueDirect(slot: ReadSlot) {
+        // Caller holds stateLock: publication, queue and close are atomic.
+        checkOpenLocked()
+        slot.buffer.clear()
+        val result = readQueuePolicy.queue(slot.buffer, ::checkOpenLocked) { readRequests.queue(slot.request, it) }
+        if (!result.queued) throw failSession("NCM optimized read queue rejected api=${Build.VERSION.SDK_INT} " +
+            "endpoint=${describeUsbEndpoint(inEndpoint)} firstBytes=${result.firstBytes} fallbackBytes=${result.fallbackBytes}")
+        slot.queued = true
+        slot.queuedNs = System.nanoTime()
+        slot.session = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+        directOrder.addLast(slot)
+    }
+
+    private fun readPipelinedChunk(timeoutMillis: Long, consume: (ByteBuffer, Int) -> Int): Int? {
+        try {
+            synchronized(stateLock) {
+                checkOpenLocked()
+                while (directReads.size < 2) {
+                    val request = UsbRequest()
+                    if (!request.initialize(connection, inEndpoint)) {
+                        request.close()
+                        throw failSession("Android could not initialize optimized NCM read")
+                    }
+                    // Publish before submit so a failed second queue is still cancelled by close.
+                    val slot = ReadSlot(request)
+                    directReads.add(slot)
+                }
+                for (index in directReads.indices) {
+                    val slot = directReads[index]
+                    if (!slot.queued) queueDirect(slot)
+                }
+            }
+            val completed = try { readRequests.await(timeoutMillis) } catch (_: TimeoutException) { return null }
+                ?: throw failSession("Android returned no optimized NCM read request")
+            val slot = synchronized(stateLock) {
+                checkOpenLocked()
+                val expected = directOrder.peekFirst()
+                if (expected == null || completed !== expected.request)
+                    throw failSession("Android completed an unexpected/out-of-order optimized NCM request")
+                directOrder.removeFirst().also { it.queued = false }
+            }
+            val size = slot.buffer.position()
+            val started = System.nanoTime()
+            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(slot.session,
+                "usb-rx-inflight-includes-idle", started - slot.queuedNs)
+            if (size > 0) {
+                slot.buffer.flip()
+                val count = consume(slot.buffer, size)
+                check(count >= 0) { "Optimized NCM parser failed rc=$count" }
+                traffic.receivedNative(count)
+            }
+            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(slot.session,
+                "usb-rx-consume-with-next-submitted", System.nanoTime() - started)
+            synchronized(stateLock) { queueDirect(slot) }
+            return size.takeIf { it > 0 }
+        } catch (error: IphoneUsbException) {
+            throw error
+        } catch (error: RuntimeException) {
+            throw failSession("NCM optimized read failed", error)
+        }
+    }
+
+    private fun readChunk(timeoutMillis: Long): Int? {
         checkOpen()
         var acceptedFallback: UsbReadQueueResult? = null
         val request = try {
@@ -492,8 +590,7 @@ class NcmUsbBridge internal constructor(
             val transferred = directReadBuffer.position()
             if (transferred <= 0) return null
             directReadBuffer.flip()
-            if (consume != null) consume(directReadBuffer, transferred)
-            else directReadBuffer.get(readBuffer, 0, transferred)
+            directReadBuffer.get(readBuffer, 0, transferred)
             return transferred
         } catch (error: IphoneUsbException) {
             throw error

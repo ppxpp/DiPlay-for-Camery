@@ -5,5 +5,9 @@
     <string name="settings_wired_backend">Metodo di connessione via cavo</string>
     <string name="settings_wired_backend_lwip">lwIP originale</string>
     <string name="settings_wired_backend_optimized">lwIP ottimizzato (sperimentale)</string>
-    <string name="settings_wired_backend_description">Scegli uno dei tre metodi. Si applica alla prossima connessione. In caso di errore cambia manualmente; nessun cambio automatico.</string>
+    <string name="settings_wired_backend_description">Scegli uno dei quattro metodi. VPN tenta prima di ottenere automaticamente il consenso. Si applica alla prossima connessione. In caso di errore, cambia manualmente; nessun cambio automatico.</string>
+    <string name="settings_wired_backend_vpn">VPN (sperimentale)</string>
+    <string name="vpn_root_authorizing">Autorizzazione VPN…</string>
+    <string name="vpn_root_failed">Autorizzazione automatica VPN non riuscita. Riprova o autorizza tramite il sistema. Il metodo resta VPN.</string>
+    <string name="vpn_manual_authorize">Autorizza nel sistema</string>
 </resources>

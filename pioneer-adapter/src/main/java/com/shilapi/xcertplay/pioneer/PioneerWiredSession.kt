@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Vehicle adaptation lifetime. Transport owners open it before advertising AirPlay. */
 object PioneerWiredSession {
-    enum class Backend { LWIP, NATIVE_NCM, LWIP_OPTIMIZED }
+    enum class Backend { LWIP, NATIVE_NCM, LWIP_OPTIMIZED, VPN }
 
     class Session internal constructor(
         val id: Long,
