@@ -131,10 +131,12 @@ Do not use **Publish DiPlay update** for a site-only deploy: it builds and publi
 
 ### Release management setup
 
-The Pages Function uses the existing private R2 `META` bucket for release snapshots and delivery settings. `ADMIN_USERNAME` is a non-secret variable managed in `wrangler.toml`. Set only the encrypted values below as Cloudflare secrets (or with `wrangler secret put`); never commit them:
+The Pages Function uses the existing private R2 `META` bucket for release snapshots and delivery settings. `ADMIN_USERNAME` is a non-secret variable managed in `wrangler.toml`. Set only the encrypted values below as Cloudflare Pages secrets in the Production environment; never commit them:
 
 - `ADMIN_PASSWORD_HASH` (secret), generated interactively with `npm run hash-admin-password`
 - `ADMIN_SESSION_SECRET` (secret), a random value of at least 32 bytes (for example, `openssl rand -hex 32`)
+
+Set them with `npx wrangler pages secret put ADMIN_PASSWORD_HASH --project-name gtmc-app-updates` (and the same command for `ADMIN_SESSION_SECRET`), or in the Pages project's Settings → Variables and Secrets → Production. Changes require a new deployment. Cloudflare Workers WebCrypto caps PBKDF2 at 100,000 iterations; the hash generator and verifier both use 100,000, and hashes with another iteration count are rejected. Regenerate the hash if it was created with an older script.
 
 The admin console is at `/admin/`. Sessions are signed, expire after eight hours and use Secure, HttpOnly, SameSite=Strict cookies. Automatic delivery settings are stored alongside each release snapshot; admin edits update only its management metadata and, when editing the current version, the `latest.json` pointer as well. Rollback disables delivery for the version being rolled back from, then points `latest.json` at the selected historical snapshot without changing that snapshot's existing policy.
 
