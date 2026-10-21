@@ -58,6 +58,22 @@ class NcmReadPipelineTest {
         } finally { ncm.close() }
     }
 
+    @Test fun fourReceiveSlotsKeepThreeRequestsInFlightWhileOneIsConsumed() {
+        val ncm = bridge()
+        try {
+            repeat(8) {
+                assertEquals(4, ncm.recvDirectChunk(100, readSlots = 4) { buffer, length ->
+                    assertEquals(4, length)
+                    assertEquals(3, PipelineReplay.pending.size)
+                    assertFalse(PipelineReplay.pending.any { it.buffer === buffer })
+                    1
+                })
+            }
+            assertEquals(4, PipelineReplay.buffers.size)
+            assertEquals(4, PipelineReplay.pending.size)
+        } finally { ncm.close() }
+    }
+
     @Test fun parserFailureDoesNotReuseBorrowedBufferAndCloseCancelsTheOtherRequest() {
         val ncm = bridge()
         try {

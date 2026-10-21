@@ -35,6 +35,9 @@ class NcmUsbBridge internal constructor(
     private val descriptorMac = descriptorHostMac?.copyOf()
     val hostMac: ByteArray? get() = descriptorMac?.copyOf()
     val inputPacketSize: Int get() = inEndpoint.maxPacketSize.takeIf { it > 0 } ?: USB_PACKET_SIZE
+    internal val usbFd: Int get() = connection.fileDescriptor
+    internal val inEndpointAddress: Int get() = inEndpoint.address
+    internal val outEndpointAddress: Int get() = outEndpoint.address
     private val stateLock = Any()
     private val readLock = Any()
     private val writeLock = Any()
@@ -156,7 +159,7 @@ class NcmUsbBridge internal constructor(
     /** Already assembled in Native; the pool owner retains the buffer through every write/retry. */
     fun sendDirectNtbMeasured(buffer: ByteBuffer, length: Int, frameCount: Int, timeoutMillis: Int, assignSequence: Boolean = false): WriteResult = synchronized(writeLock) {
         checkOpen()
-        require(buffer.isDirect && length in 28..16384 && length <= buffer.capacity() && frameCount in 1..8 && timeoutMillis > 0)
+        require(buffer.isDirect && length in 28..16384 && length <= buffer.capacity() && frameCount in 1..16 && timeoutMillis > 0)
         check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) { "Optimized lwIP requires verified Pioneer USB" }
         if (assignSequence) {
             // VPN's RX NDP replies and TX packets have separate owners. Assign wire sequence
@@ -191,11 +194,16 @@ class NcmUsbBridge internal constructor(
     }
 
     /** Synchronous borrow of the USB DirectByteBuffer; consumer must copy/consume before returning. */
-    fun recvDirectChunk(timeoutMillis: Long, consume: (ByteBuffer, Int) -> Int): Int? = synchronized(readLock) {
+    fun recvDirectChunk(
+        timeoutMillis: Long,
+        readSlots: Int = 2,
+        consume: (ByteBuffer, Int) -> Int,
+    ): Int? = synchronized(readLock) {
         require(timeoutMillis > 0)
+        require(readSlots in 2..4) { "readSlots must be between 2 and 4" }
         checkOpen()
         selectReceivePath(true)
-        readPipelinedChunk(timeoutMillis, consume)
+        readPipelinedChunk(timeoutMillis, readSlots, consume)
     }
 
     /** Only the OUT endpoint; caller serializes with the single USB writer. */
@@ -485,11 +493,15 @@ class NcmUsbBridge internal constructor(
         directOrder.addLast(slot)
     }
 
-    private fun readPipelinedChunk(timeoutMillis: Long, consume: (ByteBuffer, Int) -> Int): Int? {
+    private fun readPipelinedChunk(
+        timeoutMillis: Long,
+        readSlots: Int,
+        consume: (ByteBuffer, Int) -> Int,
+    ): Int? {
         try {
             synchronized(stateLock) {
                 checkOpenLocked()
-                while (directReads.size < 2) {
+                while (directReads.size < readSlots) {
                     val request = UsbRequest()
                     if (!request.initialize(connection, inEndpoint)) {
                         request.close()

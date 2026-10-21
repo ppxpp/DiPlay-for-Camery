@@ -38,6 +38,7 @@ object PioneerVpnFirewallWarmup {
                 val command = "CLASSPATH=${PioneerRootDispatcher.quote(app.applicationInfo.sourceDir)} /system/bin/app_process /system/bin " +
                     "com.shilapi.xcertplay.pioneer.PioneerVpnFirewallHelper --warm ${PioneerRootDispatcher.quote(file.path)} </dev/null >/dev/null 2>&1 &"
                 PioneerRootDispatcher.dispatch(command)
+                PioneerConnectionTrace.mark("vpn-firewall-warm-dispatched")
                 log("VPN_FIREWALL_WARM_DISPATCHED; idle root worker overlaps wired startup")
             } catch (error: Throwable) {
                 log("VPN_FIREWALL_WARM_UNAVAILABLE ${error.message ?: error.javaClass.simpleName}")

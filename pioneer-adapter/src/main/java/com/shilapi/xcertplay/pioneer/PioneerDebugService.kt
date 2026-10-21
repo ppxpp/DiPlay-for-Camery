@@ -37,7 +37,7 @@ class PioneerDebugService : Service() {
         PioneerDebugRuntime.phoneDiagnosticsEnabled = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
             .getBoolean("phone_auth_diagnostics", false)
         PioneerDebugRuntime.usbTxBatchFrames = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
-            .getInt("usb_tx_batch_frames", 8).takeIf { it in listOf(1, 4, 8) } ?: 8
+            .getInt("usb_tx_batch_frames", 8).takeIf { it in setOf(1, 4, 8, 16) } ?: 8
         if (Build.VERSION.SDK_INT >= 26) getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel("pioneer-debug", "DiPlay 局域网调试", NotificationManager.IMPORTANCE_LOW))
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "pioneer-debug") else Notification.Builder(this)
@@ -166,6 +166,45 @@ class PioneerDebugService : Service() {
             }
             "vpn-permission" -> send(socket, reply.put("vpnPermission", PioneerVpnPermissionGrant.run(
                 this, request.optString("action", "STATUS"))))
+            "vpn-io" -> {
+                val state = PioneerDebugRuntime.snapshot()
+                require(!PioneerWiredSession.active && !PioneerLwipRuntime.active &&
+                    !state.optBoolean("controllerRunning") && !state.optBoolean("backgroundSession") &&
+                    !state.optBoolean("hostStateTimeout") && !state.has("hostStateError")) {
+                    "Stop the wired session before changing VPN I/O mode"
+                }
+                val rxMode = request.optString("rxMode")
+                    .takeIf { it.isNotEmpty() }
+                    ?.let(PioneerDebugRuntime.VpnRxMode::valueOf)
+                val readSlots = request.optInt("readSlots", PioneerDebugRuntime.vpnReadSlots)
+                    .also { require(it in listOf(2, 4)) }
+                val urbSlots = request.optInt("urbSlots", PioneerDebugRuntime.vpnNativeUrbSlots)
+                    .also { require(it in listOf(2, 4)) }
+                val txDepth = request.optInt("txDepth", PioneerDebugRuntime.vpnTxPipelineDepth)
+                    .also { require(it in listOf(0, 2)) }
+                val batchWindowUs = request.optInt("batchWindowUs", PioneerDebugRuntime.vpnBatchWindowUs)
+                    .also { require(it in listOf(0, 50, 100, 200)) }
+                if (rxMode != null) PioneerDebugRuntime.vpnRxMode = rxMode
+                PioneerDebugRuntime.vpnReadSlots = readSlots
+                PioneerDebugRuntime.vpnNativeUrbSlots = urbSlots
+                PioneerDebugRuntime.vpnTxPipelineDepth = txDepth
+                PioneerDebugRuntime.vpnBatchWindowUs = batchWindowUs
+                PioneerDebugRuntime.vpnNativeConfigure?.invoke(
+                    PioneerDebugRuntime.usbTxBatchFrames,
+                    batchWindowUs,
+                )
+                send(socket, reply.put("config", JSONObject()
+                    .put("rxMode", PioneerDebugRuntime.vpnRxMode.name)
+                    .put("readSlots", PioneerDebugRuntime.vpnReadSlots)
+                    .put("urbSlots", PioneerDebugRuntime.vpnNativeUrbSlots)
+                    .put("txDepth", PioneerDebugRuntime.vpnTxPipelineDepth)
+                    .put("batchWindowUs", PioneerDebugRuntime.vpnBatchWindowUs))
+                    .put("message", "配置仅本次进程有效，下次连接生效"))
+            }
+            "vpn-native" -> send(socket, reply.put(
+                "metrics",
+                PioneerDebugRuntime.vpnNativeSnapshot?.invoke() ?: error("No active native VPN bridge"),
+            ))
             "usb-permission-probe" -> send(socket, reply.put("probe", PioneerUsbPermissionProbe.run(
                 this, request.optString("action", "STATUS"), request.optString("node").takeIf { it.isNotBlank() })))
             "video-settings" -> {
@@ -199,8 +238,9 @@ class PioneerDebugService : Service() {
             "runtime" -> send(socket, reply, runtimeDiagnostics(request.optBoolean("compact", false), request.optBoolean("stacks", false)).toString(2).toByteArray())
             "usb-tx-batch" -> {
                 val count = request.getInt("frames")
-                require(count in listOf(1, 4, 8))
+                require(count in listOf(1, 4, 8, 16))
                 PioneerDebugRuntime.usbTxBatchFrames = count
+                PioneerDebugRuntime.vpnNativeConfigure?.invoke(count, PioneerDebugRuntime.vpnBatchWindowUs)
                 getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putInt("usb_tx_batch_frames", count).apply()
                 send(socket, reply.put("frames", count).put("message", "立即生效；仅合并已排队数据，不等待凑包"))
             }
@@ -460,9 +500,16 @@ class PioneerDebugService : Service() {
             })
             .put("lwipActive", PioneerLwipRuntime.active).put("lwipStatus", PioneerLwipRuntime.summary)
             .put("lwipQueues", JSONArray(PioneerDiagnostics.queues()))
+            .put("transportQueues", JSONArray(PioneerDiagnostics.queues()))
             .put("lwipDiagnostics", PioneerDiagnostics.enabled)
             .put("phoneDiagnostics", PioneerDebugRuntime.phoneDiagnosticsEnabled)
             .put("usbTxBatchFrames", PioneerDebugRuntime.usbTxBatchFrames)
+            .put("vpnIo", JSONObject()
+                .put("rxMode", PioneerDebugRuntime.vpnRxMode.name)
+                .put("readSlots", PioneerDebugRuntime.vpnReadSlots)
+                .put("urbSlots", PioneerDebugRuntime.vpnNativeUrbSlots)
+                .put("txDepth", PioneerDebugRuntime.vpnTxPipelineDepth)
+                .put("batchWindowUs", PioneerDebugRuntime.vpnBatchWindowUs))
             .put("videoSettings", PioneerDebugRuntime.videoSettings?.invoke(JSONObject()))
             .put("lwipSessionId", PioneerLwipRuntime.sessionId).put("lwipAttemptId", PioneerLwipRuntime.attemptId)
             .put("lwipControlPort", PioneerLwipRuntime.controlPort)

@@ -841,6 +841,7 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val startupNs = System.nanoTime()
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.appStart()
         com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_STARTUP host create")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
@@ -1104,6 +1105,7 @@ class CarPlayHostActivity : ComponentActivity() {
         vpnRootFailureDialog = null
         val generation = ++vpnRootGeneration
         val app = applicationContext
+        com.shilapi.xcertplay.pioneer.PioneerVpnFirewallWarmup.start(app, ::appendLog)
         val stillCurrent = {
             !shuttingDown.get() && !wirelessEnabled && generation == vpnRootGeneration &&
                 com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(app) &&
@@ -1158,7 +1160,11 @@ class CarPlayHostActivity : ComponentActivity() {
                     "VPN_ROOT_AUTH completed granted=$vpnReady attempts=$attempts " +
                         "lastError=${finalFailure?.message}",
                 )
-                if (vpnReady) maybeStartCarPlay() else {
+                if (vpnReady) {
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark(
+                        "root-vpn-authorized", "attempts=$attempts", )
+                    maybeStartCarPlay()
+                } else {
                     setStatus(R.string.vpn_root_failed)
                     vpnRootFailureDialog?.dismiss()
                     vpnRootFailureDialog = android.app.AlertDialog.Builder(this)

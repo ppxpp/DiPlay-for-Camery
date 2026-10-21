@@ -52,6 +52,12 @@ int main(void) {
     assert(pn_u16(out+52)==0 && pn_u16(out+54)==0);
     total=output_batch(&v,out,sizeof(out),0,8);assert(total>0);assert(pn_u16(out+16)==16);assert(out[pn_u16(out+20)+14+23]==8);
     assert(output_batch(&v,out,sizeof(out),0,8)==0);
+    for(unsigned i=0;i<17;i++){ip[23]=(unsigned char)i;assert(write(pair[1],ip,72)==72);}
+    total=output_batch(&v,out,sizeof(out),0,16);
+    assert(total>0);assert(pn_u16(out+16)==76);count=0;
+    assert(pn_parse(out,pn_u16(out+8),count_tx,&count)==16);assert(count==16);
+    total=output_batch(&v,out,sizeof(out),0,16);
+    assert(total>0);assert(pn_u16(out+16)==16);count=0;assert(pn_parse(out,pn_u16(out+8),count_tx,&count)==1);
     unsigned char packet[1501]={0};packet[0]=0x60;put16(packet+4,1460);packet[6]=17;
     for(int i=0;i<8;i++)assert(write(pair[1],packet,1500)==1500);
     total=output_batch(&v,out,sizeof(out),0,8);assert(total>0 && total<16384);count=0;assert(pn_parse(out,pn_u16(out+8),count_tx,&count)==8);assert(count==8);

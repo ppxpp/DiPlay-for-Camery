@@ -114,6 +114,8 @@ class PioneerVpnFirewallLease private constructor(
                     val state = lease.status()
                     when (state?.optString("state")) {
                         "READY" -> {
+                            PioneerConnectionTrace.mark("vpn-firewall-ready",
+                                "interface=${owner.name} helperStartupMs=${state.optLong("helperStartupMs", -1)}")
                             log("VPN_FIREWALL_READY interface=${owner.name} index=${owner.index} helperStartupMs=${state.optLong("helperStartupMs", -1)} firewallInstallMs=${state.optLong("firewallInstallMs", -1)}")
                             lease.heartbeat.scheduleWithFixedDelay({
                                 if (!lease.closed.get()) try {

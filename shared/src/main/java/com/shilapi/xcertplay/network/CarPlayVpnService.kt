@@ -153,6 +153,7 @@ class CarPlayVpnService : VpnService() {
                 check(conflict == null) { conflict ?: "VPN conflict" }
             }
             check(prepare(this) == null) { "VPN authorization is required; no backend fallback" }
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-tun-establish-begin")
             listener.onDebugLog("VPN_TUN_ESTABLISH begin backend=VPN")
             val tunStarted = android.os.SystemClock.elapsedRealtime()
             val tunFd = Builder()
@@ -174,6 +175,7 @@ class CarPlayVpnService : VpnService() {
                 ?: throw IOException("VpnService.establish returned null")
             tun = tunFd
             vpnRevokeListener = listener
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-tun-established")
             listener.onDebugLog("VPN_TUN_ESTABLISHED backend=VPN elapsedMs=${android.os.SystemClock.elapsedRealtime() - tunStarted}")
 
             if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this)) {
@@ -191,6 +193,7 @@ class CarPlayVpnService : VpnService() {
             )
             bridge = ipv6Bridge
             ipv6Bridge.start()
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-bridge-started")
             listener.onDebugLog("VPN_BRIDGE_STARTED backend=VPN")
 
             startAirPlayServer(

@@ -26,6 +26,8 @@ object PioneerDebugRuntime {
     @Volatile var videoTap: ((JSONObject) -> JSONObject)? = null
     @Volatile var videoSnapshot: (() -> ByteArray)? = null
     @Volatile var hostUi: ((String) -> JSONObject)? = null
+    @Volatile var vpnNativeSnapshot: (() -> JSONObject)? = null
+    @Volatile var vpnNativeConfigure: ((Int, Int) -> Boolean)? = null
     @Volatile var nativeCryptoComparisonEnabled: Boolean? = null
     @Volatile var phoneDiagnosticsEnabled = false
     @Volatile var asyncSessionLogs = true
@@ -41,6 +43,12 @@ object PioneerDebugRuntime {
     @Volatile var touchCoalescingComparisonEnabled = false
     @Volatile var lwipReceiveWaitMillis = 1
     @Volatile var usbTxBatchFrames = 8
+    enum class VpnRxMode { ANDROID_REQUEST, NATIVE_URB }
+    @Volatile var vpnRxMode = VpnRxMode.ANDROID_REQUEST
+    @Volatile var vpnReadSlots = 2
+    @Volatile var vpnNativeUrbSlots = 2
+    @Volatile var vpnTxPipelineDepth = 0
+    @Volatile var vpnBatchWindowUs = 0
     @Volatile var redact: (String) -> String? = { it }
     private val main = Handler(Looper.getMainLooper())
     private val logLock = Any()

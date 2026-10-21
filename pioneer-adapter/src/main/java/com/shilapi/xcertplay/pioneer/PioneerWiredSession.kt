@@ -29,6 +29,7 @@ object PioneerWiredSession {
 
     @Synchronized fun begin(backend: Backend, verifiedDevice: Boolean = PioneerUsbPolicy.matchesDevice()): Session {
         check(current == null) { "Previous Pioneer wired session is still active" }
+        PioneerDiagnostics.clear()
         return Session(ids.incrementAndGet(), backend, verifiedDevice).also { current = it }
     }
 

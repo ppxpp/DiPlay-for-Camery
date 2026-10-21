@@ -12,10 +12,10 @@ static int receive(void *opaque, const unsigned char *data, size_t size) {
 static int ignore(void *opaque,const unsigned char *data,size_t size) { (void)opaque;(void)data;(void)size;return 0; }
 
 int main(void) {
-    unsigned char data[8][1600], out[16384], second[16384]; struct pn_frame frames[8];
-    for(unsigned i=0;i<8;i++)for(unsigned j=0;j<1600;j++)data[i][j]=(unsigned char)(i*31+j);
-    for(unsigned count=1;count<=8;count++) {
-        for(unsigned i=0;i<count;i++) { frames[i].data=data[i];frames[i].size=60+i*173; }
+    unsigned char data[16][1600], out[16384], second[16384]; struct pn_frame frames[16];
+    for(unsigned i=0;i<16;i++)for(unsigned j=0;j<1600;j++)data[i][j]=(unsigned char)(i*31+j);
+    for(unsigned count=1;count<=16;count++) {
+        for(unsigned i=0;i<count;i++) { frames[i].data=data[i];frames[i].size=60+i*10; }
         size_t length=pn_build(out,sizeof(out),frames,count,65535);assert(length);
         assert(pn_u16(out+6)==65535);assert(pn_u16(out+16)==8+4*(count+1));
         struct pn_stream stream;pn_stream_init(&stream,512);
@@ -67,6 +67,6 @@ int main(void) {
         size_t length=1+(i%1024);for(size_t j=0;j<length;j++){random=random*1664525u+1013904223u;joined[j]=(unsigned char)(random>>24);}
         assert(pn_feed(&stream,joined,length,ignore,NULL)>=0);assert(stream.used<=PN_MAX_BLOCK);
     }
-    puts("native NTB codec: batch 1..8, fragments, padding, resync, invalid tables and 10000 fuzz chunks passed");
+    puts("native NTB codec: batch 1..16, fragments, padding, resync, invalid tables and 10000 fuzz chunks passed");
     return 0;
 }

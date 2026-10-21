@@ -29,7 +29,8 @@ def main():
     core = sorted((VENDOR / "src/core").glob("*.c")) + sorted((VENDOR / "src/core/ipv6").glob("*.c"))
     targets = [([TEST / "pioneer_ntb_test.c"], "ntb"),
                ([TEST / "pioneer_lwip_stream_test.c", *core, VENDOR / "src/netif/ethernet.c"], "lwip-stream"),
-               ([TEST / "pioneer_vpn_test.c"], "vpn-packets")]
+               ([TEST / "pioneer_vpn_test.c"], "vpn-packets"),
+               ([TEST / "pioneer_vpn_urb_plan_test.c", CPP / "pioneer_vpn_urb.c"], "vpn-urb-plan")]
     with tempfile.TemporaryDirectory(prefix="diplay-native-") as temporary:
         for sources, name in targets:
             binary = Path(temporary) / name
