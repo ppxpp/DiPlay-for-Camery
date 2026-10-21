@@ -4,6 +4,7 @@ compatibility_date = "2026-05-03"
 
 [vars]
 ASSET_BASE_URL = "https://updates-assets.app.gtmc.mgulu.com"
+ADMIN_USERNAME = "admin"
 
 [[r2_buckets]]
 binding = "META"

@@ -14,7 +14,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && wrangler pages deploy dist --project-name gtmc-app-updates --branch main",
-    "publish:release": "node scripts/publish-update.mjs"
+    "publish:release": "node scripts/publish-update.mjs",
+    "hash-admin-password": "node scripts/hash-admin-password.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0"
