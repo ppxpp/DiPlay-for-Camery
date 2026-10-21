@@ -24,6 +24,7 @@
     "publishedAt": { "type": "string", "format": "date-time" },
     "mandatory": { "type": "boolean" },
     "notesUrl": { "type": "string", "format": "uri" },
+    "releaseNotes": { "type": "string" },
     "artifacts": {
       "type": "array",
       "minItems": 1,

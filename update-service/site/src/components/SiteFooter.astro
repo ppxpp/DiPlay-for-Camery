@@ -1,0 +1,24 @@
+---
+import { site } from '../data/site.ts';
+
+const sourceUrl = site.sourceRefUrl || site.repoUrl;
+---
+
+<footer class="site-footer">
+  <div class="shell footer-inner">
+    <p>{site.footer}</p>
+    <nav aria-label="页脚链接">
+      <a href={sourceUrl} target="_blank" rel="noopener">源码仓库</a>
+      <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">
+        GPL-3.0
+      </a>
+      {
+        site.feedbackUrl ? (
+          <a href={site.feedbackUrl} target="_blank" rel="noopener">
+            问题反馈
+          </a>
+        ) : null
+      }
+    </nav>
+  </div>
+</footer>

@@ -1,0 +1,37 @@
+---
+import '../styles/global.css';
+import AdminConsole from '../components/AdminConsole.vue';
+import SiteFooter from '../components/SiteFooter.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { site } from '../data/site.ts';
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>版本管理 · {site.shortName}</title>
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/app-icon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <SiteHeader current="admin" />
+
+    <main class="shell page-shell admin-shell">
+      <div class="page-frame">
+        <div class="admin-page-head">
+          <h1>版本管理</h1>
+          <p class="admin-page-note">版本信息由 CI 生成，不可编辑；新发布版本默认暂停自动下发。</p>
+        </div>
+
+        <AdminConsole client:load />
+      </div>
+    </main>
+
+    <SiteFooter />
+  </body>
+</html>

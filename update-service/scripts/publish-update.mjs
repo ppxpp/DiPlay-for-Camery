@@ -161,6 +161,7 @@ const manifest = {
   versionCode,
   publishedAt: new Date().toISOString(),
   mandatory: false,
+  management: { enabled: false, mode: "all", notes: "" },
   ...(values["notes-url"] ? { notesUrl: values["notes-url"] } : {}),
   artifacts: [
     {
