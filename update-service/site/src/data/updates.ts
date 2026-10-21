@@ -55,6 +55,12 @@ export function displayVersion(manifest: UpdateManifest): string {
   return manifest.versionName?.trim() || manifest.version;
 }
 
+export function displayShortVersion(manifest: UpdateManifest): string {
+  const versionName = manifest.versionName?.trim() ?? '';
+  const adaptationVersion = versionName.match(/(?:^|_)(\d+\.\d+\.\d+)$/)?.[1];
+  return adaptationVersion || manifest.version;
+}
+
 export function formatUpdateSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return '';
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
