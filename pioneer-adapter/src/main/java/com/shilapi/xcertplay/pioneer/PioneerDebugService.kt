@@ -62,6 +62,12 @@ class PioneerDebugService : Service() {
                 break
             } catch (error: Exception) { server.close(); PioneerDebugRuntime.log(this, "TCP bind $port failed: ${error.message}") }
         }
+        // Best effort: an active upload/session keeps its lease; the next upload also prunes.
+        runCatching {
+            PioneerDebugUpdateGuard.withCacheMaintenance { PioneerDebugUpdater.cleanup(this) }
+        }.onSuccess {
+            PioneerDebugRuntime.log(this, "APK_CACHE_CLEAN reclaimedBytes=${it.reclaimedBytes} remainingBytes=${it.remainingBytes} protected=${it.protectedApks} failed=${it.failedDeletes}")
+        }
         val server = listener ?: run { PioneerDebugRuntime.listenerState = "8721 / 9911 / 9912 均不可用"; stopSelf(); return }
         while (!closed) {
             try {
@@ -295,21 +301,16 @@ class PioneerDebugService : Service() {
                 var reclaimed = 0L
                 if (command == "clear-update-cache") {
                     PioneerDebugUpdateGuard.withCacheMaintenance {
-                        updates.listFiles()?.filter {
-                            it.isFile && it.name.endsWith(".apk") && PioneerDebugUpdateGuard.canDelete(it)
-                        }?.forEach {
-                            val bytes = it.length()
-                            if (it.delete()) {
-                                reclaimed += bytes
-                                File(it.path + ".installing").delete()
-                            }
-                        }
+                        reclaimed = PioneerDebugUpdater.cleanup(this).reclaimedBytes
                     }
                 }
                 val disk = android.os.StatFs(cacheDir.absolutePath)
                 send(socket, reply.put("availableBytes", disk.availableBytes).put("reclaimedBytes", reclaimed)
+                    .put("maxApks", PioneerUpdateCache.MAX_APKS).put("maxCacheBytes", PioneerUpdateCache.MAX_BYTES)
+                    .put("minimumFreeBytes", PioneerUpdateCache.FREE_RESERVE_BYTES)
                     .put("updateApks", org.json.JSONArray(updates.listFiles()?.filter { it.isFile }?.map {
                         JSONObject().put("name", it.name).put("bytes", it.length())
+                            .put("installerProtected", it.name.endsWith(".apk") && !PioneerDebugUpdateGuard.canDelete(it))
                     } ?: emptyList<JSONObject>())))
             }
             "companion-status" -> {

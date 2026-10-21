@@ -62,10 +62,7 @@ object PioneerDebugUpdateGuard {
         } finally { releaseOnMain(token) }
     }
 
-    internal fun canDelete(file: File): Boolean {
-        val marker = File(file.path + ".installing")
-        return !marker.exists() || System.currentTimeMillis() - marker.lastModified() > 86_400_000L
-    }
+    internal fun canDelete(file: File): Boolean = !PioneerUpdateCache.isProtected(file)
 
     /** Cache cleanup and upload admission acquire the same main-thread lease. */
     internal fun <T> withCacheMaintenance(action: () -> T): T {
