@@ -3029,6 +3029,8 @@ class CarPlayHostActivity : ComponentActivity() {
         }.apply {
             setBackgroundColor(SWIPE_SCRIM_COLOR)
             isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             layoutDirection = resources.configuration.layoutDirection
         }
         val panel = FrameLayout(this).apply {
@@ -6396,6 +6398,7 @@ class CarPlayHostActivity : ComponentActivity() {
         updateCallPopupGuard()
         gestureOverlay?.visibility = View.GONE
         settingsMenu?.visibility = View.VISIBLE
+        focusSettingsMenuRoot()
         safeAreaEditor?.visibility = View.GONE
         syncMfiSettingsControls()
         updateManualHotspotFields()
@@ -6410,6 +6413,27 @@ class CarPlayHostActivity : ComponentActivity() {
             "loadMs=${(loadedAt - openingStarted) / 1_000_000L} baselineMs=${(baselineAt - loadedAt) / 1_000_000L} " +
             "buildMs=${(builtAt - baselineAt) / 1_000_000L} rebuilt=$rebuild " +
             "iconMs=${(iconEndedAt - iconStartedAt) / 1_000_000L}")
+    }
+
+    /**
+     * The connection page starts with editable Wi-Fi fields. Without an explicit non-input
+     * focus target, the platform focuses the first EditText and raises the IME; on some head
+     * units that IME window is invisible and blocks the settings overlay.
+     */
+    private fun focusSettingsMenuRoot() {
+        val menu = settingsMenu ?: return
+        val keyboard = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as? android.view.inputmethod.InputMethodManager
+        fun hideKeyboard() {
+            keyboard?.hideSoftInputFromWindow(menu.windowToken ?: window.decorView.windowToken, 0)
+        }
+
+        menu.findFocus()?.clearFocus()
+        hideKeyboard()
+        menu.post {
+            menu.requestFocus()
+            hideKeyboard()
+        }
     }
 
     private fun openPicturePanel() {
