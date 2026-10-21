@@ -119,10 +119,15 @@ class PioneerDebugActivity : Activity() {
         Thread({
             runCatching {
                 val file = File(path)
-                val removed = PioneerUpdateCache.finish(File(app.cacheDir, "pioneer-update"), file)
+                val installed = resultCode == RESULT_OK
+                val removed = PioneerUpdateCache.finish(
+                    File(app.cacheDir, "pioneer-update"),
+                    file,
+                    installedSuccessfully = installed,
+                )
                 val uri = FileProvider.getUriForFile(app, "$packageName.pioneer-updates", file)
                 app.revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                PioneerDebugRuntime.log(app, "APK_INSTALL_FINISHED result=$resultCode cacheRemoved=$removed")
+                PioneerDebugRuntime.log(app, "APK_INSTALL_FINISHED result=$resultCode cacheRemoved=$removed retainedForRetry=${!installed}")
             }.onFailure { PioneerDebugRuntime.log(app, "APK_INSTALL_CLEANUP_FAILED ${it.message}") }
         }, "pioneer-apk-cleanup").apply { isDaemon = true; start() }
     }

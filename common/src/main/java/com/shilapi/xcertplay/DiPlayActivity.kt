@@ -99,6 +99,7 @@ import com.shilapi.xcertplay.update.UpdateChannel
 import com.shilapi.xcertplay.update.UpdateChannelStore
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.UpdateDownloadCache
 import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
@@ -253,6 +254,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
+    internal var updateCheckWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-check").start() }
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var backupServer: SettingsBackupServer? = null
     @Volatile private var backupEndpoint: SettingsBackupEndpoint? = null
@@ -380,6 +382,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Thread({
+            UpdateDownloadCache.cleanupForProcessStart(this)
+            UpdateApkExport.pruneHistory(this)
+        }, "diplay-update-cache-cleanup").apply { isDaemon = true }.start()
         com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
             "UI_ROUTE home create action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         PioneerDebugIntegration.ensure(this)
@@ -2738,7 +2744,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             var pending = channels.indexOf(current)
             appDialogBuilder()
                 .setTitle(title)
-                .setMessage(getString(R.string.settings_update_beta_warning))
+                .setMessage(getString(R.string.settings_update_flavor_note))
                 .setSingleChoiceItems(labels.toTypedArray(), pending) { _, index -> pending = index }
                 .setPositiveButton(getString(R.string.save)) { _, _ ->
                     val selected = channels[pending]
@@ -2787,7 +2793,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun discardDownloadedUpdate() {
-        updateFile?.parentFile?.deleteRecursively()
+        updateFile?.parentFile?.let { UpdateDownloadCache.release(it, delete = true) }
         updateFile = null
         updateSavedUri?.let { uri -> runCatching { contentResolver.delete(uri, null, null) } }
         updateSavedPath?.let { path -> runCatching { File(path).takeIf { it.isAbsolute }?.delete() } }
@@ -2801,7 +2807,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val generation = ++updateGeneration
         val channel = UpdateChannelStore.load(this)
         render()
-        Thread({
+        updateCheckWorker(Runnable {
             val outcome = runCatching { latestRelease(channel) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
@@ -2840,7 +2846,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     },
                 )
             }
-        }, "diplay-update-check").start()
+        })
     }
 
     private fun latestRelease(channel: UpdateChannel): UpdateLookupResult {
@@ -2879,7 +2885,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         render()
         Thread({
             // Each attempt owns its files, including across activity recreation.
-            val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
+            val directory = UpdateDownloadCache.begin(this)
             val outcome = runCatching {
                 // The cached release can be a day old. Download the newest one.
                 release = when (val latest = latestRelease(channel)) {
@@ -2906,15 +2912,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     throw IOException("Checksum mismatch for ${release.apkName}")
                 }
                 apkFile
-            }.onFailure { directory.deleteRecursively() }
+            }.onFailure { UpdateDownloadCache.release(directory, delete = true) }
             val saved = outcome.getOrNull()?.let { UpdateApkExport.copy(applicationContext, it) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) {
-                    directory.deleteRecursively()
+                    UpdateDownloadCache.release(directory, delete = true)
                     return@runOnUiThread
                 }
                 outcome.fold(
                     { file ->
+                        UpdateDownloadCache.retain(directory)
                         updateRelease = release
                         updateFile = file
                         updateSavedPath = saved?.path

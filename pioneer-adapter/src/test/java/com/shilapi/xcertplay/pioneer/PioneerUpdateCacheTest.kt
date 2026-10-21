@@ -52,14 +52,24 @@ class PioneerUpdateCacheTest {
     @Test fun terminalResultOnlyRemovesItsOwnApkAndIsIdempotent() {
         val previous = apk("previous", true)
         val next = apk("next", true)
-        assertTrue(PioneerUpdateCache.finish(root, previous))
-        assertTrue(PioneerUpdateCache.finish(root, previous))
+        assertTrue(PioneerUpdateCache.finish(root, previous, installedSuccessfully = true))
+        assertTrue(PioneerUpdateCache.finish(root, previous, installedSuccessfully = true))
         assertFalse(File(previous.path + ".installing").exists())
         assertTrue(next.exists())
         assertTrue(File(next.path + ".installing").exists())
         val outside = files.newFolder("outside").resolve("bad.apk").apply { writeText("outside") }
-        assertThrows(IllegalArgumentException::class.java) { PioneerUpdateCache.finish(root, outside) }
+        assertThrows(IllegalArgumentException::class.java) { PioneerUpdateCache.finish(root, outside, installedSuccessfully = true) }
         assertTrue(outside.exists())
+    }
+
+    @Test fun cancelledInstallerKeepsOnlyItsOwnApkForRetry() {
+        val cancelled = apk("cancelled", true)
+        val completed = apk("completed", true)
+        assertFalse(PioneerUpdateCache.finish(root, cancelled, installedSuccessfully = false))
+        assertTrue(cancelled.exists())
+        assertTrue(File(cancelled.path + ".installing").exists())
+        assertTrue(PioneerUpdateCache.finish(root, completed, installedSuccessfully = true))
+        assertFalse(completed.exists())
     }
 
     @Test fun uploadCountIsBoundedEvenWhenAllInputsAreProtected() {
@@ -103,7 +113,7 @@ class PioneerUpdateCacheTest {
             PioneerUpdateCache.prune(root)
             PioneerUpdateCache.requireCapacity(root, 100, Long.MAX_VALUE)
             val candidate = apk("build$index", true)
-            if (index % 2 == 0) PioneerUpdateCache.finish(root, candidate)
+            if (index % 2 == 0) PioneerUpdateCache.finish(root, candidate, installedSuccessfully = true)
             else PioneerUpdateCache.prune(root) { true } // Process replaced: installed copy verified.
         }
         assertTrue(root.listFiles()!!.isEmpty())

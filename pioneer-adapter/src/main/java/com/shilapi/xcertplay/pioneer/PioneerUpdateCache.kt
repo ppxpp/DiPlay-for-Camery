@@ -51,10 +51,11 @@ internal object PioneerUpdateCache {
             throw IOException("Insufficient storage for APK; free space before retrying")
     }
 
-    /** A terminal installer result identifies exactly one input, never the current upload lease. */
+    /** Only a successful installer result consumes its input; cancellation keeps it retryable. */
     @Synchronized
-    fun finish(directory: File, file: File): Boolean {
+    fun finish(directory: File, file: File, installedSuccessfully: Boolean): Boolean {
         require(safePath(directory, file) && (!file.exists() || file.isFile) && file.name.endsWith(".apk")) { "Invalid update cache path" }
+        if (!installedSuccessfully) return false
         val removed = !file.exists() || file.delete()
         if (removed) File(file.path + ".installing").delete()
         return removed
