@@ -1,7 +1,0 @@
-{
-  "productName": "爱趣听",
-  "versionCode": 22101715,
-  "versionName": "2.7.1.36971303",
-  "targetAbi": "armeabi-v7a",
-  "bugFix": "修复播放列表只循环20首"
-}
