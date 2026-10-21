@@ -1,3 +1,5 @@
+import { isManifest as isManagedManifest } from "../../../../../../_shared/management";
+
 interface Env {
   META: R2Bucket;
   ASSET_BASE_URL: string;
@@ -20,6 +22,13 @@ interface StoredManifest {
   publishedAt?: string;
   mandatory?: boolean;
   notesUrl?: string;
+  management?: {
+    enabled: boolean;
+    mode: "all" | "percentage" | "whitelist";
+    percentage?: number;
+    ids?: string[];
+    notes?: string;
+  };
   artifacts: StoredArtifact[];
 }
 
@@ -103,7 +112,23 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   } catch {
     return json({ error: "invalid_manifest" }, 502);
   }
-  if (!isManifest(stored)) return json({ error: "invalid_manifest" }, 502);
+  if (!isManifest(stored) || !isManagedManifest(stored)) return json({ error: "invalid_manifest" }, 502);
+
+  const management = stored.management ?? { enabled: true, mode: "all" as const, notes: "" };
+  if (!management.enabled) return json({ error: "update_unavailable" }, 404);
+  const clientId = new URL(request.url).searchParams.get("id")?.trim() || null;
+  if (management.mode === "whitelist" && (!clientId || !management.ids?.includes(clientId))) {
+    return json({ error: "update_unavailable" }, 404);
+  }
+  if (management.mode === "percentage") {
+    const percentage = management.percentage ?? 0;
+    if (percentage < 100) {
+      if (!clientId) return json({ error: "update_unavailable" }, 404);
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clientId));
+      const bucket = new DataView(digest).getUint32(0, false) % 100;
+      if (bucket >= percentage) return json({ error: "update_unavailable" }, 404);
+    }
+  }
 
   const arch = new URL(request.url).searchParams.get("arch")?.trim() || null;
   const selected = arch
@@ -137,6 +162,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
     ...(stored.publishedAt ? { publishedAt: stored.publishedAt } : {}),
     mandatory: stored.mandatory ?? false,
     ...(stored.notesUrl ? { notesUrl: stored.notesUrl } : {}),
+    ...(management.notes ? { releaseNotes: management.notes } : {}),
     artifacts,
   });
 };

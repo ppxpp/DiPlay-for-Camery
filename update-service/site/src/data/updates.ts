@@ -27,7 +27,7 @@ export type UpdateChannel = {
 export const UPDATE_API_BASE = 'https://diplay.mgulu.com';
 
 export async function fetchUpdateChannel(key: ChannelKey): Promise<UpdateChannel | null> {
-  const response = await fetch(`${UPDATE_API_BASE}/api/v1/apps/diplay/android/${key}/latest`, {
+  const response = await fetch(`${UPDATE_API_BASE}/api/v1/apps/diplay/android/${key}/public-latest`, {
     cache: 'no-store',
     headers: { Accept: 'application/json' },
   });

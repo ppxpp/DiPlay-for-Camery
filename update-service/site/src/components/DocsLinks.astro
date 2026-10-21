@@ -1,59 +1,72 @@
 ---
+import DocIcon from './DocIcon.astro';
 import { site } from '../data/site.ts';
 
 const items = [
   {
     title: '安装教程',
     text: '前置条件与权限授予、无线与有线两种连接方式的首次连接步骤、装好后建议修改的设置。',
-    url: site.docs.install
+    url: site.docs.install,
+    icon: 'book',
+    tone: 'brand'
   },
   {
     title: '能做什么',
     text: '车机音频通道、方向盘按键、本机音乐隔离、仪表盘显示与日夜模式的详细说明。',
-    url: site.docs.features
+    url: site.docs.features,
+    icon: 'features',
+    tone: 'neutral'
   },
   {
     title: '已知问题',
     text: '当前仍会出现的卡顿、掉线与功能不生效情况，以及每一项对应的规避设置。',
-    url: site.docs.knownIssues
+    url: site.docs.knownIssues,
+    icon: 'alert',
+    tone: 'warning'
   }
-];
+] as const;
 ---
 
 <ul class="docs">
   {
-    items.map((item) =>
-      item.url ? (
-        <li>
-          <a class="doc-link" href={item.url} target="_blank" rel="noopener">
+    items.map((item) => (
+      <li>
+        {item.url ? (
+          <a class="doc-card" href={item.url} target="_blank" rel="noopener">
+            <span
+              class:list={['doc-icon', item.tone !== 'brand' && `doc-icon--${item.tone}`]}
+              aria-hidden="true"
+            >
+              <DocIcon name={item.icon} />
+            </span>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+            <svg class="doc-arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4.5 11.5 11.5 4.5M11.5 4.5H6M11.5 4.5V10"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </a>
+        ) : (
+          <div class="doc-card" aria-disabled="true">
+            <span
+              class:list={['doc-icon', item.tone !== 'brand' && `doc-icon--${item.tone}`]}
+              aria-hidden="true"
+            >
+              <DocIcon name={item.icon} />
+            </span>
             <h3>
               {item.title}
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4.5 11.5 11.5 4.5M11.5 4.5H6M11.5 4.5V10"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </h3>
-            <p>{item.text}</p>
-          </a>
-        </li>
-      ) : (
-        <li>
-          <div class="doc-link" aria-disabled="true">
-            <h3>
-              <span>
-                {item.title}
-                <span class="tag">待发布</span>
-              </span>
+              <span class="tag">待发布</span>
             </h3>
             <p>{item.text}</p>
           </div>
-        </li>
-      )
-    )
+        )}
+      </li>
+    ))
   }
 </ul>

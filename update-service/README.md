@@ -21,7 +21,11 @@ wrangler.toml                                                  Pages project + R
 ```
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
+GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
+GET /api/v1/apps/{appId}/{platform}/{channel}/releases
 ```
+
+The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 
 The Function reads this private metadata object:
 
@@ -115,11 +119,40 @@ Use `--dry-run` to print the plan without writing R2.
 
 ## GitHub Actions
 
-The DiPlay repository publishes with `.github/workflows/release.yml`:
+The DiPlay repository uses `.github/workflows/release.yml`:
 
-- Push a tag such as `v0.3.0`, or run the workflow manually and choose `stable` or `beta`.
+- A tag push builds and verifies the signed APK, then stores it only as a short-lived GitHub Actions artifact. It does not write to R2 or deploy the public site.
+- Only manually running the workflow (`workflow_dispatch`) and choosing `stable` or `beta` uploads the APK and updates the release platform.
 - The workflow builds `:mobile:assembleRelease`, verifies the APK version matches the tag, rejects a `versionCode` that is not greater than the currently published one, uploads to R2 and checks the public endpoint.
 - It then installs `update-service` dependencies, rebuilds the Astro site with the newly published manifests baked in, and deploys the Pages project. A site deploy failure fails the workflow after the R2 release is already live.
+
+Manually published releases start with automatic delivery disabled. Sign in to `/admin/` and enable delivery after reviewing the release. Release APKs and APK-derived identity fields are immutable; the console edits only release notes and delivery settings.
+
+### Deploy only the site
+
+Run the **Deploy DiPlay update site** workflow (`.github/workflows/deploy-update-site.yml`) from the Actions tab to rebuild and deploy the Cloudflare Pages project without building or publishing an APK. It runs the update-service tests and typecheck, then `npm --prefix update-service run deploy`, which uploads the static site and its Functions. It uses the `release` environment and requires `CLOUDFLARE_API_TOKEN` and `R2_ACCOUNT_ID`.
+
+Do not use **Publish DiPlay update** for a site-only deploy: it builds and publishes a signed APK first. The legacy **Publish download site (diplay)** workflow deploys the separate GitHub Pages site and does not update this Pages project. The new workflow only appears in the Actions UI for the default branch, so merge it there before running it.
+
+### Release management setup
+
+The Pages Function uses the existing private R2 `META` bucket for release snapshots and delivery settings. `ADMIN_USERNAME` is a non-secret variable managed in `wrangler.toml`. Set only the encrypted values below as Cloudflare secrets (or with `wrangler secret put`); never commit them:
+
+- `ADMIN_PASSWORD_HASH` (secret), generated interactively with `npm run hash-admin-password`
+- `ADMIN_SESSION_SECRET` (secret), a random value of at least 32 bytes (for example, `openssl rand -hex 32`)
+
+The admin console is at `/admin/`. Sessions are signed, expire after eight hours and use Secure, HttpOnly, SameSite=Strict cookies. Automatic delivery settings are stored alongside each release snapshot; admin edits update only its management metadata and, when editing the current version, the `latest.json` pointer as well. Rollback disables delivery for the version being rolled back from, then points `latest.json` at the selected historical snapshot without changing that snapshot's existing policy.
+
+For local login, run `npm run hash-admin-password` and put its output plus a local session secret in `update-service/.dev.vars`:
+
+```dotenv
+ADMIN_PASSWORD_HASH=<hash printed by the command>
+ADMIN_SESSION_SECRET=<local random value, for example from openssl rand -hex 32>
+```
+
+Wrangler loads `.dev.vars` for `npm run dev`; the file is git-ignored. The local username remains the `ADMIN_USERNAME` value in `wrangler.toml` (`admin` by default). Use `http://localhost:8788/admin/` while the dev server is running.
+
+The public `/history/` page lists all permanent release snapshots. It reads a public history API and does not depend on automatic delivery being enabled. The homepage reads `public-latest`; the app update endpoint `latest` applies the release delivery policy and accepts the client's `id` query parameter.
 
 Repository secrets:
 
