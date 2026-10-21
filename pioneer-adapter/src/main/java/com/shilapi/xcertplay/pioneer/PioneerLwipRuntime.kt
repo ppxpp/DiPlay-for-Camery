@@ -42,8 +42,7 @@ object PioneerLwipRuntime {
         @Volatile var success = false
     }
     fun enabled(context: Context) = PioneerUsbPolicy.enabled(context) &&
-        (PioneerWiredBackend.explicitLwip(context) ||
-        context.getSharedPreferences("pioneer-debug", Context.MODE_PRIVATE).getString("network_backend", "LWIP") != "VPN")
+        PioneerWiredBackend.mode(context) in setOf(PioneerWiredBackend.Mode.LWIP, PioneerWiredBackend.Mode.LWIP_OPTIMIZED)
     @Synchronized fun begin(): Long {
         check(!active) { "Previous lwIP owner is still active" }
         sessionId = ids.incrementAndGet(); attemptId = 1

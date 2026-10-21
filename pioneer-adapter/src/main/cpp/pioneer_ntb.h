@@ -25,12 +25,17 @@ static size_t pn_build(unsigned char *out, size_t capacity, const struct pn_fram
     }
     size_t transfer=length+(length%512==0);
     if (transfer>capacity) return 0;
-    memset(out,0,transfer); pn_w32(out,PN_NTH); pn_w16(out+4,12); pn_w16(out+6,sequence);
+    /* Only metadata/alignment/pad need zeroes. Payload is overwritten exactly once. */
+    size_t written=12+ndp;
+    memset(out,0,written); pn_w32(out,PN_NTH); pn_w16(out+4,12); pn_w16(out+6,sequence);
     pn_w16(out+8,(unsigned)length); pn_w16(out+10,12); pn_w32(out+12,PN_NDP); pn_w16(out+16,(unsigned)ndp);
     for (unsigned i=0;i<count;i++) {
         pn_w16(out+20+4*i,(unsigned)offsets[i]); pn_w16(out+22+4*i,(unsigned)frames[i].size);
+        memset(out+written,0,offsets[i]-written);
         memcpy(out+offsets[i],frames[i].data,frames[i].size);
+        written=offsets[i]+frames[i].size;
     }
+    if(transfer>written)memset(out+written,0,transfer-written);
     return transfer;
 }
 

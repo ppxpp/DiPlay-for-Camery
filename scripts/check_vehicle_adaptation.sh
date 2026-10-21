@@ -31,6 +31,7 @@ python3 scripts/check_public_tree.py
 ./gradlew -PdiplaySourceOnly=true \
     :shared:testDebugUnitTest \
     --tests '*CarPlaySizeTest' \
+    --tests '*CarPlayVpn*Test' \
     --tests '*Pioneer*' \
     --tests '*BluetoothSuspendLifecycleTest' \
     --tests '*RemoteGatewayConnectionTest' \
@@ -41,11 +42,15 @@ python3 scripts/check_public_tree.py
     --tests '*WiredStartWatchdogTest' \
     --tests '*FirstTcpWatchdogTest' \
     --tests '*NcmUsbBridgeFramingTest' \
+    --tests '*NcmReadPipeline*Test' \
+    --tests '*Ipv6NcmWriteResultTest' \
     --tests '*NcmTrafficCounterTest' \
     --tests '*SoftwareOpusEncoderTest' \
     --tests '*NavigationAudioGainTest' \
     :common:testDebugUnitTest \
     --tests '*CamrySettingsDefaultsTest' \
+    --tests '*CarPlayVpnConsentTest' \
+    --tests '*NativeNcmSettingsTest' \
     --tests '*CamryDisplaySettingsTest' \
     --tests '*UsbChargingCurrentTest' \
     --tests '*AdaptiveSettingsUiTest.settingsLiveWhereDriversLookForThem' \

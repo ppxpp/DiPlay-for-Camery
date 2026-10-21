@@ -6,8 +6,11 @@ class PioneerTiming(private val name: String) {
     private var count = 0L
     private var maxNs = 0L
     private var errors = 0L
-    @Synchronized fun record(nanos: Long, failed: Boolean = false) {
+    fun record(nanos: Long, failed: Boolean = false) {
         if (!PioneerDiagnostics.enabled) return
+        synchronized(this) { recordEnabled(nanos, failed) }
+    }
+    private fun recordEnabled(nanos: Long, failed: Boolean) {
         val us = ((nanos.coerceAtLeast(0) + 999) / 1_000).coerceAtLeast(1)
         val slot = if (false) {
             var legacy = 0

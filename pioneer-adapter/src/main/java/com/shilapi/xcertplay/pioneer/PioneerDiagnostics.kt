@@ -22,7 +22,11 @@ object PioneerDiagnostics {
     }
     @Synchronized fun drainSlow(): List<String> = slowEvents.toList().also { slowEvents.clear() }
     private val metrics = LinkedHashMap<String, PioneerTiming>()
-    @Synchronized fun record(session: Long, name: String, nanos: Long, failed: Boolean = false) {
+    fun record(session: Long, name: String, nanos: Long, failed: Boolean = false) {
+        if (!enabled) return
+        recordEnabled(session, name, nanos, failed)
+    }
+    @Synchronized private fun recordEnabled(session: Long, name: String, nanos: Long, failed: Boolean) {
         if (!enabled || !PioneerLwipRuntime.active || session != PioneerLwipRuntime.sessionId) return
         if (metrics.size >= 64 && !metrics.containsKey(name)) return
         metrics.getOrPut(name) { PioneerTiming(name) }.record(nanos, failed)
