@@ -102,6 +102,7 @@ import com.shilapi.xcertplay.update.UpdateClient
 import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
+import com.shilapi.xcertplay.update.StableClientId
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -2843,7 +2844,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun latestRelease(channel: UpdateChannel): UpdateLookupResult {
-        return UpdateReleaseLookup.latest(installedVersionCode(), userAgent(), channel)
+        return UpdateReleaseLookup.latest(
+            installedVersionCode(),
+            userAgent(),
+            channel,
+            clientId = StableClientId.get(this),
+        )
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {

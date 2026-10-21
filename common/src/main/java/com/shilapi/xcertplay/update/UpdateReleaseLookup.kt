@@ -16,10 +16,11 @@ internal object UpdateReleaseLookup {
         userAgent: String,
         channel: UpdateChannel,
         openConnection: (URL) -> URLConnection = { it.openConnection() },
+        clientId: String? = null,
     ): UpdateLookupResult {
         val json = try {
             UpdateClient.fetchText(
-                UpdateClient.releasesUrl(channel),
+                UpdateClient.releasesUrl(channel, clientId),
                 "application/json",
                 userAgent,
                 openConnection,

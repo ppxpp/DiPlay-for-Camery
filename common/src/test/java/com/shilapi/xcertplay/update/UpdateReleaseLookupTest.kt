@@ -40,7 +40,8 @@ class UpdateReleaseLookupTest {
             installedVersionCode = 1L,
             userAgent = "DiPlay/test",
             channel = UpdateChannel.BETA,
-        ) { URL("$root/beta/latest").openConnection() }
+            openConnection = { URL("$root/beta/latest").openConnection() },
+        )
 
         assertEquals(UpdateLookupResult.ChannelUnavailable, result)
     }
@@ -71,9 +72,8 @@ class UpdateReleaseLookupTest {
             exchange.responseBody.use { it.write(body) }
         }
         try {
-            UpdateReleaseLookup.latest(1L, "DiPlay/test", UpdateChannel.STABLE) {
-                URL("$root/stable/latest").openConnection()
-            }
+            UpdateReleaseLookup.latest(1L, "DiPlay/test", UpdateChannel.STABLE,
+                openConnection = { URL("$root/stable/latest").openConnection() })
             throw AssertionError("expected a malformed-manifest failure")
         } catch (_: IOException) {
         }
