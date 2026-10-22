@@ -8,6 +8,19 @@ import org.junit.Test
 class PioneerPlaybackPolicyTest {
     @After fun tearDown() { PioneerWiredSession.current?.close() }
 
+    @Test fun freescaleReorderOptimizationDefaultsToVpnOnly() {
+        assertFalse(PioneerPlaybackPolicy.freescaleNoReorderEnabled)
+        for (backend in PioneerWiredSession.Backend.entries) {
+            PioneerWiredSession.begin(backend, verifiedDevice = true).use {
+                org.junit.Assert.assertEquals(
+                    backend == PioneerWiredSession.Backend.VPN,
+                    PioneerPlaybackPolicy.freescaleNoReorderEnabled,
+                )
+            }
+            assertFalse(PioneerPlaybackPolicy.freescaleNoReorderEnabled)
+        }
+    }
+
     @Test fun nativeWiredRetainsTheVerifiedNightModeCompatibility() {
         for (backend in PioneerWiredSession.Backend.entries) {
             PioneerWiredSession.begin(backend, verifiedDevice = true).use {

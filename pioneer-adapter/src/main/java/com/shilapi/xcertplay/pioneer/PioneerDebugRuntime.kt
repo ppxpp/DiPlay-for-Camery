@@ -31,7 +31,9 @@ object PioneerDebugRuntime {
     @Volatile var nativeCryptoComparisonEnabled: Boolean? = null
     @Volatile var phoneDiagnosticsEnabled = false
     @Volatile var asyncSessionLogs = true
-    @Volatile var freescaleNoReorder = false
+    var freescaleNoReorder: Boolean
+        get() = PioneerPlaybackPolicy.freescaleNoReorderEnabled
+        set(value) { PioneerPlaybackPolicy.freescaleNoReorderEnabled = value }
     // Compatibility view for TCP status/control; production playback reads its own policy.
     val appearanceDeclarationsEnabled: Boolean
         get() = PioneerPlaybackPolicy.appearanceDeclarationsEnabled
