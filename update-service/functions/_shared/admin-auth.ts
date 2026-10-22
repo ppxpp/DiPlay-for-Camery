@@ -2,7 +2,8 @@ import type { Env } from "./management";
 
 const COOKIE = "diplay_admin_session";
 const SESSION_SECONDS = 8 * 60 * 60;
-const ITERATIONS = 210_000;
+// Cloudflare Workers WebCrypto rejects PBKDF2 iteration counts above 100,000.
+const ITERATIONS = 100_000;
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -35,7 +36,7 @@ export async function verifyPassword(password: string, encoded: string): Promise
   const salt = fromHex(saltHex ?? "");
   const expected = fromHex(hashHex ?? "");
   const iterations = Number(iterationsText ?? ITERATIONS);
-  if (!salt || !expected || salt.length < 16 || expected.length !== 32 || !Number.isInteger(iterations) || iterations < ITERATIONS || iterations > 1_000_000) return false;
+  if (!salt || !expected || salt.length < 16 || expected.length !== 32 || iterations !== ITERATIONS) return false;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256);
   return constantTimeEqual(new Uint8Array(bits), expected);

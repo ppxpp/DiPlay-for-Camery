@@ -9,9 +9,6 @@ const [initialStable, initialBeta] = await Promise.all([
   fetchUpdateChannel('beta'),
 ]);
 
-const heroBrand = site.name.split(' ')[0];
-const heroModel = site.shortName.replace(/^DiPlay\s+/, '');
-const heroVariant = site.name.split(' ').slice(2).join(' ');
 ---
 
 <section class="hero-section" aria-labelledby="hero-title">
@@ -21,7 +18,7 @@ const heroVariant = site.name.split(' ').slice(2).join(' ');
         <span class="eyebrow-dot" aria-hidden="true"></span>
         社区适配版
       </span>
-      <h1 id="hero-title"><span class="brand-word">{heroBrand}</span>{' '}{heroModel}<br />{heroVariant}</h1>
+      <h1 id="hero-title"><span class="brand-word">DiPlay</span>凯美瑞A 导航适配版</h1>
       <p class="intro">{site.intro}</p>
       <DownloadPanel client:load initialStable={initialStable} initialBeta={initialBeta} />
     </div>

@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, useId } from 'vue';
 import { site } from '../data/site.ts';
-import { displayVersion, formatUpdateSize, type UpdateChannel } from '../data/updates.ts';
+import {
+  displayShortVersion,
+  displayVersion,
+  formatUpdateSize,
+  type UpdateChannel,
+} from '../data/updates.ts';
 
 const props = withDefaults(
   defineProps<{
@@ -20,7 +25,9 @@ const dialog = ref<HTMLDialogElement | null>(null);
 const agreed = ref(false);
 const accepted = ref(false);
 const version = computed(() => (props.channel ? displayVersion(props.channel.manifest) : ''));
-const shortVersion = computed(() => props.channel?.manifest.version ?? '');
+const shortVersion = computed(() =>
+  props.channel ? displayShortVersion(props.channel.manifest) : '',
+);
 const available = computed(() => Boolean(props.channel?.artifact.url?.trim()));
 
 onMounted(() => {
