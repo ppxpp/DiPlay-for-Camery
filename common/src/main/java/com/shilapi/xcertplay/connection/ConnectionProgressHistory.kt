@@ -15,14 +15,21 @@ import java.util.concurrent.Executors
 /** Local, bounded, mode-specific history; only successful first-frame samples enter it. */
 internal class ConnectionProgressHistory(context: Context) {
     private val context = context.applicationContext
-    private val prefs = this.context.getSharedPreferences("connection_progress_v1", Context.MODE_PRIVATE)
+    private val prefs = this.context.getSharedPreferences("connection_progress_v2", Context.MODE_PRIVATE)
 
     fun create(config: CarPlayRuntimeConfig, previous: ConnectionProgress?): ConnectionProgress {
         val wireless = config.transport == CarPlayTransport.WIRELESS
         val proxy = wireless && config.wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI && config.remoteRfcommGateway != null
+        val channel = when {
+            wireless -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.WIRELESS
+            config.nativeNcmEnabled -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.NATIVE_NCM
+            config.optimizedLwipEnabled || PioneerLwipRuntime.enabled(context) -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.LWIP
+            config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.VPN
+            else -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.FRAMEWORK
+        }
         val link = if (wireless) "wireless-${config.wirelessHotspotMode.name}-${if (proxy) "proxy" else "native"}"
             else "usb-${if (config.nativeNcmEnabled) "native-ncm" else if (config.optimizedLwipEnabled) "lwip-optimized" else if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
-        val profile = "$link-${config.mfiTarget.name}"
+        val profile = "$link-${channel.name}-${config.mfiTarget.name}"
         val samples = read(profile)
         val baseline = if (samples.isEmpty()) null else ConnectionTiming(
             ConnectionStep.entries.associateWith { step -> median(samples.map { it.durations.getValue(step) }) },
@@ -33,6 +40,7 @@ internal class ConnectionProgressHistory(context: Context) {
             profile, wireless, (continuing?.attempt ?: 0) + 1,
             continuing?.overallStartedMillis ?: ConnectionProgress.monotonicMillis(),
             baseline, samples.size,
+            channel = channel,
             onCompleted = { timing ->
                 // Enqueue only: no JSON, preference writes or file I/O on the video/protocol thread.
                 writer.execute {

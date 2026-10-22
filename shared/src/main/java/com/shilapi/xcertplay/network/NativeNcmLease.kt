@@ -57,6 +57,7 @@ internal class NativeNcmLease private constructor(
     }
 
     private fun launch(context: Context, device: UsbDevice, address: String) {
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("driver", "RUNNING")
         val (bus, number) = UsbBindingSnapshot.parseDeviceName(device.deviceName)
             ?: throw IOException("Invalid iPhone USB device path")
         val config = IphoneCarPlayConfiguration.find(device) ?: throw IOException("CarPlay USB configuration missing")
@@ -103,6 +104,9 @@ internal class NativeNcmLease private constructor(
                     val routeStarted = SystemClock.elapsedRealtime()
                     awaitRoute(candidate)
                     val routeMillis = SystemClock.elapsedRealtime() - routeStarted
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("driver", "COMPLETE")
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("interface", "COMPLETE")
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("components", "COMPLETE")
                     binding = candidate
                     interfaceName = name
                     hostMac = status.getString("mac").split(':').map { it.toInt(16).toByte() }.toByteArray()

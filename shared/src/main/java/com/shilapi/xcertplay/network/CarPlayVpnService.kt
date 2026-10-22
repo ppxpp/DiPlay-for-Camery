@@ -130,12 +130,15 @@ class CarPlayVpnService : VpnService() {
                 pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
                     if (optimized) com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.LWIP_OPTIMIZED
                     else com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.LWIP)
+                com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("stack", "RUNNING")
                 val rawBridge = PioneerLwipBridge(ncm, hostMac, address.address,
                     diagnosticPath = java.io.File(filesDir, "pioneer-debug/lwip-native.log").absolutePath,
                     log = { listener.onDebugLog(it) },
                     onError = { onTransportError(generation, listener, it) }, optimized = optimized)
                 lwipBridge = rawBridge
                 rawBridge.start()
+                for (task in listOf("stack", "io-init", "components", "buffers", "bridge", "channel-ready"))
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update(task, "COMPLETE")
                 startAirPlayServer(generation, AirPlayAttachment(
                     InetAddress.getByName("127.0.0.1"), config.copy(port = 7000, pinInboundPorts = false),
                     identity, pairings, mfi, listener, media))
@@ -173,8 +176,10 @@ class CarPlayVpnService : VpnService() {
                 .addAllowedApplication(packageName)
                 .establish()
                 ?: throw IOException("VpnService.establish returned null")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("tun-info", "COMPLETE")
             tun = tunFd
             vpnRevokeListener = listener
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("tun", "COMPLETE")
             com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-tun-established")
             listener.onDebugLog("VPN_TUN_ESTABLISHED backend=VPN elapsedMs=${android.os.SystemClock.elapsedRealtime() - tunStarted}")
 
@@ -186,13 +191,22 @@ class CarPlayVpnService : VpnService() {
                     acquired = { vpnFirewall = it })
             }
 
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("io-init", "RUNNING")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("components", "RUNNING")
             val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac,
                 onError = { error -> onTransportError(generation, listener, error) },
                 onDiagnostic = { message -> listener.onDebugLog(message) },
                 neighborAddress = if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.enabled(this)) address.address else null,
             )
             bridge = ipv6Bridge
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("components", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("bridge", "RUNNING")
             ipv6Bridge.start()
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("buffers", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("io-init", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("channel-ready", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session", "RUNNING")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("bridge", "COMPLETE")
             com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-bridge-started")
             listener.onDebugLog("VPN_BRIDGE_STARTED backend=VPN")
 
@@ -230,6 +244,8 @@ class CarPlayVpnService : VpnService() {
             startAirPlayServer(generation, AirPlayAttachment(lease.binding.localAddress,
                 config.copy(pinInboundPorts = false), identity, pairings, mfi, listener, media,
                 nativeBinding = lease.binding))
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("channel-ready", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session", "RUNNING")
             AttachResult.Started
         } catch (error: Exception) {
             runCatching { releaseLocked() }.onFailure(error::addSuppressed)

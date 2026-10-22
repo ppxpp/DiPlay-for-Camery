@@ -582,6 +582,11 @@ class AndroidMediaSink(
     }
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray) {
+        if (type == 110) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("media", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-receive", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-decode", "RUNNING")
+        }
         synchronized(videoOwnershipLock) {
             if (videoClosed) return
             videoDecoder(type).submit(naluBytes)
@@ -590,6 +595,11 @@ class AndroidMediaSink(
     }
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) {
+        if (type == 110) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("media", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-receive", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-decode", "RUNNING")
+        }
         synchronized(videoOwnershipLock) {
             if (videoClosed) return
             videoDecoder(type).submit(naluBytes, senderNanos, arrivalNanos)
@@ -1791,7 +1801,11 @@ private class VideoDecoder(
                     stats.onRendered()
                     liveRendered.incrementAndGet()
                 }
+                if (streamType == MAIN_SCREEN_TYPE) {
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-decode", "COMPLETE")
+                }
                 if (shown && !renderedFrameLogged) {
+                    if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-render", "COMPLETE")
                     renderedFrameLogged = true
                     if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerWiredSession.firstFrame(pioneerSession)
                     if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerLwipRuntime

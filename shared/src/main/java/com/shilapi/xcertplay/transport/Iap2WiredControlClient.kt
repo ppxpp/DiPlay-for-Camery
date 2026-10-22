@@ -33,6 +33,7 @@ class Iap2WiredControlClient(
         retryNetworkReady: () -> Boolean = { false },
         maxStartRequests: Int = Int.MAX_VALUE,
         onStartSessionSent: () -> Unit = {},
+        onAuthenticated: () -> Unit = {},
     ): Iap2WiredControlResult {
         require(maxStartRequests > 0)
         require(availableCurrentMilliAmps in 0..0xffff) {
@@ -52,6 +53,7 @@ class Iap2WiredControlClient(
         var stage = Iap2WiredControlStage.IDENTIFIED
         mfi.run(session, requireRemaining(deadlineNanos), onProgress)
         stage = Iap2WiredControlStage.AUTHENTICATED
+        onAuthenticated()
         onProgress("iap2 authentication accepted")
         deadlineNanos.authenticated()
 
