@@ -113,6 +113,10 @@ class PioneerDebugService : Service() {
                 PioneerDebugRuntime.log(this, "AUDIO_SOURCE $state")
                 send(socket, reply.put("audio", state))
             }
+            "transport-timings" -> send(socket, reply
+                .put("metrics", JSONArray(PioneerDiagnostics.drain()))
+                .put("queues", JSONArray(PioneerDiagnostics.queues()))
+                .put("slow", JSONArray(PioneerDiagnostics.drainSlow())))
             "system-load" -> send(socket, reply, PioneerSystemLoad.snapshot().toString(2).toByteArray())
             "touch-coalescing" -> {
                 require(PioneerUsbPolicy.matchesDevice())
@@ -483,7 +487,7 @@ class PioneerDebugService : Service() {
 
     private fun memorySnapshot(): JSONObject {
         val runtime = Runtime.getRuntime()
-        return JSONObject().put("javaUsed", runtime.totalMemory() - runtime.freeMemory())
+        return JSONObject().put("fdCount",File("/proc/self/fd").list()?.size ?: -1).put("javaUsed", runtime.totalMemory() - runtime.freeMemory())
             .put("javaTotal", runtime.totalMemory()).put("javaMax", runtime.maxMemory())
             .put("nativeAllocated", android.os.Debug.getNativeHeapAllocatedSize())
             .put("threads", Thread.activeCount())

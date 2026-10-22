@@ -1054,9 +1054,11 @@ private class VideoDecoder(
     private var parking: ParkingOutput? = null
     private var lastConfig: VideoJob.Config? = null
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
     private val pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.sessionId
     private val interactionProbe = if (streamType == MAIN_SCREEN_TYPE && statsLabel == null &&
-        com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active) VideoInteractionProbe(lwipSession) else null
+        (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active ||
+            com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive)) VideoInteractionProbe(diagnosticSession) else null
     private val firstRenderCallback = java.util.concurrent.atomic.AtomicBoolean(false)
     private val connectionRunId = com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.runId
     private val frameCallbackThread = interactionProbe?.let { android.os.HandlerThread("carplay-frame-probe") }
@@ -1132,9 +1134,9 @@ private class VideoDecoder(
         // Pacing runs on the worker, in queue order: callbacks of a replaced stream may still deliver here.
         queue.offer(frame)
         val now = System.nanoTime()
-        if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active && now-queueObservedNs > 1_000_000_000L) {
+        if ((com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active || com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive) && now-queueObservedNs > 1_000_000_000L) {
             val snapshot = queue.snapshot(); queuePeak = maxOf(queuePeak,snapshot.frames)
-            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(lwipSession, "video-$streamType", snapshot.frames,snapshot.bytes,snapshot.oldestNs,queuePeak)
+            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(diagnosticSession, "video-$streamType", snapshot.frames,snapshot.bytes,snapshot.oldestNs,queuePeak)
             queueObservedNs = now
         }
     }
@@ -1195,8 +1197,8 @@ private class VideoDecoder(
                         is VideoJob.Frame -> {
                             diagnosticFrameId = job.frameId
                             val queueNs = System.nanoTime()-job.receivedNs
-                            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-queue", queueNs)
-                            if (queueNs > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(lwipSession,
+                            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-queue", queueNs)
+                            if (queueNs > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(diagnosticSession,
                                 "stage=video-queue frameId=${job.frameId} streamType=$streamType queueUs=${queueNs/1000}")
                             val backlog = queue.backlogAfterCurrent()
                             val overloaded = !referenceChain.needsKeyFrame && backlogRecovery.observe(
@@ -1684,7 +1686,7 @@ private class VideoDecoder(
             running = { running }, drain = { if (outputThread == null) drainOutput(codec) },
             dequeue = { codec.dequeueInputBuffer(INPUT_TIMEOUT_US) },
         )
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-input-buffer", System.nanoTime()-acquiring, index < 0)
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-input-buffer", System.nanoTime()-acquiring, index < 0)
         if (index < 0) {
             dropMtkTuning("video decoder input stalled")
             dropMtkCodec2LowLatency("video decoder input stalled")
@@ -1731,7 +1733,7 @@ private class VideoDecoder(
     private fun recover(reason: String) {
         Log.w(TAG, "Video recovery: $reason; waiting for keyframe")
         stats.onRecovery()
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(lwipSession, "stage=video-recovery frameId=$diagnosticFrameId streamType=$streamType reason=$reason")
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(diagnosticSession, "stage=video-recovery frameId=$diagnosticFrameId streamType=$streamType reason=$reason")
         report("recovery: $reason; waiting for keyframe")
         // Recreate with codec-specific data: flush can discard CSD before the first output.
         releaseDecoder()
@@ -1772,8 +1774,8 @@ private class VideoDecoder(
                 val queued = if (slot >= 0) queuedAtNanos[slot] else 0L
                 val heldOverGap = queued in 1 until resumedAtNanos
                 if (queued > 0 && !heldOverGap) {
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-codec-pipeline", now-queued)
-                    if (now-queued > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(lwipSession,
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-codec-pipeline", now-queued)
+                    if (now-queued > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(diagnosticSession,
                         "stage=video-codec-pipeline frameId=${queuedFrameIds[slot]} streamType=$streamType ptsUs=${info.presentationTimeUs} elapsedUs=${(now-queued)/1000}")
                     stats.onDecodeLatency(now - queued)
                     liveDecodeNanos.addAndGet(now - queued)
@@ -1796,7 +1798,7 @@ private class VideoDecoder(
                     if (shown && delay != null && !heldOverGap && !pauseHeld) stats.onLate()
                     codec.releaseOutputBuffer(index, render)
                 }
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-surface-release", System.nanoTime()-releasing)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-surface-release", System.nanoTime()-releasing)
                 if (shown) {
                     stats.onRendered()
                     liveRendered.incrementAndGet()
@@ -1960,6 +1962,7 @@ private class AudioRenderer(
     voiceFilter: Boolean = false,
 ) : Closeable {
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
     private var queueObservedNs = 0L
     private var queuePeak = 0
     private data class AudioPacket(val rtp: ByteArray, val sample: Int, val queuedNs: Long = System.nanoTime())
@@ -2067,9 +2070,9 @@ private class AudioRenderer(
             }
         }
         val now = System.nanoTime()
-        if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active && now-queueObservedNs > 1_000_000_000L) {
+        if ((com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active || com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive) && now-queueObservedNs > 1_000_000_000L) {
             queuePeak = maxOf(queuePeak,queue.size)
-            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(lwipSession, "audio-${format.payloadType}-${format.audioType}",
+            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(diagnosticSession, "audio-${format.payloadType}-${format.audioType}",
                 queue.size, queue.sumOf { it.rtp.size.toLong() }, queue.peek()?.queuedNs ?: 0L, queuePeak)
             queueObservedNs = now
         }
@@ -2117,10 +2120,10 @@ private class AudioRenderer(
                     val now = System.nanoTime()
                     if (now - lastAudioInputNs >= 500_000_000L) audioFocusCoordinator.ensureVehicleSource()
                     lastAudioInputNs = now
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
                     val decoding = System.nanoTime()
                     handle(it)
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-handle-includes-write-${format.audioType}", System.nanoTime()-decoding)
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-handle-includes-write-${format.audioType}", System.nanoTime()-decoding)
                 }
                 // Output becomes ready asynchronously, including after the last packet of a burst.
                 // Waiting for the next UDP packet can strand decoded sound for hundreds of ms.
@@ -2523,7 +2526,7 @@ private class AudioRenderer(
             dequeue = { codec.dequeueInputBuffer(INPUT_TIMEOUT_US) },
             timeoutNs = AUDIO_INPUT_WAIT_NS,
         )
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-input-includes-output-write-${format.audioType}", System.nanoTime()-acquiring, index < 0)
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-input-includes-output-write-${format.audioType}", System.nanoTime()-acquiring, index < 0)
         if (index < 0) {
             inputDropped++
             if (inputDropped == 1) {
@@ -2651,7 +2654,7 @@ private class AudioRenderer(
                 // A vehicle policy can require bounded writes while its output bus is inactive.
                 val count = track.write(data, offset + written, writeLength,
                     if (VehicleAudioRouting.selected.nonBlockingWrites) AudioTrack.WRITE_NON_BLOCKING else AudioTrack.WRITE_BLOCKING)
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
                 maxWriteMs = maxOf(maxWriteMs, (System.nanoTime() - writeStarted) / 1_000_000L)
                 if (count < 0) {
                     writeErrorsThisWindow++

@@ -240,6 +240,7 @@ class CarPlayController(
         execute = { touchExecutor.execute(it) },
         isCurrent = { session, token -> !closed && activeSession === session && session.mainScreenSessionToken() === token },
         send = { session, contacts -> session.sendTouch(contacts) },
+        sendTimed = { session, contacts, enteredNs -> session.sendTouch(contacts, enteredNs = enteredNs) },
         onFailure = { session, token, reason ->
             if (!closed && activeSession === session && session.mainScreenSessionToken() === token)
                 session.pioneerTransportFailed("touch", IOException(reason))
