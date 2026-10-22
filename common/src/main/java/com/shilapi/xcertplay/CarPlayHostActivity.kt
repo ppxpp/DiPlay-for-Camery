@@ -5688,9 +5688,22 @@ class CarPlayHostActivity : ComponentActivity() {
         return true
     }
 
+    private val resumeAfterUpdate = object : Runnable {
+        override fun run() {
+            if (isFinishing || isDestroyed || shuttingDown.get()) return
+            if (com.shilapi.xcertplay.pioneer.PioneerDebugUpdateGuard.isBusy()) {
+                mainHandler.postDelayed(this, 250)
+            } else {
+                maybeStartCarPlay()
+            }
+        }
+    }
+
     private fun startCarPlay(size: DisplaySize) {
         if (com.shilapi.xcertplay.pioneer.PioneerDebugUpdateGuard.isBusy()) {
             appendLog("CarPlay start deferred: APK update in progress")
+            mainHandler.removeCallbacks(resumeAfterUpdate)
+            mainHandler.postDelayed(resumeAfterUpdate, 250)
             return
         }
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
