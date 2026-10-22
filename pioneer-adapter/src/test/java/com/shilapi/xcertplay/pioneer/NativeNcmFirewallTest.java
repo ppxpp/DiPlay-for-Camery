@@ -27,7 +27,8 @@ public class NativeNcmFirewallTest {
             String line = "-A " + chain + " " + String.join(" ", Arrays.copyOfRange(args, action.equals("-I") ? 6 : 5, args.length));
             if (action.equals("-C")) return new NativeNcmFirewall.Result(corruptCheck ? 2 : rules.contains(line) ? 0 : 1, "");
             if (action.equals("-I")) {
-                assertEquals("I" + inserts + ":false", journal.get(journal.size() - 1));
+                String comment = args[args.length-3];
+                assertEquals("I" + comment.substring(comment.lastIndexOf('-')+1) + ":false", journal.get(journal.size() - 1));
                 inserts++;
                 if (!ignoreInsert) rules.add(0, line);
                 if (uncertain) { uncertain = false; throw new NativeNcmFirewall.CompletionUnknown(stopped, "timeout"); }
@@ -35,6 +36,31 @@ public class NativeNcmFirewallTest {
             if (action.equals("-D")) { deletes++; if (!ignoreDelete) rules.remove(line); }
             return new NativeNcmFirewall.Result(0, "");
         }
+    }
+    @Test public void persistentEnsureReusesRulesWithoutInsertingDuplicates() throws Exception {
+        Fixture f = new Fixture();
+        f.firewall.ensure(); f.firewall.verify();
+        assertEquals(4,f.inserts);
+        f.firewall.ensure(); f.firewall.verify();
+        assertEquals(4,f.inserts);
+        assertEquals(0,f.deletes);
+        assertEquals(3,f.chains.get("CARNET_IN").size());
+        assertEquals(3,f.chains.get("CARNET_OUT").size());
+    }
+    @Test public void persistentEnsureRepairsOnlyMissingRuleAfterReconnect() throws Exception {
+        Fixture f = new Fixture(); f.firewall.ensure();
+        f.chains.get("CARNET_OUT").remove(0);
+        f.firewall.ensure(); f.firewall.verify();
+        assertEquals(5,f.inserts);
+        assertEquals(0,f.deletes);
+        assertEquals(3,f.chains.get("CARNET_OUT").size());
+    }
+    @Test public void persistentEnsureRejectsDuplicatesRatherThanAddingMore() throws Exception {
+        Fixture f = new Fixture(); f.firewall.ensure();
+        f.chains.get("CARNET_IN").add(0,f.chains.get("CARNET_IN").get(0));
+        try { f.firewall.ensure(); fail("Duplicate must be rejected"); }
+        catch (IOException expected) { assertTrue(expected.getMessage().contains("CONFLICT")); }
+        assertEquals(4,f.inserts);
     }
     @Test public void installsAtHeadJournalsBeforeMutationAndRestoresOnlyOwnRules() throws Exception {
         Fixture f = new Fixture(); f.firewall.install();

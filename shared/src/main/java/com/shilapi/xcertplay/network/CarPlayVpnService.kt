@@ -155,7 +155,14 @@ class CarPlayVpnService : VpnService() {
                 val conflict = com.shilapi.xcertplay.pioneer.PioneerVpnPermissionGrant.conflict(this)
                 check(conflict == null) { conflict ?: "VPN conflict" }
             }
-            check(prepare(this) == null) { "VPN authorization is required; no backend fallback" }
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this)) {
+                com.shilapi.xcertplay.pioneer.PioneerVpnInitialization.await(this) { generation == attachGeneration }
+            }
+            else {
+                check(prepare(this) == null) { "VPN authorization is required; no backend fallback" }
+                com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("vpn-permission", "REUSED")
+            }
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("tun", "RUNNING")
             com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-tun-establish-begin")
             listener.onDebugLog("VPN_TUN_ESTABLISH begin backend=VPN")
             val tunStarted = android.os.SystemClock.elapsedRealtime()
@@ -218,7 +225,7 @@ class CarPlayVpnService : VpnService() {
             )
             AttachResult.Started
         } catch (error: Exception) {
-            releaseLocked()
+            runCatching { releaseLocked() }.onFailure(error::addSuppressed)
             lastAttachFailure = attachFailure(error)
             AttachResult.Failed(error.message ?: error.javaClass.simpleName)
         }
@@ -529,12 +536,15 @@ class CarPlayVpnService : VpnService() {
         error: Throwable,
     ) {
         val message = error.message ?: error.javaClass.simpleName
+        com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease.invalidate()
         Log.e(TAG, "CarPlay transport stopped: $message", error)
         Thread(
             {
                 val releasedGeneration = synchronized(this) {
                     if (generation != attachGeneration) return@Thread
-                    releaseLocked()
+                    runCatching { releaseLocked() }.onFailure { cleanup ->
+                        Log.e(TAG, "Transport cleanup failed", cleanup)
+                    }
                     attachGeneration
                 }
                 listener.onTransportError(message)

@@ -75,7 +75,14 @@ object PioneerUsbPermissionProbe {
         Os.chmod(root.path, 0x1c0)
         val directory = File(root, token).apply { check(mkdir()) }
         Os.chmod(directory.path, 0x1c0)
-        val deadline = SystemClock.elapsedRealtime() + 6000
+        val unified = action == "AUTO_GRANT" && PioneerWiredBackend.usesVehicleAdaptation(app) &&
+            PioneerWiredBackend.mode(app) == PioneerWiredBackend.Mode.VPN
+        if (unified) {
+            PioneerConnectionTasks.update("permission-request", "RUNNING", "waiting-root")
+            PioneerRootSession.ready(app, stillCurrent)
+            PioneerConnectionTasks.update("permission-request", "RUNNING")
+        }
+        val deadline = SystemClock.elapsedRealtime() + 15000
         val boot = File("/proc/sys/kernel/random/boot_id").readText().trim()
         val appStart = File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19]
         val request = JSONObject().put("token", token).put("action", action).put("package", app.packageName)
@@ -90,7 +97,9 @@ object PioneerUsbPermissionProbe {
         val command = "CLASSPATH=${quote(app.applicationInfo.sourceDir)} /system/bin/app_process /system/bin " +
             "com.shilapi.xcertplay.pioneer.PioneerUsbPermissionHelper ${quote(directory.path)} </dev/null >/dev/null 2>&1 &"
         val started = SystemClock.elapsedRealtime()
-        Thread({ runCatching { dispatch(command) }.onFailure(dispatchError::set) }, "usb-permission-probe-launch")
+        Thread({ runCatching {
+            if (unified) PioneerRootSession.submit(app, directory, stillCurrent) else dispatch(command)
+        }.onFailure(dispatchError::set) }, "usb-permission-probe-launch")
             .apply { isDaemon = true; start() }
         try {
             var helper: JSONObject? = null
@@ -105,6 +114,12 @@ object PioneerUsbPermissionProbe {
             if (helper == null) error("No helper result before deadline; root capability is unconfirmed")
             check(helper.getString("token") == token) { "Probe token mismatch" }
             report.put("helper", helper)
+            if (action == "AUTO_GRANT") {
+                check(helper.optInt("targetUid", -1) == app.applicationInfo.uid &&
+                    helper.optString("identityHash") == identity && helper.optInt("helperUid", -1) == 0 &&
+                    helper.optString("code") == "COMPLETED" && helper.optBoolean("targetPermissionVerified")) { "USB_TARGET_PERMISSION_UNCONFIRMED" }
+                report.put("permissionAfter", true).put("verdict", "AUTO_GRANT_VERIFIED")
+            } else {
             val current = usb.deviceList[device.deviceName]
             val unchanged = current != null && current.deviceId == device.deviceId &&
                 runCatching { PioneerUsbPermissionHelper.identity(current) == identity }.getOrDefault(false)
@@ -119,6 +134,7 @@ object PioneerUsbPermissionProbe {
                 report.put("appOpenSucceeded", opened) // Ordinary app process, no claim or I/O.
             }
             report.put("verdict", verdict(action, before, unchanged, after, opened, helper))
+            }
         } catch (failure: Throwable) {
             File(directory, "cancel").writeText("cancel")
             report.put("verdict", "ERROR_OR_UNCONFIRMED").put("error", "${failure.javaClass.simpleName}: ${failure.message}")

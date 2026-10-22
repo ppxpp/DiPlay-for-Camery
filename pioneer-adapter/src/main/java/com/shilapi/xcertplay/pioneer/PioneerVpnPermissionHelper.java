@@ -18,22 +18,28 @@ public final class PioneerVpnPermissionHelper {
     public static void main(String[] args) {
         if (args.length != 1 || Process.myUid() != 0) return;
         Thread watchdog = new Thread(() -> {
-            try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
+            try { Thread.sleep(20000); } catch (InterruptedException ended) { return; }
             System.exit(3);
-        }, "vpn-grant-deadline");
+        }, "permission-task-deadline");
         watchdog.setDaemon(true); watchdog.start();
+        runTask(new File(args[0]));
+        System.exit(0);
+    }
+
+    static void runTask(File task) {
+        long helperEntryMs = SystemClock.elapsedRealtime();
         File directory = null;
         JSONObject result = new JSONObject();
-        long entered = SystemClock.elapsedRealtime();
+        long entered = helperEntryMs;
         try {
-            File candidate = new File(args[0]).getCanonicalFile();
+            File candidate = task.getCanonicalFile();
             requireDirectory(candidate.getPath());
             StructStat dir = Os.lstat(candidate.getPath());
             requireFile(dir, true, dir.st_uid);
             File input = new File(candidate, "request.json");
             JSONObject request;
-            try (FileInputStream stream = new FileInputStream(Os.open(input.getPath(),
-                    OsConstants.O_RDONLY | OsConstants.O_NOFOLLOW, 0))) {
+            try (FileInputStream stream = PioneerRootFiles.input(input.getPath(),
+                    OsConstants.O_RDONLY | OsConstants.O_NOFOLLOW, 0)) {
                 requireFile(Os.fstat(stream.getFD()), false, dir.st_uid);
                 request = new JSONObject(read(stream, 8192));
             }
@@ -75,19 +81,19 @@ public final class PioneerVpnPermissionHelper {
             guard.check();
             String before = query(pkg, user, guard);
             result.put("appOpBefore", before);
-            if (action.equals("GRANT")) {
+            if (action.equals("GRANT") || action.equals("REVOKE")) {
                 guard.check();
                 requireNoOtherVpn(pkg, user);
                 guard.check();
                 // Persist the uncertain-mutation fence before launching an appops child.
-                try (FileOutputStream marker = new FileOutputStream(Os.open(new File(candidate, "mutation").getPath(),
-                        OsConstants.O_CREAT | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600))) {
+                try (FileOutputStream marker = PioneerRootFiles.output(new File(candidate, "mutation").getPath(),
+                        OsConstants.O_CREAT | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600)) {
                     marker.write(token.getBytes("US-ASCII")); marker.getFD().sync();
                     Os.fchown(marker.getFD(), uid, uid);
                 }
                 guard.check();
                 NativeNcmFirewall.Result command;
-                try { command = NativeNcmCommand.run(arguments("set", pkg, user), 1500); }
+                try { command = NativeNcmCommand.run((action.equals("REVOKE") ? new String[]{"/system/bin/appops", "set", "--user", String.valueOf(user), pkg, "ACTIVATE_VPN", "ignore"} : arguments("set", pkg, user)), 1500); }
                 catch (NativeNcmFirewall.CompletionUnknown uncertain) {
                     result.put("unresolvedChild", !uncertain.childStopped);
                     throw uncertain;
@@ -97,7 +103,31 @@ public final class PioneerVpnPermissionHelper {
                 guard.check();
                 String after = query(pkg, user, guard);
                 result.put("appOpAfter", after).put("appOpAllowed", isAllowed(after));
-                if (!isAllowed(after)) throw new IOException("VPN_APPOP_READBACK_NOT_ALLOWED");
+                if (isAllowed(after) != action.equals("GRANT")) throw new IOException("VPN_APPOP_READBACK_MISMATCH");
+            }
+            if (action.equals("INSPECT")) {
+                JSONObject chains = new JSONObject();
+                for (String chain : new String[]{"CARNET_IN", "CARNET_OUT"}) {
+                    NativeNcmFirewall.Result dump = NativeNcmCommand.run(new String[]{"/system/bin/ip6tables","-t","filter","-S",chain},1200);
+                    chains.put(chain,new JSONObject().put("exit",dump.exit).put("rules",dump.output));
+                }
+                result.put("firewallChains",chains);
+                try { result.put("helperOomScoreAdj", readFile(new File("/proc/self/oom_score_adj"), 128).trim()); }
+                catch (Exception error) { result.put("helperOomReadError",error.toString()); }
+                try {
+                    NativeNcmFirewall.Result logs = NativeNcmCommand.run(new String[]{"/system/bin/logcat","-d","-b","main","-b","events","-b","crash","-t","800","-v","threadtime","DiPlayVpnRoot:V","ActivityManager:I","AndroidRuntime:E","libc:F","*:S"},1000);
+                    result.put("processExitEvents", killLines(logs.output));
+                } catch (Exception error) { result.put("processExitReadError",error.toString()); }
+                result.put("kernelExitEvents", kernelKillEvents());
+                org.json.JSONArray workers=new org.json.JSONArray();
+                try {
+                    android.app.ActivityManager manager=(android.app.ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+                    java.util.List<android.app.ActivityManager.RunningTaskInfo> tasks=manager.getRunningTasks(1);
+                    if(!tasks.isEmpty() && tasks.get(0).topActivity!=null) {
+                        String top=tasks.get(0).topActivity.flattenToShortString();
+                        result.put("topActivity",top).put("usbDialogObserved",top.matches(".*Usb(?:Confirm|Permission|Resolver|Accessory).*"));
+                    }
+                } catch(Exception error) { result.put("topActivityReadError",error.toString()); }
             }
             result.put("code", "COMPLETED");
         } catch (Throwable error) {
@@ -115,11 +145,49 @@ public final class PioneerVpnPermissionHelper {
         try { result.put("childrenFinished", !result.optBoolean("unresolvedChild")); } catch (Exception ignored) { }
         try { result.put("helperOperationMs", SystemClock.elapsedRealtime() - entered); } catch (Exception ignored) { }
         if (directory != null) try { publish(directory, result); } catch (Throwable ignored) { }
-        System.exit(0);
+    }
+
+    private static final java.util.regex.Pattern EXIT_EVENT_PATTERN=java.util.regex.Pattern.compile(
+        "DiPlayVpnRoot|am_kill|am_proc_died|am_crash|am_anr|fatal signal|fatal exception|lowmemorykiller|lmkd|killed process|out of memory|oom_reaper",java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static String killLines(String text) {
+        StringBuilder kept=new StringBuilder();
+        for(String line:text.split("\\n")) {
+            if (EXIT_EVENT_PATTERN.matcher(line).find()) {
+                if (kept.length()+line.length()>8000) break;
+                kept.append(line).append('\n');
+            }
+        }
+        return kept.toString();
+    }
+    private static JSONObject kernelKillEvents() throws Exception {
+        JSONObject report=new JSONObject();
+        StringBuilder kept=new StringBuilder();int scanned=0;boolean reachedEnd=false;
+        long started=SystemClock.elapsedRealtime();
+        try {
+            java.io.FileDescriptor fd=Os.open("/dev/kmsg",OsConstants.O_RDONLY|OsConstants.O_NONBLOCK|OsConstants.O_CLOEXEC,0);
+            try {
+                byte[] bytes=new byte[8192];long until=started+1000;
+                for(int i=0;i<8192 && SystemClock.elapsedRealtime()<until;i++) {
+                    int count;
+                    try { count=Os.read(fd,bytes,0,bytes.length); }
+                    catch(android.system.ErrnoException error) {
+                        if(error.errno==OsConstants.EAGAIN){reachedEnd=true;break;}
+                        if(error.errno==OsConstants.EINTR || error.errno==OsConstants.EPIPE)continue;
+                        throw error;
+                    }
+                    if(count<=0){reachedEnd=true;break;}
+                    scanned++;
+                    String line=killLines(new String(bytes,0,count,"UTF-8"));
+                    if(kept.length()+line.length()<=8000)kept.append(line);
+                }
+            } finally { Os.close(fd); }
+        } catch(Exception error) { report.put("error",error.toString()); }
+        return report.put("events",kept.toString()).put("scanned",scanned).put("reachedEnd",reachedEnd)
+            .put("durationMs",SystemClock.elapsedRealtime()-started);
     }
 
     static void requireAction(String action) throws IOException {
-        if (!Arrays.asList("INSPECT", "GRANT").contains(action)) throw new IOException("VPN_UNSUPPORTED_ACTION");
+        if (!Arrays.asList("INSPECT", "GRANT", "REVOKE").contains(action)) throw new IOException("VPN_UNSUPPORTED_ACTION");
     }
     static void requireDirectory(String path) throws IOException {
         if (!path.matches("/data/(?:data|user/[0-9]+)/[A-Za-z0-9_.]+/files/vpn-permission/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"))
@@ -139,7 +207,7 @@ public final class PioneerVpnPermissionHelper {
     }
     static void requireLive(JSONObject request, long now) throws Exception {
         long started = request.getLong("requestedAtMs"), deadline = request.getLong("deadline");
-        if (started < 0 || now < started || deadline <= now || deadline - started > 6000 || deadline <= started)
+        if (started < 0 || now < started || deadline <= now || deadline - started > 15000 || deadline <= started)
             throw new IOException("VPN_TASK_EXPIRED");
     }
     static String[] arguments(String action, String pkg, int user) {
@@ -177,7 +245,7 @@ public final class PioneerVpnPermissionHelper {
         return config != null;
     }
     private static Context cachedContext;
-    static Context systemContext() throws Exception {
+    static synchronized Context systemContext() throws Exception {
         if (cachedContext != null) return cachedContext;
         if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
         Class<?> type = Class.forName("android.app.ActivityThread");
@@ -200,8 +268,8 @@ public final class PioneerVpnPermissionHelper {
     static void publish(File dir, JSONObject result, boolean durable) throws Exception {
         StructStat owner = Os.lstat(dir.getPath());
         File temp = new File(dir, "result.tmp");
-        try (FileOutputStream out = new FileOutputStream(Os.open(temp.getPath(),
-                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600))) {
+        try (FileOutputStream out = PioneerRootFiles.output(temp.getPath(),
+                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600)) {
             out.write(result.toString().getBytes("UTF-8")); if (durable) out.getFD().sync();
             Os.fchown(out.getFD(), owner.st_uid, owner.st_gid);
         }

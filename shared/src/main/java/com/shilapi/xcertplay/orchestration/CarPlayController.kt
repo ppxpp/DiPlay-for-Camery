@@ -561,7 +561,11 @@ class CarPlayController(
         if (config.transport == CarPlayTransport.WIRED &&
             config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
             com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
-            com.shilapi.xcertplay.pioneer.PioneerVpnFirewallWarmup.start(appContext, ::connectionDiagnostic)
+            com.shilapi.xcertplay.pioneer.PioneerRootSession.start(appContext)
+            executor.execute {
+                runCatching { com.shilapi.xcertplay.network.Ipv6NcmBridge.prepare() }
+                    .onFailure { if (!closed) fail(it) }
+            }
         }
         if (config.transport == CarPlayTransport.WIRED && config.nativeNcmEnabled)
             com.shilapi.xcertplay.network.NativeNcmPreparation.connectionRequested()
@@ -800,6 +804,9 @@ class CarPlayController(
         synchronized(wirelessResourceLock) {
             if (closed) return
             closed = true
+            connectionProgress?.stop(ConnectionOutcome.CANCELLED)
+            if (config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
+                com.shilapi.xcertplay.pioneer.PioneerRootSession.finish(appContext)
             remoteGatewayConnection?.close()
             // Order cancellation with address-preference commits and generation replacement.
             wirelessGeneration.incrementAndGet()
@@ -2106,6 +2113,11 @@ class CarPlayController(
         phase = Phase.IPHONE
         reenumerationAttempts = 0
         usbResetInCurrentAttempt = false
+        if (config.transport == CarPlayTransport.WIRED &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(appContext) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(appContext) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
+            com.shilapi.xcertplay.pioneer.PioneerVpnInitialization.begin(appContext, this) { !closed }
+        }
         onStatus(CarPlayStatus.DiscoveringIphone)
         checkIphoneAvailability()
     }
@@ -3466,6 +3478,8 @@ class CarPlayController(
     }
 
     private fun fail(error: Throwable, generation: Int? = null) {
+        if (config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
+            com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease.invalidate()
         synchronized(wirelessResourceLock) {
             if (closed || generation != null && generation != wirelessGeneration.get()) return
             val wireless = config.transport == CarPlayTransport.WIRELESS

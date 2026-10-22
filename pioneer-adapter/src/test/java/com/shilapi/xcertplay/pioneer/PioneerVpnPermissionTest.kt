@@ -138,8 +138,8 @@ class PioneerVpnPermissionTest {
     }
 
     @Test fun helperOnlyAllowsFixedOperationsAndValidTaskDirectories() {
-        listOf("INSPECT", "GRANT").forEach { PioneerVpnPermissionHelper.requireAction(it) }
-        for (action in listOf("REVOKE", "SHELL", "GRANT;reboot", ""))
+        listOf("INSPECT", "GRANT", "REVOKE").forEach { PioneerVpnPermissionHelper.requireAction(it) }
+        for (action in listOf("SHELL", "GRANT;reboot", ""))
             assertThrows(IOException::class.java) { PioneerVpnPermissionHelper.requireAction(action) }
         val token = "01234567-0123-0123-0123-0123456789ab"
         PioneerVpnPermissionHelper.requireDirectory("/data/user/10/com.test.diplay/files/vpn-permission/$token")
@@ -158,7 +158,8 @@ class PioneerVpnPermissionTest {
         PioneerVpnPermissionHelper.requireLive(request, 2000)
         assertThrows(IOException::class.java) { PioneerVpnPermissionHelper.requireLive(request, 6000) }
         assertThrows(IOException::class.java) { PioneerVpnPermissionHelper.requireLive(request, 999) }
-        assertThrows(IOException::class.java) { PioneerVpnPermissionHelper.requireLive(request.put("deadline", 9000), 2000) }
+        PioneerVpnPermissionHelper.requireLive(request.put("deadline",16000), 9000)
+        assertThrows(IOException::class.java) { PioneerVpnPermissionHelper.requireLive(request.put("deadline", 17000), 2000) }
     }
 
     @Test fun appopsTargetsApplicationUserAndRequiresExactAllowedOperation() {

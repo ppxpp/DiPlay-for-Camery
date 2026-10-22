@@ -146,22 +146,6 @@ class PioneerDebugService : Service() {
                 send(socket, reply.put("format", "png"), bytes)
             }
             "status" -> send(socket, status(request.optBoolean("compact", false)).put("ok", true))
-            "vpn-firewall-fault" -> {
-                require(PioneerUsbPolicy.matchesDevice() && request.optString("action") == "EXIT_HELPER")
-                check(PioneerWiredSession.current?.backend == PioneerWiredSession.Backend.VPN)
-                val task = File(filesDir, "vpn-firewall").listFiles().orEmpty().filter { it.isDirectory }
-                    .sortedByDescending { it.lastModified() }.firstOrNull { directory ->
-                        runCatching {
-                            val owner = JSONObject(File(directory,"request.json").readText())
-                            val result = JSONObject(File(directory,"result.json").readText())
-                            owner.getInt("appPid") == android.os.Process.myPid() && owner.getString("token") == directory.name &&
-                                result.getString("token") == directory.name && result.getString("state") == "READY"
-                        }.getOrDefault(false)
-                    } ?: error("No owned READY VPN firewall helper")
-                File(task,"test-exit").apply { writeText(task.name); android.system.Os.chmod(path, 0x180) }
-                PioneerDebugRuntime.log(this,"VPN_FIREWALL_FAULT helper self-exit requested token=${task.name}")
-                send(socket,reply.put("token",task.name).put("message","仅当前VPN辅助进程退出，验证精确回收与同后端恢复"))
-            }
             "vpn-permission" -> send(socket, reply.put("vpnPermission", PioneerVpnPermissionGrant.run(
                 this, request.optString("action", "STATUS"))))
             "vpn-native" -> send(socket, reply.put(
@@ -445,6 +429,12 @@ class PioneerDebugService : Service() {
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
             .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
             .put("vpnPermission", PioneerVpnPermissionGrant.status(this))
+             .put("rootInitialization", PioneerRootSession.status())
+            .put("connectionTasks", JSONArray(PioneerConnectionTasks.snapshot().map { event ->
+                JSONObject().put("id",event.id).put("state",event.state).put("detail",event.detail)
+                    .put("startedAtMs",event.startedAtMillis).put("updatedAtMs",event.atMillis)
+                    .put("durationMs",event.atMillis-event.startedAtMillis)
+            }))
             .put("vpnFirewallLeases", vpnFirewallLeaseDiagnostics())
             .put("pioneerWiredSession", JSONObject().apply {
                 val session = PioneerWiredSession.current

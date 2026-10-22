@@ -842,6 +842,12 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val startupNs = System.nanoTime()
         com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.appStart()
+        if (!AirPlayPersistence.loadWirelessEnabled(this) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.reset()
+            com.shilapi.xcertplay.pioneer.PioneerRootSession.start(applicationContext)
+        }
         com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_STARTUP host create")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
@@ -1090,91 +1096,12 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         if (selected == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
-            requestRootVpnConsent()
+            // USB/protocol work may proceed while VPN authorization runs in initialization phase 2.
+            vpnReady = true
+            maybeStartCarPlay()
             return
         }
         requestSystemVpnConsent()
-    }
-
-    private fun requestRootVpnConsent() {
-        if (vpnRootPending || vpnRootAttempted || vpnReady) { if (vpnReady) maybeStartCarPlay(); return }
-        vpnRootPending = true
-        vpnRootAttempted = true
-        vpnReady = false
-        vpnRootFailureDialog?.dismiss()
-        vpnRootFailureDialog = null
-        val generation = ++vpnRootGeneration
-        val app = applicationContext
-        com.shilapi.xcertplay.pioneer.PioneerVpnFirewallWarmup.start(app, ::appendLog)
-        val stillCurrent = {
-            !shuttingDown.get() && !wirelessEnabled && generation == vpnRootGeneration &&
-                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(app) &&
-                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(app) ==
-                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
-        }
-        setStatus(R.string.vpn_root_authorizing)
-        appendLog("VPN_ROOT_AUTH begin backend=VPN")
-        Thread({
-            var granted = false
-            var attempts = 0
-            var finalFailure: Throwable? = null
-            while (stillCurrent()) {
-                attempts++
-                val attempt = runCatching {
-                    com.shilapi.xcertplay.pioneer.PioneerVpnPermissionGrant.grantForConnection(
-                        app,
-                        stillCurrent,
-                    )
-                }
-                granted = attempt.getOrDefault(false)
-                if (granted) break
-                finalFailure = attempt.exceptionOrNull()
-                    ?: IllegalStateException("VPN_ROOT_AUTH_REJECTED")
-                if (attempts >= VPN_ROOT_AUTH_MAX_ATTEMPTS) break
-                val retryDelay = VPN_ROOT_RETRY_DELAYS_MS[attempts - 1]
-                val attemptNumber = attempts
-                val attemptFailure = finalFailure
-                runOnUiThread {
-                    if (stillCurrent()) {
-                        appendLog(
-                            "VPN_ROOT_AUTH attempt=$attemptNumber/${VPN_ROOT_AUTH_MAX_ATTEMPTS} " +
-                                "failed=${attemptFailure?.message}; retrying in ${retryDelay}ms",
-                        )
-                    }
-                }
-                try {
-                    Thread.sleep(retryDelay)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    finalFailure = IllegalStateException("VPN_ROOT_AUTH_INTERRUPTED")
-                    break
-                }
-            }
-            runOnUiThread {
-                if (isFinishing || isDestroyed || shuttingDown.get() || generation != vpnRootGeneration) return@runOnUiThread
-                vpnRootPending = false
-                if (wirelessEnabled || !com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(app) ||
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(app) != startupWiredBackend) return@runOnUiThread
-                vpnReady = granted
-                appendLog(
-                    "VPN_ROOT_AUTH completed granted=$vpnReady attempts=$attempts " +
-                        "lastError=${finalFailure?.message}",
-                )
-                if (vpnReady) {
-                    com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark(
-                        "root-vpn-authorized", "attempts=$attempts", )
-                    maybeStartCarPlay()
-                } else {
-                    setStatus(R.string.vpn_root_failed)
-                    vpnRootFailureDialog?.dismiss()
-                    vpnRootFailureDialog = android.app.AlertDialog.Builder(this)
-                        .setMessage(R.string.vpn_root_failed)
-                        .setPositiveButton(R.string.vpn_manual_authorize) { _, _ -> requestSystemVpnConsent() }
-                        .setNeutralButton(R.string.retry_carplay_connection) { _, _ -> vpnRootAttempted = false; requestVpnConsent() }
-                        .setNegativeButton(android.R.string.cancel, null).show()
-                }
-            }
-        }, "diplay-vpn-root-consent").apply { isDaemon = true; start() }
     }
 
     private fun requestSystemVpnConsent() {
@@ -7246,8 +7173,6 @@ class CarPlayHostActivity : ComponentActivity() {
         const val RECONNECT_DELAY_MILLIS = 2_000L
         const val IAP_TUNNEL_RECONNECT_DELAY_MILLIS = 15_000L
         const val CONTROLLER_CLOSE_TIMEOUT_MILLIS = 4_000L
-        const val VPN_ROOT_AUTH_MAX_ATTEMPTS = 4
-        val VPN_ROOT_RETRY_DELAYS_MS = longArrayOf(750L, 1_500L, 3_000L)
         const val AUDIO_CAPTURE_MARKER = "audio-capture.enabled"
         const val AUDIO_CAPTURE_DIRECTORY = "audio-captures"
         const val PROTOCOL_TRACE_PREFIX = "TRACE "

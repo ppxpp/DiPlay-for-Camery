@@ -22,17 +22,22 @@ import java.util.Objects;
 /** Fixed diagnostic operations only; never changes USB configuration or opens a data interface. */
 public final class PioneerUsbPermissionHelper {
     public static void main(String[] args) {
-        long helperEntryMs = SystemClock.elapsedRealtime();
         if (args.length != 1 || Process.myUid() != 0) return;
         Thread watchdog = new Thread(() -> {
-            try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
+            try { Thread.sleep(8000); } catch (InterruptedException ended) { return; }
             System.exit(3);
-        }, "usb-permission-probe-deadline");
+        }, "permission-task-deadline");
         watchdog.setDaemon(true); watchdog.start();
+        runTask(new File(args[0]));
+        System.exit(0);
+    }
+
+    static void runTask(File task) {
+        long helperEntryMs = SystemClock.elapsedRealtime();
         File directory = null;
         JSONObject result = new JSONObject();
         try {
-            File candidate = new File(args[0]).getCanonicalFile();
+            File candidate = task.getCanonicalFile();
             if (!candidate.getPath().matches("/data/(?:data|user/0)/[A-Za-z0-9_.]+/files/usb-permission-probe/[0-9a-f-]{36}"))
                 throw new IOException("INVALID_PROBE_DIRECTORY");
             StructStat stat = Os.lstat(candidate.getPath());
@@ -78,6 +83,11 @@ public final class PioneerUsbPermissionHelper {
                 guard.check(); device = current(usb, request);
                 invoke("grantDevicePermission", service, new Class<?>[]{UsbDevice.class, int.class}, device, app.uid);
                 result.put("grantCallSucceeded", true);
+                guard.check(); device = current(usb, request);
+                NativeNcmFirewall.Result permissionDump = NativeNcmCommand.run(new String[]{"/system/bin/dumpsys", "usb"}, 1500);
+                boolean granted = permissionDump.exit == 0 && PioneerUsbPermissionReadback.granted(permissionDump.output,device.getDeviceName(),app.uid);
+                result.put("targetPermissionVerified",granted);
+                if (!granted) throw new IOException("USB_TARGET_PERMISSION_UNCONFIRMED");
                 if (action.equals("AUTO_GRANT")) {
                     // Persist only our own default. Default selection failure must not undo a valid grant.
                     try {
@@ -119,7 +129,6 @@ public final class PioneerUsbPermissionHelper {
         }
         try { result.put("helperOperationMs", SystemClock.elapsedRealtime() - helperEntryMs); } catch (Exception ignored) { }
         if (directory != null) try { publish(directory, result); } catch (Throwable ignored) { }
-        System.exit(0);
     }
 
     /** Reuse the already running module-prewarm process; never start a second ART process at boot. */
@@ -199,10 +208,7 @@ public final class PioneerUsbPermissionHelper {
         return current;
     }
     private static Context systemContext() throws Exception {
-        if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
-        Class<?> thread = Class.forName("android.app.ActivityThread");
-        Object instance = thread.getMethod("systemMain").invoke(null);
-        return (Context) thread.getMethod("getSystemContext").invoke(instance);
+        return PioneerVpnPermissionHelper.systemContext();
     }
     private static Object usbService() throws Exception {
         IBinder binder = (IBinder) Class.forName("android.os.ServiceManager").getMethod("checkService", String.class).invoke(null, "usb");
@@ -277,8 +283,8 @@ public final class PioneerUsbPermissionHelper {
     private static void publish(File directory, JSONObject value) throws Exception {
         StructStat owner = Os.lstat(directory.getPath());
         File temp = new File(directory, "result.tmp");
-        try (FileOutputStream out = new FileOutputStream(Os.open(temp.getPath(),
-                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_NOFOLLOW | OsConstants.O_WRONLY, 0600))) {
+        try (FileOutputStream out = PioneerRootFiles.output(temp.getPath(),
+                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_NOFOLLOW | OsConstants.O_WRONLY, 0600)) {
             out.write(value.toString().getBytes("UTF-8")); out.getFD().sync();
         }
         Os.chown(temp.getPath(), owner.st_uid, owner.st_gid); Os.chmod(temp.getPath(), 0600);
