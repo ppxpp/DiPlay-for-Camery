@@ -1,31 +1,22 @@
 package com.shilapi.xcertplay.pioneer
 
-import java.nio.ByteBuffer
-
 /** One RX and one TX caller may run concurrently; join both before [close]. */
 object PioneerVpnPacketNative {
     init { System.loadLibrary("pioneer_vpn") }
+    fun prepare() = Unit
     /** Duplicates the fd; setting nonblocking also affects the original open file description. */
     external fun create(tunFd: Int, hostMac: ByteArray, address: ByteArray): Long
-    /** Metadata: reply NTB length, reply frame count, reply Ethernet bytes.
-     * Reply capacity must be at least 1024. Batches eight replies; extra NS go to TUN. */
-    external fun inputNtb(handle: Long, buffer: ByteBuffer, length: Int, reply: ByteBuffer, metadata: LongArray): Int
-    /** Packed frame count, reply length and reply frame count for the normal Android request path. */
-    external fun inputNtbPacked(handle: Long, buffer: ByteBuffer, length: Int, reply: ByteBuffer): Long
-    /** Returns transfer bytes, or zero after a timeout. Buffer capacity must be at least 16384. */
-    external fun outputNtb(handle: Long, buffer: ByteBuffer, timeoutMs: Int, maxFrames: Int): Int
     external fun prepareUsbContext(handle: Long, usbFd: Int, inEndpoint: Int, outEndpoint: Int): Int
     external fun runUsbReceiver(handle: Long, usbFd: Int, inEndpoint: Int, outEndpoint: Int, slots: Int): Int
     external fun runUsbSender(handle: Long, usbFd: Int, outEndpoint: Int,
-                              pipelineDepth: Int, maxFrames: Int, batchWindowUs: Int): Int
-    external fun configure(handle: Long, maxFrames: Int, batchWindowUs: Int): Int
-    external fun capabilities(usbFd: Int, values: LongArray): Int
+                              pipelineDepth: Int): Int
+    external fun enableBatching(handle: Long): Int
     external fun stop(handle: Long)
     private external fun snapshot(handle: Long, values: LongArray): Int
     external fun close(handle: Long)
 
     fun snapshotJson(handle: Long): org.json.JSONObject = org.json.JSONObject().apply {
-        val values = LongArray(32)
+        val values = LongArray(33)
         check(snapshot(handle, values) == 0) { "VPN metric snapshot failed" }
         put("rxChunks", values[0])
         put("rxDirectBlocks", values[1])
@@ -52,8 +43,13 @@ object PioneerVpnPacketNative {
         put("usbTxSubmits", values[22])
         put("usbTxReaps", values[23])
         put("usbTxErrors", values[24])
-        put("rxAllocations", 0)
-        put("txAllocations", 0)
-        put("javaDirectBufferAllocations", 2)
+        put("usbRxPolls", values[25])
+        put("usbRxPollReady", values[26])
+        put("usbRxPollTimeouts", values[27])
+        put("usbTxPolls", values[28])
+        put("usbTxPollReady", values[29])
+        put("usbTxPollTimeouts", values[30])
+        put("configuredTxBatchFrames", values[31])
+        put("usbRxCompletionOrderRegressions", values[32])
     }
 }

@@ -65,12 +65,6 @@ def main():
     ncm_startup.add_argument("--prewarm", choices=["ON", "OFF"])
     vpn_permission = commands.add_parser("vpn-permission", help="先锋VPN授权状态、只读检查或root授权；写任务须先停止会话")
     vpn_permission.add_argument("--action", choices=["STATUS", "INSPECT", "GRANT"], default="STATUS")
-    vpn_io = commands.add_parser("vpn-io", help="空闲时设置VPN native I/O实验参数；下次连接生效")
-    vpn_io.add_argument("--rx-mode", choices=["ANDROID_REQUEST", "NATIVE_URB"])
-    vpn_io.add_argument("--read-slots", type=int, choices=[2, 4])
-    vpn_io.add_argument("--urb-slots", type=int, choices=[2, 4])
-    vpn_io.add_argument("--tx-depth", type=int, choices=[0, 2])
-    vpn_io.add_argument("--batch-window-us", type=int, choices=[0, 50, 100, 200])
     commands.add_parser("vpn-native", help="读取当前 VPN native 数据面和批量分布")
     permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
     permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT"], default="STATUS")
@@ -110,8 +104,6 @@ def main():
     crypto.add_argument("--mode", choices=["ON", "OFF"], required=True)
     snapshot = commands.add_parser("video-snapshot", help="读取当前CarPlay视频Surface的PNG，非系统截图")
     snapshot.add_argument("--output", default="carplay-surface.png")
-    batch = commands.add_parser("usb-tx-batch", help="实时切换NCM已排队数据聚合上限，1为原模式")
-    batch.add_argument("--frames", type=int, choices=[1, 4, 8, 16], required=True)
     commands.add_parser("usb-reset", help="会话完全停止后，通过已授权FD复位唯一iPhone；随后重新查询状态")
     commands.add_parser("start-wired", help="停止旧会话后启动有线 CarPlay")
     commands.add_parser("stop", help="停止 CarPlay，保留 TCP 服务")
@@ -161,21 +153,8 @@ def main():
             if args.cmd in ("usb-permission-probe", "vpn-permission"):
                 fields = {"action": args.action}
                 if getattr(args, "node", None) is not None: fields["node"] = args.node
-            if args.cmd == "vpn-io":
-                fields = {
-                    key: getattr(args, attr)
-                    for attr, key in [
-                        ("rx_mode", "rxMode"),
-                        ("read_slots", "readSlots"),
-                        ("urb_slots", "urbSlots"),
-                        ("tx_depth", "txDepth"),
-                        ("batch_window_us", "batchWindowUs"),
-                    ]
-                    if getattr(args, attr) is not None
-                }
             if args.cmd == "video-tap": fields = {"x": args.x, "y": args.y}
             if args.cmd == "toast": fields = {"text": args.text}
-            if args.cmd == "usb-tx-batch": fields = {"frames": args.frames}
             if args.cmd == "video-settings":
                 if args.fps is not None: fields["fps"] = args.fps
                 if args.resolution_percent is not None: fields["resolutionPercent"] = args.resolution_percent

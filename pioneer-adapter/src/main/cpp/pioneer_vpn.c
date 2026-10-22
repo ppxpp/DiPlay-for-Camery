@@ -43,8 +43,7 @@ struct vpn {
     VPN_METRIC(tx_tun_reads);
     VPN_METRIC(tx_tun_ready_drains);
     VPN_METRIC(tx_build_ns);
-    volatile unsigned max_batch_frames;
-    volatile unsigned batch_window_us;
+    _Atomic unsigned max_batch_frames;
 };
 struct input {
     struct vpn *v; unsigned char *reply; size_t capacity, reply_size; int error;
@@ -122,7 +121,7 @@ JNIEXPORT jlong JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNativ
     v->fd=fcntl(fd,F_DUPFD_CLOEXEC,0);if(v->fd<0){free(v);fail(e,"Cannot duplicate TUN fd");return 0;}
     int flags=fcntl(v->fd,F_GETFL);if(flags<0 || fcntl(v->fd,F_SETFL,flags|O_NONBLOCK)<0 || pthread_mutex_init(&v->peer_lock,NULL)!=0 || pthread_mutex_init(&v->usb_write_lock,NULL)!=0 || pthread_mutex_init(&v->usb_context_lock,NULL)!=0){close(v->fd);free(v);fail(e,"Cannot initialize VPN fd");return 0;}
     (*e)->GetByteArrayRegion(e,mac,0,6,(jbyte *)v->mac);(*e)->GetByteArrayRegion(e,address,0,16,(jbyte *)v->address);
-    pn_stream_init(&v->stream,512);v->max_batch_frames=8;v->error_window=now_ms();v->running=1;return (jlong)(uintptr_t)v;
+    pn_stream_init(&v->stream,512);v->max_batch_frames=1;v->error_window=now_ms();v->running=1;return (jlong)(uintptr_t)v;
 }
 static int process_input(struct vpn *v,const unsigned char *data,size_t length,
                          unsigned char *out,size_t ocap,jlong result[3]) {
@@ -139,24 +138,6 @@ static int process_input(struct vpn *v,const unsigned char *data,size_t length,
     if(count<0)return in.error? -in.error : -EIO;
     if(v->stream.errors!=previous){uint64_t now=now_ms();if(now-v->error_window>10000){v->error_window=now;v->window_errors=0;}v->window_errors+=(unsigned)(v->stream.errors-previous);if(v->window_errors>=16)return -3;}
     result[0]=(jlong)in.reply_size;result[1]=in.reply_count;result[2]=in.reply_count*86;return count;
-}
-JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_inputNtb(JNIEnv *e,jobject o,jlong h,jobject buffer,jint length,jobject reply,jlongArray metadata) {
-    (void)o;if(!buffer || !reply){fail(e,"Missing VPN input buffer");return -1;}struct vpn *v=handle(h);unsigned char *data=(*e)->GetDirectBufferAddress(e,buffer),*out=(*e)->GetDirectBufferAddress(e,reply);
-    jlong cap=(*e)->GetDirectBufferCapacity(e,buffer),ocap=(*e)->GetDirectBufferCapacity(e,reply);
-    if(!v || !data || !out || length<0 || length>cap || ocap<1024 || !metadata || (*e)->GetArrayLength(e,metadata)<3){fail(e,"Invalid VPN input buffers");return -1;}
-    jlong result[3]={0};
-    int count=process_input(v,data,(size_t)length,out,(size_t)ocap,result);
-    if(count<0){fail(e,count==-ETIMEDOUT?"TUN write timed out":"VPN input or TUN write failed");return -1;}
-    (*e)->SetLongArrayRegion(e,metadata,0,3,result);return count;
-}
-JNIEXPORT jlong JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_inputNtbPacked(JNIEnv *e,jobject o,jlong h,jobject buffer,jint length,jobject reply) {
-    (void)o;if(!buffer||!reply){fail(e,"Missing VPN input buffer");return -1;}
-    struct vpn *v=handle(h);unsigned char *data=(*e)->GetDirectBufferAddress(e,buffer),*out=(*e)->GetDirectBufferAddress(e,reply);
-    jlong cap=(*e)->GetDirectBufferCapacity(e,buffer),ocap=(*e)->GetDirectBufferCapacity(e,reply);
-    if(!v||!data||!out||length<0||length>cap||ocap<1024){fail(e,"Invalid VPN input buffers");return -1;}
-    jlong result[3]={0};int count=process_input(v,data,(size_t)length,out,(size_t)ocap,result);
-    if(count<0){fail(e,count==-ETIMEDOUT?"TUN write timed out":"VPN input or TUN write failed");return -1;}
-    return (count&0xffffLL)|((result[0]&0xffffLL)<<16)|((result[1]&0xffLL)<<32);
 }
 static size_t add_na_mac(unsigned char *ip,size_t len,const unsigned char *mac) {
     if(len<64 || ip[6]!=58 || ip[40]!=136)return len;
@@ -196,12 +177,7 @@ static int output_batch(struct vpn *v,unsigned char *out,size_t capacity,int tim
         pn_w16(out+20+count*4,(unsigned)offset);pn_w16(out+22+count*4,(unsigned)frame_len);
         if(offset>block)memset(out+block,0,offset-block);
         block=offset+frame_len;count++;
-        if(count==1 && v->batch_window_us && max_frames>1) {
-            struct timespec delay={0,(long)v->batch_window_us*1000};
-            while(nanosleep(&delay,&delay)<0 && errno==EINTR);
-            struct pollfd ready={v->fd,POLLIN,0};
-            if(poll(&ready,1,0)<=0)break;
-        }
+
     }
     if(!count)return 0;
     pn_w32(out,PN_NTH);pn_w16(out+4,12);pn_w16(out+8,(unsigned)block);pn_w16(out+10,12);
@@ -214,21 +190,14 @@ static int output_batch(struct vpn *v,unsigned char *out,size_t capacity,int tim
     metric_add(&v->tx_build_ns,now_ns()-build_start);
     return (int)block;
 }
-JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_outputNtb(JNIEnv *e,jobject o,jlong h,jobject buffer,jint timeout,jint max_frames) {
-    (void)o;if(!buffer){fail(e,"Missing VPN output buffer");return -1;}struct vpn *v=handle(h);unsigned char *out=(*e)->GetDirectBufferAddress(e,buffer);jlong capacity=(*e)->GetDirectBufferCapacity(e,buffer);
-    if(!v || !out || capacity<PN_OUT_LIMIT+1 || timeout<0 || max_frames<1 || max_frames>(int)PN_MAX_BATCH){fail(e,"Invalid VPN output buffer or timeout");return -1;}
-    int result=output_batch(v,out,(size_t)capacity,timeout,(unsigned)max_frames);
-    if(result<0)fail(e,"TUN read, poll, or IPv6 packet validation failed");
-    return result;
-}
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_snapshot(JNIEnv *e,jobject o,jlong h,jlongArray values) {
     (void)o;struct vpn *v=handle(h);
-    if(!v||!values||(*e)->GetArrayLength(e,values)<32){fail(e,"Invalid VPN metric buffer");return -1;}
-    unsigned long urb[6]={0};
+    if(!v||!values||(*e)->GetArrayLength(e,values)<33){fail(e,"Invalid VPN metric buffer");return -1;}
+    unsigned long urb[13]={0};
 #if defined(__linux__)
     vpn_linux_urb_snapshot(v->usb_context,urb);
 #endif
-    jlong result[32]={
+    jlong result[33]={
         (jlong)__atomic_load_n(&v->rx_chunks,__ATOMIC_RELAXED),
         (jlong)__atomic_load_n(&v->rx_direct_blocks,__ATOMIC_RELAXED),
         (jlong)__atomic_load_n(&v->rx_stream_copies,__ATOMIC_RELAXED),
@@ -250,9 +219,11 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
         (jlong)__atomic_load_n(&v->tx_build_ns,__ATOMIC_RELAXED),
         (jlong)urb[0],(jlong)urb[1],(jlong)urb[2],
         (jlong)urb[3],(jlong)urb[4],(jlong)urb[5],
-        0,0,0,0,0,0,0
+        (jlong)urb[6],(jlong)urb[7],(jlong)urb[8],
+        (jlong)urb[9],(jlong)urb[10],(jlong)urb[11],
+        (jlong)v->max_batch_frames,(jlong)urb[12]
     };
-    (*e)->SetLongArrayRegion(e,values,0,32,result);return 0;
+    (*e)->SetLongArrayRegion(e,values,0,33,result);return 0;
 }
 #if defined(__linux__)
 struct native_rx_context {
@@ -261,7 +232,6 @@ struct native_rx_context {
 };
 struct native_tx_context {
     struct vpn *v;
-    int batch_window_us;
 };
 static int native_rx_chunk(void *opaque,const unsigned char *data,size_t length) {
     struct native_rx_context *context=opaque;
@@ -311,11 +281,9 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
     if(result<0)fail(e,"VPN USBFS receiver failed");return result;
 }
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_runUsbSender(
-    JNIEnv *e,jobject o,jlong h,jint fd,jint out_endpoint,jint pipeline_depth,
-    jint max_frames,jint batch_window_us) {
+    JNIEnv *e,jobject o,jlong h,jint fd,jint out_endpoint,jint pipeline_depth) {
     (void)o;struct vpn *v=handle(h);
-    if(!v||fd<0||(out_endpoint&0x80)||pipeline_depth<0||pipeline_depth>2||
-       max_frames<1||max_frames>16||batch_window_us<0||batch_window_us>200){
+    if(!v||fd<0||(out_endpoint&0x80)||pipeline_depth!=2){
         fail(e,"Invalid VPN USB sender arguments");return -1;
     }
     pthread_mutex_lock(&v->usb_context_lock);
@@ -324,29 +292,17 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
     struct vpn_linux_urb_context *usb=v->usb_context;
     pthread_mutex_unlock(&v->usb_context_lock);
     if(!usb){fail(e,"Could not create VPN USBFS sender");return -ENOMEM;}
-    struct native_tx_context context={.v=v,.batch_window_us=batch_window_us};
-    v->max_batch_frames=(unsigned)max_frames;
-    v->batch_window_us=(unsigned)batch_window_us;
+    struct native_tx_context context={.v=v};
     int result=vpn_linux_urb_writer(usb,(unsigned)pipeline_depth,
-        (unsigned)max_frames,&v->running,native_tx_build,&context);
+        8,&v->running,native_tx_build,&context);
     if(result<0)fail(e,"VPN USBFS sender failed");return result;
 }
-JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_configure(
-    JNIEnv *e,jobject o,jlong h,jint max_frames,jint batch_window_us) {
+JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_enableBatching(
+    JNIEnv *e,jobject o,jlong h) {
     (void)o;struct vpn *v=handle(h);
-    if(!v||max_frames<1||max_frames>16||batch_window_us<0||batch_window_us>200){
-        fail(e,"Invalid VPN batching configuration");return -1;
-    }
-    v->max_batch_frames=(unsigned)max_frames;
-    v->batch_window_us=(unsigned)batch_window_us;
+    if(!v){fail(e,"VPN session already closed");return -1;}
+    v->max_batch_frames=8;
     return 0;
-}
-JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_capabilities(
-    JNIEnv *e,jobject o,jint fd,jlongArray values) {
-    (void)o;if(!values||(*e)->GetArrayLength(e,values)<1){fail(e,"Invalid USB capability buffer");return -1;}
-    uint64_t capabilities=0;int result=vpn_linux_usb_capabilities(fd,&capabilities);
-    if(result<0){fail(e,"USB capability query failed");return result;}
-    jlong value=(jlong)capabilities;(*e)->SetLongArrayRegion(e,values,0,1,&value);return 0;
 }
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_stop(
     JNIEnv *e,jobject o,jlong h) {

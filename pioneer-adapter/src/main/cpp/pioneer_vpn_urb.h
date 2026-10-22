@@ -65,8 +65,7 @@ int vpn_linux_urb_writer(struct vpn_linux_urb_context *context,
 int vpn_linux_urb_sync_write(struct vpn_linux_urb_context *context,
                              const unsigned char *data, size_t length);
 void vpn_linux_urb_snapshot(struct vpn_linux_urb_context *context,
-                            unsigned long values[6]);
-int vpn_linux_usb_capabilities(int fd, uint64_t *capabilities);
+                            unsigned long values[13]);
 #endif
 
 #endif

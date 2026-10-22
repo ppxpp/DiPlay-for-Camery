@@ -37,8 +37,18 @@ object PioneerWiredSession {
         if (current === owner) current = null
     }
 
-    @Synchronized fun firstFrame(id: Long) {
-        current?.takeIf { it.id == id }?.firstFrame = true
+    fun firstFrame(id: Long) {
+        val configure = synchronized(this) {
+            val owner = current?.takeIf { it.id == id && !it.firstFrame } ?: return
+            owner.firstFrame = true
+            if (owner.backend == Backend.VPN) PioneerDebugRuntime.vpnEnableBatching else null
+        }
+        // Native URB sender stays in JNI: it cannot observe the Kotlin flag by itself.
+        // Promote its startup single-frame limit exactly once after the first output.
+        if (configure != null) runCatching {
+            check(configure()) { "VPN batching owner already closed" }
+            PioneerConnectionTrace.mark("vpn-batch-enabled", "frames=${PioneerVpnIoPolicy.BATCH_PACKETS}")
+        }.onFailure { android.util.Log.e("DiPlayVpn", "Could not enable post-startup batching",it) }
     }
 
     @Synchronized fun controlAccepted(id: Long) {
