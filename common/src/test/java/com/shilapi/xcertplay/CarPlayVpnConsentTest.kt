@@ -132,17 +132,16 @@ class CarPlayVpnConsentTest {
 
     @Test
     @Config(sdk = [25])
-    fun pioneerVpnWaitsForRootRatherThanSkippingConsentAsLwip() {
+    fun pioneerVpnStartsUsbWorkWhileRootAuthorizationRunsInBackground() {
         org.robolectric.shadows.ShadowBuild.setModel("SABRESD_MX6DQ")
         org.robolectric.shadows.ShadowBuild.setDevice("tamago")
         val mode = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
         com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(activity, mode)
         try {
             ReflectionHelpers.setField(activity, "startupWiredBackend", mode)
-            ReflectionHelpers.setField(activity, "vpnRootPending", true)
             invoke("requestVpnConsent")
-            assertFalse(field("vpnReady"))
-            assertTrue(field("vpnRootPending"))
+            // VPN authorization now runs in initialization phase 2 instead of blocking USB setup.
+            assertTrue(field("vpnReady"))
             assertFalse(field("awaitingVpnConsent"))
             assertEquals(0, launches)
         } finally { activity.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }

@@ -76,9 +76,10 @@ class AudioRebufferDiagnosticsTest {
             // Check queue full flag reset when queue is empty
             set("droppedPacketsLogged", true)
             val audioPacketClass = Class.forName("com.shilapi.xcertplay.media.AudioRenderer\$AudioPacket")
-            val packetConstructor = audioPacketClass.declaredConstructors.single().apply { isAccessible = true }
+            val packetConstructor = audioPacketClass.declaredConstructors.first { it.parameterCount == 3 }
+                .apply { isAccessible = true }
             val dummyRtp = ByteArray(12 + 100)
-            val packetInstance = packetConstructor.newInstance(dummyRtp, 0)
+            val packetInstance = packetConstructor.newInstance(dummyRtp, 0, System.nanoTime())
 
             type.getDeclaredMethod("handle", audioPacketClass).apply { isAccessible = true }.invoke(renderer, packetInstance)
 
@@ -160,9 +161,10 @@ class AudioRebufferDiagnosticsTest {
             set("started", true)
             set("running", true)
             val audioPacketClass = Class.forName("com.shilapi.xcertplay.media.AudioRenderer\$AudioPacket")
-            val packetConstructor = audioPacketClass.declaredConstructors.single().apply { isAccessible = true }
+            val packetConstructor = audioPacketClass.declaredConstructors.first { it.parameterCount == 3 }
+                .apply { isAccessible = true }
             val dummyRtp = ByteArray(12 + 100)
-            val packetInstance = packetConstructor.newInstance(dummyRtp, 0)
+            val packetInstance = packetConstructor.newInstance(dummyRtp, 0, System.nanoTime())
 
             @Suppress("UNCHECKED_CAST")
             val queue = get("queue") as java.util.concurrent.BlockingQueue<Any>

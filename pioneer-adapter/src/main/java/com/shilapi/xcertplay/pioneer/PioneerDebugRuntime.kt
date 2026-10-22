@@ -44,7 +44,7 @@ object PioneerDebugRuntime {
     @Volatile var lwipReceiveWaitMillis = 1
     const val usbTxBatchFrames = 8
     @Volatile var redact: (String) -> String? = { it }
-    private val main = Handler(Looper.getMainLooper())
+    private val main by lazy { Handler(Looper.getMainLooper()) }
     private val logLock = Any()
 
     fun automaticStartEnabled(context: Context): Boolean =

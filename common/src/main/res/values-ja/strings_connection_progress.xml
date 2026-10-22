@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="connect_progress_permissions">権限</string>
+    <string name="connect_progress_channel">データチャネルを開始</string>
+    <string name="connect_progress_task_reused">満たされています／再利用</string>
+    <string name="connect_progress_task_skipped">不要</string>
+    <string name="connect_progress_task_failed">失敗</string>
+    <string name="connect_progress_task_retrying">再試行中</string>
+    <string name="connect_task_root">認証サービスを開始</string>
+    <string name="connect_task_config">接続設定を読み込み</string>
+    <string name="connect_task_device_detect">USBデバイスを検出</string>
+    <string name="connect_task_components">接続コンポーネントを読み込み</string>
+    <string name="connect_task_buffers">転送バッファを準備</string>
+    <string name="connect_task_permission_check">接続権限を確認</string>
+    <string name="connect_task_permission_request">不足している権限を要求</string>
+    <string name="connect_task_usb_permission">USB権限を確認済み</string>
+    <string name="connect_task_usb_open">USBデバイスを開く</string>
+    <string name="connect_task_usb_interfaces">デバイスインターフェースを準備</string>
+    <string name="connect_task_pair">iPhoneとペアリング</string>
+    <string name="connect_task_authenticate">認証チャネルを準備</string>
+    <string name="connect_task_vpn_permission">VPN権限を確認済み</string>
+    <string name="connect_task_tun">VPNインターフェースを作成</string>
+    <string name="connect_task_tun_info">インターフェース情報を読み取り</string>
+    <string name="connect_task_rules">ネットワークルールを設定</string>
+    <string name="connect_task_driver">ネットワークドライバを準備</string>
+    <string name="connect_task_interface">ネットワークインターフェースを設定</string>
+    <string name="connect_task_wireless_network">ワイヤレスネットワークを確立</string>
+    <string name="connect_task_stack">プロトコルスタックを初期化</string>
+    <string name="connect_task_io_init">データ転送を初期化</string>
+    <string name="connect_task_bridge">データブリッジを開始</string>
+    <string name="connect_task_channel_ready">データチャネル準備完了</string>
+    <string name="connect_task_session">CarPlayセッションを確立</string>
+    <string name="connect_task_media">メディアチャネルを準備</string>
+    <string name="connect_task_video_receive">最初の映像フレームを受信</string>
+    <string name="connect_task_video_decode">最初の映像フレームをデコード</string>
+    <string name="connect_task_video_render">最初のフレームを表示</string>
+    <string name="connect_task_wireless_link">ワイヤレスデバイスを接続</string>
+    <string name="connect_task_wireless_detect">iPhoneを検出</string>
+    <string name="connect_task_io_native">ネイティブUSB転送を初期化</string>
+    <string name="connect_progress_task_retry_count">再試行中 · %1$d 回目</string>
+    <string name="connect_task_rules_check">ネットワークルールを確認</string>
+    <string name="connect_task_network_ready">ネットワーク準備完了</string>
+    <string name="connect_progress_wait_root">認証サービスを待機中 · %1$s 秒</string>
+    <string name="connect_task_session_auth">セッションを認証</string>
+</resources>

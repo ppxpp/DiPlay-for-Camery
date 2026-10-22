@@ -46,6 +46,7 @@ class UpdateAvailabilityTest {
     }
 
     @Test fun reportShowsStateWithRelativeAges() {
+        UpdateChannelStore.save(context, UpdateChannel.STABLE)
         assertEquals(
             "Update check: background=on; channel=stable; lastSuccess=never; cachedRelease=none; " +
                 "lastResult=none (never); lastInstall=none (never)",

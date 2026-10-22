@@ -1,4 +1,5 @@
 <resources>
+    <string name="home_title">DiPlay 凱美瑞 A 導航適配版</string>
     <string name="existing_wifi_title">現有 Wi-Fi / 同一區域網路</string>
     <string name="existing_wifi_description">使用已有路由器或隨身 Wi-Fi。讓 iPhone 和車機保持連線同一網路，並透過它上網。</string>
     <string name="existing_wifi_hint">現有 Wi-Fi · 兩部裝置保持連線同一 Wi-Fi，藍牙保持開啟，無需開啟車機熱點。</string>

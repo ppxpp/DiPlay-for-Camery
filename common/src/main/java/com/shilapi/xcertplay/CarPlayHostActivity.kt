@@ -3635,7 +3635,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     /** Mirrors [persistMenuSettings]: a field staged there belongs here too. */
     private fun menuSettingsSignature(): Int = listOf(
-        hideBydCallPopup, gestureFingerCount, wirelessEnabled, mfiTarget, mfiI2cPath, remoteMfiServer, remoteMfiToken,
+        gestureFingerCount, wirelessEnabled, mfiTarget, mfiI2cPath, remoteMfiServer, remoteMfiToken,
         wirelessHotspotMode, existingWifiSsid, existingWifiPassphrase, manualHotspotSsid,
         manualHotspotPassphrase, manualHotspotBand, manualHotspotChannel, manualHotspotSecurity,
         locationReportingEnabled, autoStartOnBoot, advancedAudioChannelMapping, displayScaleTenths,

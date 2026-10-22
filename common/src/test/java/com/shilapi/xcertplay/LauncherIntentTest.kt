@@ -69,7 +69,9 @@ class LauncherIntentTest {
         ReflectionHelpers.setField(activity, "connectionSettingsReturnCategory", SettingsCategory.ADVANCED)
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "onNewIntent",
             ReflectionHelpers.ClassParameter(Intent::class.java, launcher()))
-        assertEquals("home", ReflectionHelpers.getField<String>(activity, "page"))
+        // Redirecting without re-rendering home avoids a flash before the projection opens.
+        assertEquals("settings", ReflectionHelpers.getField<String>(activity, "page"))
+        assertEquals(true, ReflectionHelpers.getField<Boolean>(activity, "forwardingToProjection"))
         assertNull(ReflectionHelpers.getField<SettingsCategory?>(activity, "connectionSettingsReturnCategory"))
         assertEquals(CarPlayHostActivity::class.java.name,
             shadowOf(activity).nextStartedActivity?.component?.className)
