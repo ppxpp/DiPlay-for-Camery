@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
-import android.net.VpnService
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -401,22 +400,21 @@ class PioneerDebugService : Service() {
                 put("sessionId", session?.id ?: 0L)
             })
         val conflict = runCatching { PioneerVpnPermissionGrant.conflict(this) }.getOrDefault("VPN_CONFLICT_QUERY_FAILED")
-        // prepare() can replace a previously authorized VPN; status queries must not do that.
-        val consent = runCatching { if (conflict == null) VpnService.prepare(this) else null }
-        val vpn = JSONObject().put("authorized", if (conflict == null) consent.isSuccess && consent.getOrNull() == null else JSONObject.NULL)
-            .put("prepareChecked", conflict == null).put("conflict", conflict ?: JSONObject.NULL)
-            .put("consentComponent", consent.getOrNull()?.component?.flattenToShortString() ?: "")
+        // prepare() changes the prepared owner, even without a consent window. Diagnostics
+        // must not complete missing initialization and hide a first-connection failure.
+        val permission = PioneerVpnPermissionGrant.status(this)
+        val vpn = JSONObject().put("authorized", permission.opt("preconsented"))
+            .put("prepareChecked", false).put("conflict", conflict ?: JSONObject.NULL)
+            .put("consentComponent", "")
             .put("tunNodeExists", File("/dev/tun").exists() || File("/dev/net/tun").exists())
-        consent.exceptionOrNull()?.let { vpn.put("error", it.toString()) }
-        vpn.put("consentActivityAvailable", consent.getOrNull()?.component?.let {
-            runCatching { packageManager.getActivityInfo(it, 0).enabled }.getOrDefault(false)
-        } ?: false)
+            .put("consentActivityAvailable", JSONObject.NULL)
         val devices = getSystemService(UsbManager::class.java).deviceList.values.map { device ->
             JSONObject().put("vid", device.vendorId).put("pid", device.productId).put("path", device.deviceName)
                 .put("permission", getSystemService(UsbManager::class.java).hasPermission(device))
         }
-        return JSONObject().put("package", packageName).put("version", packageManager.getPackageInfo(packageName, 0).versionName)
-            .put("versionCode", packageManager.getPackageInfo(packageName, 0).versionCode)
+        val installed = packageManager.getPackageInfo(packageName, 0)
+        return JSONObject().put("package", packageName).put("version", installed.versionName)
+            .put("versionCode", installed.versionCode).put("packageLastUpdateTimeMs", installed.lastUpdateTime)
             .put("port", PioneerDebugRuntime.port).put("listener", PioneerDebugRuntime.listenerState)
             .put("addresses", JSONArray(addresses())).put("vpn", vpn).put("host", PioneerDebugRuntime.snapshot())
             .put("usbConfigurationMode", PioneerUsbPolicy.configurationMode(this))

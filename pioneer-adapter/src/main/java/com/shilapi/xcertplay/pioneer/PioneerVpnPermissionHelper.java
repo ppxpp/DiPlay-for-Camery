@@ -104,6 +104,17 @@ public final class PioneerVpnPermissionHelper {
                 String after = query(pkg, user, guard);
                 result.put("appOpAfter", after).put("appOpAllowed", isAllowed(after));
                 if (isAllowed(after) != action.equals("GRANT")) throw new IOException("VPN_APPOP_READBACK_MISMATCH");
+                if (action.equals("GRANT")) {
+                    guard.check();
+                    requireNoOtherVpn(pkg, user);
+                    // AppOps pre-consent alone does not select the VPN owner after boot.
+                    // Complete the system preparation here before reporting authorization success.
+                    long preparing = SystemClock.elapsedRealtime();
+                    prepareTargetVpn(pkg, user);
+                    result.put("targetPrepared", true)
+                        .put("prepareMs", SystemClock.elapsedRealtime() - preparing);
+                    guard.check();
+                }
             }
             if (action.equals("INSPECT")) {
                 JSONObject chains = new JSONObject();
@@ -226,6 +237,18 @@ public final class PioneerVpnPermissionHelper {
         NativeNcmFirewall.Result result = NativeNcmCommand.run(arguments("get", pkg, user), 1000);
         if (result.exit != 0) throw new IOException("VPN_APPOP_QUERY_FAILED exit=" + result.exit + " " + result.output);
         return result.output;
+    }
+    private static void prepareTargetVpn(String pkg, int user) throws Exception {
+        IBinder binder = (IBinder) Class.forName("android.os.ServiceManager").getMethod("checkService", String.class)
+            .invoke(null, "connectivity");
+        if (binder == null) throw new IOException("VPN_CONNECTIVITY_SERVICE_MISSING");
+        Class<?> api = Class.forName("android.net.IConnectivityManager");
+        Object service = Class.forName("android.net.IConnectivityManager$Stub").getMethod("asInterface", IBinder.class).invoke(null, binder);
+        java.lang.reflect.Method prepare = api.getMethod("prepareVpn", String.class, String.class, int.class);
+        // Only the privileged confirmation form accepts a target package with a different UID.
+        // The application form (pkg, null) checks the caller UID and would revoke this owner.
+        if (!Boolean.TRUE.equals(prepare.invoke(service, null, pkg, user)))
+            throw new IOException("VPN_TARGET_PREPARE_FAILED");
     }
     private static boolean requireNoOtherVpn(String pkg, int user) throws Exception {
         IBinder binder = (IBinder) Class.forName("android.os.ServiceManager").getMethod("checkService", String.class)
