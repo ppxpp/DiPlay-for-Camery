@@ -39,14 +39,13 @@ fun ConnectionProgress.status(status: CarPlayStatus) {
         CarPlayStatus.DiscoveringIphone, CarPlayStatus.WaitingForReenumeration,
         CarPlayStatus.SelectingConfiguration, CarPlayStatus.OpeningDataPaths,
         CarPlayStatus.ConnectingBluetooth -> step(ConnectionStep.DEVICE)
-        CarPlayStatus.WaitingForIphone,
+        CarPlayStatus.WaitingForIphone, CarPlayStatus.RequestingIphonePermission,
         CarPlayStatus.WaitingForPairedIphone -> step(ConnectionStep.DEVICE, true)
         CarPlayStatus.StartingHotspot, is CarPlayStatus.HotspotReady,
         CarPlayStatus.AttachingNetwork -> step(ConnectionStep.NETWORK)
         CarPlayStatus.Pairing, CarPlayStatus.ConnectingControl,
         CarPlayStatus.RunningWireless, CarPlayStatus.RunningControl -> step(ConnectionStep.CONTROL)
         CarPlayStatus.WirelessActive, CarPlayStatus.WirelessActiveFallback -> sessionRequested()
-        CarPlayStatus.RequestingIphonePermission -> step(ConnectionStep.PERMISSIONS, true)
         CarPlayStatus.ControlEnded, is CarPlayStatus.Failed -> stop(ConnectionOutcome.FAILED)
     }
 }
