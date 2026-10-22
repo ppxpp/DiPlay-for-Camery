@@ -16,7 +16,7 @@ object PioneerVpnPacketNative {
     external fun close(handle: Long)
 
     fun snapshotJson(handle: Long): org.json.JSONObject = org.json.JSONObject().apply {
-        val values = LongArray(33)
+        val values = LongArray(36)
         check(snapshot(handle, values) == 0) { "VPN metric snapshot failed" }
         put("rxChunks", values[0])
         put("rxDirectBlocks", values[1])
@@ -51,5 +51,8 @@ object PioneerVpnPacketNative {
         put("usbTxPollTimeouts", values[30])
         put("configuredTxBatchFrames", values[31])
         put("usbRxCompletionOrderRegressions", values[32])
+        put("rxProcessNs", values[33]) // Parse and TUN writes, excluding USB completion wait.
+        put("rxBytes", values[34]) // USB payload bytes, including NCM framing.
+        put("txBuiltBytes", values[35]) // Built NCM bytes, not proof of successful USB delivery.
     }
 }

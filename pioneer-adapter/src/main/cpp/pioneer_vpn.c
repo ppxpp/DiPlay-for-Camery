@@ -43,6 +43,9 @@ struct vpn {
     VPN_METRIC(tx_tun_reads);
     VPN_METRIC(tx_tun_ready_drains);
     VPN_METRIC(tx_build_ns);
+    VPN_METRIC(rx_process_ns);
+    VPN_METRIC(rx_bytes);
+    VPN_METRIC(tx_built_bytes);
     _Atomic unsigned max_batch_frames;
 };
 struct input {
@@ -125,6 +128,7 @@ JNIEXPORT jlong JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNativ
 }
 static int process_input(struct vpn *v,const unsigned char *data,size_t length,
                          unsigned char *out,size_t ocap,jlong result[3]) {
+    uint64_t process_start=now_ns();
     result[0]=result[1]=result[2]=0;
     struct input in={.v=v,.reply=out,.capacity=ocap};uint64_t previous=v->stream.errors;
     uint64_t copied_previous=v->stream.copied_bytes;
@@ -135,6 +139,8 @@ static int process_input(struct vpn *v,const unsigned char *data,size_t length,
     if(count>0)metric_add(&v->rx_frames,(uint64_t)count);
     if(v->stream.errors>previous)metric_add(&v->rx_parse_errors,v->stream.errors-previous);
     if(count>=0 && finish_replies(&in)<0)count=-1;
+    metric_add(&v->rx_process_ns,now_ns()-process_start);
+    metric_add(&v->rx_bytes,length);
     if(count<0)return in.error? -in.error : -EIO;
     if(v->stream.errors!=previous){uint64_t now=now_ms();if(now-v->error_window>10000){v->error_window=now;v->window_errors=0;}v->window_errors+=(unsigned)(v->stream.errors-previous);if(v->window_errors>=16)return -3;}
     result[0]=(jlong)in.reply_size;result[1]=in.reply_count;result[2]=in.reply_count*86;return count;
@@ -149,7 +155,7 @@ static size_t add_na_mac(unsigned char *ip,size_t len,const unsigned char *mac) 
 /* Drain only packets already ready: no batching timer and no extra payload copy.
  * Header reserves eight datagram entries; a short final batch may keep unused space. */
 static int output_batch(struct vpn *v,unsigned char *out,size_t capacity,int timeout,unsigned max_frames) {
-    uint64_t build_start=now_ns();metric_add(&v->tx_polls,1);
+    metric_add(&v->tx_polls,1);
     if(timeout>100)timeout=100;
     unsigned char peer[6];int known=__atomic_load_n(&v->has_peer,__ATOMIC_ACQUIRE);
     if(known){pthread_mutex_lock(&v->peer_lock);memcpy(peer,v->peer,6);pthread_mutex_unlock(&v->peer_lock);}
@@ -158,6 +164,7 @@ static int output_batch(struct vpn *v,unsigned char *out,size_t capacity,int tim
     if(ready<0 && errno==EINTR)return 0;
     if(ready<0 || (p.revents&(POLLERR|POLLHUP|POLLNVAL)))return -1;
     if(!ready)return 0;
+    uint64_t build_start=now_ns();
     size_t block=(12+8+4*(max_frames+1)+3)&~(size_t)3;unsigned count=0;
     memset(out,0,block);
     while(count<max_frames) {
@@ -188,16 +195,17 @@ static int output_batch(struct vpn *v,unsigned char *out,size_t capacity,int tim
     if(count==max_frames)metric_add(&v->tx_batch_full,1);
     if(count<=16)metric_add(&v->tx_batch_hist[count],1);
     metric_add(&v->tx_build_ns,now_ns()-build_start);
+    metric_add(&v->tx_built_bytes,block);
     return (int)block;
 }
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_snapshot(JNIEnv *e,jobject o,jlong h,jlongArray values) {
     (void)o;struct vpn *v=handle(h);
-    if(!v||!values||(*e)->GetArrayLength(e,values)<33){fail(e,"Invalid VPN metric buffer");return -1;}
+    if(!v||!values||(*e)->GetArrayLength(e,values)<36){fail(e,"Invalid VPN metric buffer");return -1;}
     unsigned long urb[13]={0};
 #if defined(__linux__)
     vpn_linux_urb_snapshot(v->usb_context,urb);
 #endif
-    jlong result[33]={
+    jlong result[36]={
         (jlong)__atomic_load_n(&v->rx_chunks,__ATOMIC_RELAXED),
         (jlong)__atomic_load_n(&v->rx_direct_blocks,__ATOMIC_RELAXED),
         (jlong)__atomic_load_n(&v->rx_stream_copies,__ATOMIC_RELAXED),
@@ -221,9 +229,12 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
         (jlong)urb[3],(jlong)urb[4],(jlong)urb[5],
         (jlong)urb[6],(jlong)urb[7],(jlong)urb[8],
         (jlong)urb[9],(jlong)urb[10],(jlong)urb[11],
-        (jlong)v->max_batch_frames,(jlong)urb[12]
+        (jlong)v->max_batch_frames,(jlong)urb[12],
+        (jlong)__atomic_load_n(&v->rx_process_ns,__ATOMIC_RELAXED),
+        (jlong)__atomic_load_n(&v->rx_bytes,__ATOMIC_RELAXED),
+        (jlong)__atomic_load_n(&v->tx_built_bytes,__ATOMIC_RELAXED)
     };
-    (*e)->SetLongArrayRegion(e,values,0,33,result);return 0;
+    (*e)->SetLongArrayRegion(e,values,0,36,result);return 0;
 }
 #if defined(__linux__)
 struct native_rx_context {

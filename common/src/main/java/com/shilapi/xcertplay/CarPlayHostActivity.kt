@@ -893,6 +893,16 @@ class CarPlayHostActivity : ComponentActivity() {
                 .put("connectionOverlayVisible", connectionPanel?.visibility == View.VISIBLE)
                 .put("firstOutput", controller?.connectionProgress?.hasRendered)
                 .put("progressOutcome", controller?.connectionProgress?.snapshot()?.outcome?.name)
+                .put("connectionProgress", controller?.connectionProgress?.snapshot()?.let { progress ->
+                    org.json.JSONObject().put("attempt", progress.attempt)
+                        .put("elapsedMs", progress.elapsedMillis).put("overallMs", progress.overallMillis)
+                        .put("current", progress.current.key).put("outcome", progress.outcome.name)
+                        .put("steps", org.json.JSONArray(progress.steps.map { step ->
+                            org.json.JSONObject().put("id", step.key)
+                                .put("durationMs", progress.durations[step] ?: 0L)
+                                .put("visited", step in progress.visited)
+                        }))
+                })
                 .put("videoRendered", sink?.liveVideoCounters()?.rendered)
                 .put("videoReceived", sink?.liveVideoCounters()?.received)
                 .put("settingsMenuOpen", menuOpen).put("hostWindowFocused", hasWindowFocus())
