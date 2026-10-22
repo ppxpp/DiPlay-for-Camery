@@ -1,0 +1,132 @@
+---
+import AdminUserMenu from './AdminUserMenu.vue';
+import { site } from '../data/site.ts';
+
+interface Props {
+  current?: 'home' | 'history' | 'admin';
+}
+
+const { current = 'home' } = Astro.props;
+const isHome = current === 'home';
+const sourceUrl = site.sourceRefUrl || site.repoUrl;
+const docsHref = isHome ? '#docs' : '/#docs';
+const beforeHref = isHome ? '#before' : '/#before';
+---
+
+<header class="topbar" data-site-header>
+  <div class="shell topbar-inner">
+    <a class="brand" href="/">
+      <img src="/app-icon.png" alt="" width="40" height="40" />
+      <span>{site.shortName}</span>
+    </a>
+
+    <div class="topbar-actions">
+      <nav class="topnav" id="site-nav" aria-label="主导航">
+        <a href="/" aria-current={current === 'home' ? 'page' : undefined}>首页</a>
+        <a href="/history/" aria-current={current === 'history' ? 'page' : undefined}>历史版本</a>
+        <a href={docsHref}>文档</a>
+        <a href={beforeHref}>试用前须知</a>
+        <a class="github" href={sourceUrl} target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </nav>
+
+      {current === 'admin' && <AdminUserMenu client:load />}
+
+      <button
+        class="menu-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="site-nav"
+        aria-label="打开导航菜单"
+        data-menu-toggle
+      >
+        <span class="menu-bars" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 7h16M4 12h16M4 17h16"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </span>
+        <span class="menu-close" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="m6 6 12 12M18 6 6 18"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<script>
+  const header = document.querySelector('[data-site-header]');
+  const toggle = header && header.querySelector('[data-menu-toggle]');
+  const nav = header && header.querySelector('#site-nav');
+
+  if (header && toggle && nav) {
+    const isOpen = () => toggle.getAttribute('aria-expanded') === 'true';
+
+    const setOpen = (open) => {
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
+      header.toggleAttribute('data-menu-open', open);
+      if (open) {
+        requestAnimationFrame(() => {
+          const firstLink = nav.querySelector('a');
+          if (firstLink) firstLink.focus({ preventScroll: true });
+        });
+      }
+    };
+
+    toggle.addEventListener('click', () => {
+      setOpen(!isOpen());
+    });
+
+    nav.addEventListener('click', (event) => {
+      if (!isOpen()) return;
+      const link = event.target instanceof Element ? event.target.closest('a') : null;
+      if (!link) return;
+      setOpen(false);
+      const href = link.getAttribute('href') || '';
+      if (href.startsWith('#')) {
+        const target = document.querySelector(href);
+        if (target) target.focus({ preventScroll: true });
+      } else {
+        toggle.focus({ preventScroll: true });
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !isOpen()) return;
+      setOpen(false);
+      toggle.focus();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (event.target instanceof Element && event.target.closest('[data-admin-user-trigger]')) {
+        if (isOpen()) setOpen(false);
+        return;
+      }
+      if (!isOpen() || header.contains(event.target)) return;
+      setOpen(false);
+    });
+
+    window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => {
+      if (event.matches && isOpen()) setOpen(false);
+    });
+  }
+</script>

@@ -179,6 +179,12 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     // CH341 USB\VID_1A86&PID_5512&REV_0304 is the deployment-supplied bridge identity.
+    private var startupWiredBackend: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode? = null
+    private var vpnRootPending = false
+    private var vpnRootAttempted = false
+    @Volatile private var vpnRootGeneration = 0
+    private var vpnRootFailureDialog: android.app.AlertDialog? = null
+
     private fun createRuntimeConfig(): CarPlayRuntimeConfig = CarPlayRuntimeConfig(
         mfiTarget = mfiTarget,
         ch341Devices = if (mfiTarget == MfiTarget.USB_CH341) {
@@ -214,8 +220,9 @@ class CarPlayHostActivity : ComponentActivity() {
         wirelessBluetoothDeviceAddress = DiPlayPreferences.phoneAddress(this),
         remoteRfcommGateway = if (wirelessEnabled) RemoteGatewaySettings.loadSelected(this, wirelessHotspotMode) else null,
         transport = if (wirelessEnabled) CarPlayTransport.WIRELESS else CarPlayTransport.WIRED,
-        nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this),
-        optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.optimizedEnabled(this),
+        nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM,
+        optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED,
+        wiredBackend = startupWiredBackend,
         wirelessHotspotMode = wirelessHotspotMode,
         wifiP2pPreferredChannel = AirPlayPersistence.loadWifiP2pPreferredChannel(this),
         manualHotspotSsid = manualHotspotSsid,
@@ -833,6 +840,15 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val startupNs = System.nanoTime()
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.appStart()
+        if (!AirPlayPersistence.loadWirelessEnabled(this) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.reset()
+            com.shilapi.xcertplay.pioneer.PioneerRootSession.start(applicationContext)
+        }
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_STARTUP host create")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
         NavigationWidgetUpdater.attach(applicationContext)
@@ -844,10 +860,15 @@ class CarPlayHostActivity : ComponentActivity() {
         if (isIphoneUsbAttachment(intent)) {
             AirPlayPersistence.saveWirelessEnabled(this, false)
         }
+        com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
+            wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
+            hasSession = { CarPlayBackgroundSession.hasSession() },
+            log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
         if (runCatching { DiPlayBootstrap.ensure(this, AirPlayPersistence.loadMfiTarget(this)) }.isFailure) {
             OwnScreenStart.start(this, Intent(this, DiPlayActivity::class.java), ::appendLog)
             finish(); return
         }
+        CarPlayBackgroundSession.markHost(this)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
@@ -879,7 +900,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 .put("vehicleNight", com.shilapi.xcertplay.pioneer.CamryDayNight.latestNight)
                 .put("microphoneProbe", com.shilapi.xcertplay.media.MicrophoneProbe.snapshot())
                 .put("diagnosticLogDropped", AsyncDiagnosticLog.droppedCount)
-        }, retryVpn = { requestStartupPrerequisites() }, videoGesture = ::startDebugVideoGesture, videoTap = ::debugVideoTap,
+        }, retryVpn = { if (!vpnRootPending) vpnRootAttempted = false; requestStartupPrerequisites() }, videoGesture = ::startDebugVideoGesture, videoTap = ::debugVideoTap,
             hostUi = ::debugHostUi,
             videoSnapshot = {
                 check(!debugGestureRunning) { "Wait for timed gesture to complete before capturing" }
@@ -887,6 +908,19 @@ class CarPlayHostActivity : ComponentActivity() {
             })
         locationPermissionAvailable = hasFineLocationPermission()
         setContentView(buildContentView())
+        appendLog("UI_STARTUP content-created elapsedMs=${(System.nanoTime() - startupNs) / 1_000_000L}")
+        val startupDecor = window.decorView
+        startupDecor.viewTreeObserver.addOnDrawListener(object : android.view.ViewTreeObserver.OnDrawListener {
+            private var reported = false
+            override fun onDraw() {
+                if (reported) return
+                reported = true
+                appendLog("UI_STARTUP first-draw elapsedMs=${(System.nanoTime() - startupNs) / 1_000_000L}")
+                startupDecor.post {
+                    if (startupDecor.viewTreeObserver.isAlive) startupDecor.viewTreeObserver.removeOnDrawListener(this)
+                }
+            }
+        })
         applyFullscreenMode()
         onBackPressedDispatcher.addCallback(
             this,
@@ -1043,13 +1077,35 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun requestVpnConsent() {
         if (awaitingVpnConsent) return
-        if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this) ||
-            com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
-            vpnReady = true // This backend has no system VPN prerequisite.
+        val selected = if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this))
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this) else null
+        if (startupWiredBackend != selected) {
+            startupWiredBackend = selected
+            vpnRootGeneration++
+            vpnRootPending = false
+            vpnRootAttempted = false
+            vpnReady = false
+            vpnRootFailureDialog?.dismiss()
+        }
+        if (selected != null && selected != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
+            (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this) ||
+                com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this))) {
+            vpnReady = true
             appendLog("Selected wired backend requires no system VPN consent")
             maybeStartCarPlay()
             return
         }
+        if (selected == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
+            // USB/protocol work may proceed while VPN authorization runs in initialization phase 2.
+            vpnReady = true
+            maybeStartCarPlay()
+            return
+        }
+        requestSystemVpnConsent()
+    }
+
+    private fun requestSystemVpnConsent() {
+        if (awaitingVpnConsent) return
         val consent = try {
             CarPlayVpnService.prepare(this)
         } catch (error: ActivityNotFoundException) {
@@ -1079,7 +1135,9 @@ class CarPlayHostActivity : ComponentActivity() {
         // A failed launch clears the pending state; a late result must not authorize that attempt.
         if (!awaitingVpnConsent) return
         awaitingVpnConsent = false
-        vpnReady = resultCode == RESULT_OK
+        vpnReady = resultCode == RESULT_OK &&
+            (startupWiredBackend != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN ||
+                runCatching { CarPlayVpnService.prepare(this) == null }.getOrDefault(false))
         if (vpnReady) {
             maybeStartCarPlay()
         } else {
@@ -1096,7 +1154,8 @@ class CarPlayHostActivity : ComponentActivity() {
         Log.w(TAG, diagnostic, error)
         appendLog(diagnostic)
         setStatus(R.string.vpn_authorization_unavailable)
-        if (!vpnAdbConsentTried) preConsentVpnOverAdb()
+        if (!vpnAdbConsentTried && startupWiredBackend !=
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) preConsentVpnOverAdb()
     }
 
     /** Without a consent dialog, the car's approved adb can allow the VPN instead (#604). */
@@ -1159,6 +1218,7 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE host new-intent action=${intent.action} controller=${controller != null}")
         if (isIphoneUsbAttachment(intent)) {
             if (wirelessEnabled) {
                 if (menuOpen) cancelSettingsEdits()
@@ -1949,6 +2009,10 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        vpnRootGeneration++
+        vpnRootFailureDialog?.dismiss()
+        vpnRootFailureDialog = null
+        CarPlayBackgroundSession.clearHost(this)
         stopObservingCamryNight?.invoke()
         stopObservingCamryNight = null
         PioneerDebugIntegration.detachHost(this)
@@ -2074,6 +2138,10 @@ class CarPlayHostActivity : ComponentActivity() {
                 reconnectAttempts = 0
                 visibility = View.GONE
                 restartCarPlay(getString(R.string.connecting_to_your_iphone))
+                if (!wirelessEnabled && !vpnReady) {
+                    vpnRootAttempted = false
+                    requestStartupPrerequisites()
+                }
             }
             startupRetryButton = this
         }
@@ -2169,10 +2237,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 setMargins(0, dp(12), dp(12), 0)
             })
         }
-        settingsMenu = buildSettingsMenu().apply { visibility = View.GONE }
-        root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
-        safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
-        root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
+        // Settings and the safe-area editor are built only when opened, after the connection UI is visible.
         videoView = video
         smoothVideo = AirPlayPersistence.loadSmoothVideo(this)
         directVideoOutput = AirPlayPersistence.loadDirectVideoOutput(this)
@@ -2891,6 +2956,8 @@ class CarPlayHostActivity : ComponentActivity() {
         }.apply {
             setBackgroundColor(SWIPE_SCRIM_COLOR)
             isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             layoutDirection = resources.configuration.layoutDirection
         }
         val panel = FrameLayout(this).apply {
@@ -5205,6 +5272,11 @@ class CarPlayHostActivity : ComponentActivity() {
             appendLog("Safe area editor is unavailable before display layout")
             return
         }
+        if (safeAreaEditor == null) {
+            val root = videoView?.parent as? FrameLayout ?: return
+            safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
+            root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
+        }
         val editorView = safeAreaEditorView ?: return
         val initial = AirPlayPersistence.loadSafeAreaRect(this, size.width, size.height)
             ?: AirPlaySafeArea.default(size.width, size.height)
@@ -5427,6 +5499,17 @@ class CarPlayHostActivity : ComponentActivity() {
                     callPopupSessionReady = false
                     updateCallPopupGuard()
                     startupRetryBudget.disconnected()
+                    if (message.contains("VPN_PERMISSION_REVOKED")) {
+                        startupRetryStopped = true
+                        vpnReady = false
+                        vpnRootAttempted = false
+                        startupRetryButton?.visibility = View.VISIBLE
+                        setStatus(R.string.vpn_root_failed)
+                        appendLog("VPN_PERMISSION_REVOKED; stopped automatic recovery")
+                        val revokedController = controller
+                        teardownExecutor.execute { revokedController?.close() }
+                        return@runOnUiThread
+                    }
                     if (menuOpen) {
                         recoveryPendingAfterMenu = true
                         return@runOnUiThread
@@ -5607,9 +5690,22 @@ class CarPlayHostActivity : ComponentActivity() {
         return true
     }
 
+    private val resumeAfterUpdate = object : Runnable {
+        override fun run() {
+            if (isFinishing || isDestroyed || shuttingDown.get()) return
+            if (com.shilapi.xcertplay.pioneer.PioneerDebugUpdateGuard.isBusy()) {
+                mainHandler.postDelayed(this, 250)
+            } else {
+                maybeStartCarPlay()
+            }
+        }
+    }
+
     private fun startCarPlay(size: DisplaySize) {
         if (com.shilapi.xcertplay.pioneer.PioneerDebugUpdateGuard.isBusy()) {
             appendLog("CarPlay start deferred: APK update in progress")
+            mainHandler.removeCallbacks(resumeAfterUpdate)
+            mainHandler.postDelayed(resumeAfterUpdate, 250)
             return
         }
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
@@ -6015,6 +6111,13 @@ class CarPlayHostActivity : ComponentActivity() {
             recreate()
             return
         }
+        if (!wirelessEnabled && controller == null &&
+            startupWiredBackend != (if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this))
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this) else null)) {
+            vpnReady = false
+            requestVpnConsent()
+            return
+        }
         val size = activeDisplaySize ?: return
         val transportReady = if (wirelessEnabled) wirelessPermissionsReady else vpnReady
         val locationReady = !locationReportingEnabled || locationPermissionAvailable
@@ -6219,7 +6322,11 @@ class CarPlayHostActivity : ComponentActivity() {
         // Reuse the prepared controls until settings changed. Cancelled edits explicitly invalidate
         // them before restoring fields, so stale slider/text values cannot reappear.
         val rebuild = settingsMenuNeedsRebuild || settingsMenuRenderedState != settingsMenuRenderState()
-        settingsMenu?.takeIf { rebuild }?.let { previous ->
+        if (settingsMenu == null) {
+            val root = videoView?.parent as? FrameLayout ?: return
+            settingsMenu = buildSettingsMenu().apply { visibility = View.GONE }
+            root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
+        } else settingsMenu?.takeIf { rebuild }?.let { previous ->
             val parent = previous.parent as ViewGroup
             val index = parent.indexOfChild(previous)
             parent.removeView(previous)
@@ -6231,6 +6338,7 @@ class CarPlayHostActivity : ComponentActivity() {
         updateCallPopupGuard()
         gestureOverlay?.visibility = View.GONE
         settingsMenu?.visibility = View.VISIBLE
+        focusSettingsMenuRoot()
         safeAreaEditor?.visibility = View.GONE
         syncMfiSettingsControls()
         updateManualHotspotFields()
@@ -6245,6 +6353,27 @@ class CarPlayHostActivity : ComponentActivity() {
             "loadMs=${(loadedAt - openingStarted) / 1_000_000L} baselineMs=${(baselineAt - loadedAt) / 1_000_000L} " +
             "buildMs=${(builtAt - baselineAt) / 1_000_000L} rebuilt=$rebuild " +
             "iconMs=${(iconEndedAt - iconStartedAt) / 1_000_000L}")
+    }
+
+    /**
+     * The connection page starts with editable Wi-Fi fields. Without an explicit non-input
+     * focus target, the platform focuses the first EditText and raises the IME; on some head
+     * units that IME window is invisible and blocks the settings overlay.
+     */
+    private fun focusSettingsMenuRoot() {
+        val menu = settingsMenu ?: return
+        val keyboard = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as? android.view.inputmethod.InputMethodManager
+        fun hideKeyboard() {
+            keyboard?.hideSoftInputFromWindow(menu.windowToken ?: window.decorView.windowToken, 0)
+        }
+
+        menu.findFocus()?.clearFocus()
+        hideKeyboard()
+        menu.post {
+            menu.requestFocus()
+            hideKeyboard()
+        }
     }
 
     private fun openPicturePanel() {
@@ -6573,6 +6702,7 @@ class CarPlayHostActivity : ComponentActivity() {
         check(!debugGestureRunning) { "Wait for timed gesture to finish" }
         val started = System.nanoTime()
         val result = when (action) {
+            "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE) == true
             "AUDIO_TAKE", "AUDIO_RELEASE" -> {
                 check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice())
                 val session = checkNotNull(activeAirPlaySession) { "No active CarPlay session" }
@@ -7140,6 +7270,10 @@ internal fun statusBarHiddenByAnotherWindow(display: CarPlaySessionDisplay, widt
 
 /** Process-local hand-off for keeping the CarPlay session alive while no Activity is visible. */
 internal object CarPlayBackgroundSession {
+    @Volatile private var hostActivity: java.lang.ref.WeakReference<CarPlayHostActivity>? = null
+    fun markHost(activity: CarPlayHostActivity) { hostActivity = java.lang.ref.WeakReference(activity) }
+    fun clearHost(activity: CarPlayHostActivity) { if (hostActivity?.get() === activity) hostActivity = null }
+    fun hasHost(): Boolean = hostActivity?.get()?.let { !it.isFinishing && !it.isDestroyed } == true
     @Volatile var active = false
     @Volatile var callPopupReady = false
     private var stopAction: (((() -> Unit)) -> Unit)? = null

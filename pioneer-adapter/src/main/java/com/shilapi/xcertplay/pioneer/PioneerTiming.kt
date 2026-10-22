@@ -6,18 +6,15 @@ class PioneerTiming(private val name: String) {
     private var count = 0L
     private var maxNs = 0L
     private var errors = 0L
-    @Synchronized fun record(nanos: Long, failed: Boolean = false) {
+    fun record(nanos: Long, failed: Boolean = false) {
         if (!PioneerDiagnostics.enabled) return
+        synchronized(this) { recordEnabled(nanos, failed) }
+    }
+    private fun recordEnabled(nanos: Long, failed: Boolean) {
         val us = ((nanos.coerceAtLeast(0) + 999) / 1_000).coerceAtLeast(1)
-        val slot = if (false) {
-            var legacy = 0
-            while (legacy < buckets.lastIndex && limitUs(legacy) < us) legacy++
-            legacy
-        } else {
-            val exponent = 63 - java.lang.Long.numberOfLeadingZeros(us)
-            val base = 1L shl exponent
-            (exponent * 4 + ((us - base) * 4 + base - 1) / base).toInt().coerceAtMost(buckets.lastIndex)
-        }
+        val exponent = 63 - java.lang.Long.numberOfLeadingZeros(us)
+        val base = 1L shl exponent
+        val slot = (exponent * 4 + ((us - base) * 4 + base - 1) / base).toInt().coerceAtMost(buckets.lastIndex)
         buckets[slot]++
         count++
         maxNs = maxOf(maxNs, nanos)

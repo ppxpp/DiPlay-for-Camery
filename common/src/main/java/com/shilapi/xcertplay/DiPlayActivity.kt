@@ -99,9 +99,11 @@ import com.shilapi.xcertplay.update.UpdateChannel
 import com.shilapi.xcertplay.update.UpdateChannelStore
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.UpdateDownloadCache
 import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
+import com.shilapi.xcertplay.update.StableClientId
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -205,6 +207,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var pendingWireless = false
     private var bluetoothSettingsVisited = false
     private var initialLaunch = true
+    private var forwardingToProjection = false
     private var disclaimerAcknowledged = false
     private var notificationTransport = true
     private var exportInProgress = false
@@ -251,6 +254,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
+    internal var updateCheckWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-check").start() }
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var backupServer: SettingsBackupServer? = null
     @Volatile private var backupEndpoint: SettingsBackupEndpoint? = null
@@ -378,6 +382,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Thread({
+            UpdateDownloadCache.cleanupForProcessStart(this)
+            UpdateApkExport.pruneHistory(this)
+        }, "diplay-update-cache-cleanup").apply { isDaemon = true }.start()
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
+            "UI_ROUTE home create action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.vehicle.runtime.VehicleMediaRuntime.prepareCompanion(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
@@ -391,7 +401,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
-        if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
+        if (savedInstanceState == null && isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
+            forwardingToProjection = true
             openProjection(); finish(); return
         }
         scheduleBackgroundUpdateChecks()
@@ -452,6 +463,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
+        forwardingToProjection = false
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
+            "UI_ROUTE home new-intent action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         connectionSettingsReturnCategory = null
         // A re-tap on the launcher icon before consent still has to pass the gate, not resume projection.
         if (isLauncherIntent(intent) && !disclaimerAcknowledged && !Disclaimer.acceptedForCurrentVersion(this)) {
@@ -459,8 +473,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
         // CarPlay carry a "page" extra, which isLauncherIntent rejects.
-        if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            page = "home"; render(); openProjection(); return
+        if (isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
+            forwardingToProjection = true
+            com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE home redirect-to-host without-render action=${intent.action}")
+            openProjection(); return
         }
         page = intent.getStringExtra("page") ?: "home"; render()
         automaticVehicleValidationStarted = false
@@ -558,6 +574,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onResume() {
         super.onResume()
+        if (forwardingToProjection) return
         if (setupError == null) {
             com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
                 wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
@@ -1901,7 +1918,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.entries
                 choice(card, getString(R.string.settings_wired_backend), listOf(
                     getString(R.string.settings_wired_backend_lwip), getString(R.string.settings_native_ncm),
-                    getString(R.string.settings_wired_backend_optimized)),
+                    getString(R.string.settings_wired_backend_optimized), getString(R.string.settings_wired_backend_vpn)),
                     modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
                     markReconnectNeeded()
@@ -2714,6 +2731,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 updateSavedPath?.let { container.addView(label(getString(R.string.update_saved_to, it), 13, MUTED).apply { setPadding(0, dp(10), 0, 0) }) }
             }
         }
+        val clientId = StableClientId.get(this)
+        container.addView(
+            label(
+                clientId?.let { getString(R.string.settings_update_client_id, it) }
+                    ?: getString(R.string.settings_update_client_id_unavailable),
+                13,
+                MUTED,
+            ).apply { setPadding(0, dp(12), 0, 0) },
+        )
         return container
     }
 
@@ -2730,7 +2756,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             var pending = channels.indexOf(current)
             appDialogBuilder()
                 .setTitle(title)
-                .setMessage(getString(R.string.settings_update_beta_warning))
                 .setSingleChoiceItems(labels.toTypedArray(), pending) { _, index -> pending = index }
                 .setPositiveButton(getString(R.string.save)) { _, _ ->
                     val selected = channels[pending]
@@ -2779,7 +2804,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun discardDownloadedUpdate() {
-        updateFile?.parentFile?.deleteRecursively()
+        updateFile?.parentFile?.let { UpdateDownloadCache.release(it, delete = true) }
         updateFile = null
         updateSavedUri?.let { uri -> runCatching { contentResolver.delete(uri, null, null) } }
         updateSavedPath?.let { path -> runCatching { File(path).takeIf { it.isAbsolute }?.delete() } }
@@ -2793,7 +2818,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val generation = ++updateGeneration
         val channel = UpdateChannelStore.load(this)
         render()
-        Thread({
+        updateCheckWorker(Runnable {
             val outcome = runCatching { latestRelease(channel) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
@@ -2832,11 +2857,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     },
                 )
             }
-        }, "diplay-update-check").start()
+        })
     }
 
     private fun latestRelease(channel: UpdateChannel): UpdateLookupResult {
-        return UpdateReleaseLookup.latest(installedVersionCode(), userAgent(), channel)
+        return UpdateReleaseLookup.latest(
+            installedVersionCode(),
+            userAgent(),
+            channel,
+            clientId = StableClientId.get(this),
+        )
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
@@ -2866,7 +2896,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         render()
         Thread({
             // Each attempt owns its files, including across activity recreation.
-            val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
+            val directory = UpdateDownloadCache.begin(this)
             val outcome = runCatching {
                 // The cached release can be a day old. Download the newest one.
                 release = when (val latest = latestRelease(channel)) {
@@ -2893,15 +2923,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     throw IOException("Checksum mismatch for ${release.apkName}")
                 }
                 apkFile
-            }.onFailure { directory.deleteRecursively() }
+            }.onFailure { UpdateDownloadCache.release(directory, delete = true) }
             val saved = outcome.getOrNull()?.let { UpdateApkExport.copy(applicationContext, it) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) {
-                    directory.deleteRecursively()
+                    UpdateDownloadCache.release(directory, delete = true)
                     return@runOnUiThread
                 }
                 outcome.fold(
                     { file ->
+                        UpdateDownloadCache.retain(directory)
                         updateRelease = release
                         updateFile = file
                         updateSavedPath = saved?.path
@@ -5814,7 +5845,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else open()
     }
     private fun openProjection() {
-        OwnScreenStart.start(this, Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        val projection = Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        if (forwardingToProjection) projection.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        OwnScreenStart.start(this, projection)
+        if (forwardingToProjection) overridePendingTransition(0, 0)
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {

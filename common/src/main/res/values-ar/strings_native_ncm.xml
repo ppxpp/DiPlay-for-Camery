@@ -5,5 +5,9 @@
     <string name="settings_wired_backend">طريقة الاتصال السلكي</string>
     <string name="settings_wired_backend_lwip">lwIP الأصلي</string>
     <string name="settings_wired_backend_optimized">lwIP المحسّن (تجريبي)</string>
-    <string name="settings_wired_backend_description">اختر إحدى الطرق الثلاث. يسري عند الاتصال التالي. عند الفشل بدّل يدويًا؛ لا يوجد تبديل تلقائي.</string>
+    <string name="settings_wired_backend_description">اختر إحدى الطرق الأربع. تحاول VPN التفويض التلقائي أولاً. يسري عند الاتصال التالي. عند الفشل، بدّل يدوياً؛ لا يوجد تبديل تلقائي.</string>
+    <string name="settings_wired_backend_vpn">VPN (تجريبي)</string>
+    <string name="vpn_root_authorizing">جارٍ تفويض VPN…</string>
+    <string name="vpn_root_failed">فشل تفويض VPN التلقائي. أعد المحاولة أو امنح الإذن عبر النظام. ستبقى طريقة الاتصال VPN.</string>
+    <string name="vpn_manual_authorize">التفويض عبر النظام</string>
 </resources>

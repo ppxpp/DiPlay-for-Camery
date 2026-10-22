@@ -37,7 +37,9 @@ function context(
   options: { body?: unknown; url?: string; base?: string } = {},
 ) {
   return {
-    request: new Request(options.url ?? "https://upd.example.com/api/v1/apps/diplay/android/stable/latest"),
+    request: new Request(
+      options.url ?? "https://upd.example.com/api/v1/apps/diplay/android/stable/latest?id=test-client",
+    ),
     env: {
       ASSET_BASE_URL: options.base ?? "https://dl.example.com/",
       META: {
@@ -62,6 +64,7 @@ describe("latest update manifest", () => {
 
     const body = (await response.json()) as any;
     expect(body.appId).toBe("diplay");
+    expect(body.channel).toBe("stable");
     expect(body.version).toBe("0.3.0");
     expect(body.versionName).toBe("0.3.0_凯美瑞A导航适配版_0.1.0");
     expect(body.versionCode).toBe(97);
@@ -97,7 +100,7 @@ describe("latest update manifest", () => {
   it("filters by architecture while keeping universal artifacts", async () => {
     const response = await onRequestGet(context(params, {
       body: manifest,
-      url: "https://upd.example.com/api/v1/apps/diplay/android/stable/latest?arch=arm64-v8a",
+      url: "https://upd.example.com/api/v1/apps/diplay/android/stable/latest?id=test-client&arch=arm64-v8a",
     }));
     expect(response.status).toBe(200);
     const body = (await response.json()) as any;
@@ -110,7 +113,7 @@ describe("latest update manifest", () => {
   it("returns 404 when the requested architecture is absent", async () => {
     const response = await onRequestGet(context(params, {
       body: { ...manifest, artifacts: manifest.artifacts.filter((artifact) => artifact.arch !== "universal") },
-      url: "https://upd.example.com/api/v1/apps/diplay/android/stable/latest?arch=mips",
+      url: "https://upd.example.com/api/v1/apps/diplay/android/stable/latest?id=test-client&arch=mips",
     }));
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "artifact_not_found" });
@@ -176,5 +179,31 @@ describe("latest update manifest", () => {
     const response = await onRequestGet(context(params, { body: manifest, base: " " }));
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "asset_base_url_not_configured" });
+  });
+
+  it("serves beta to the legacy stable request without a client id", async () => {
+    let requestedKey = "";
+    const response = await onRequestGet({
+      request: new Request("https://upd.example.com/api/v1/apps/diplay/android/stable/latest"),
+      env: {
+        ASSET_BASE_URL: "https://dl.example.com",
+        META: {
+          get: async (key: string) => {
+            requestedKey = key;
+            return {
+              json: async () => ({
+                ...manifest,
+                management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
+              }),
+            };
+          },
+        },
+      },
+      params,
+    } as never);
+
+    expect(response.status).toBe(200);
+    expect(requestedKey).toBe("apps/diplay/android/beta/latest.json");
+    expect(((await response.json()) as any).channel).toBe("beta");
   });
 });

@@ -36,8 +36,6 @@ class PioneerDebugService : Service() {
         super.onCreate()
         PioneerDebugRuntime.phoneDiagnosticsEnabled = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
             .getBoolean("phone_auth_diagnostics", false)
-        PioneerDebugRuntime.usbTxBatchFrames = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
-            .getInt("usb_tx_batch_frames", 8).takeIf { it in listOf(1, 4, 8) } ?: 8
         if (Build.VERSION.SDK_INT >= 26) getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel("pioneer-debug", "DiPlay 局域网调试", NotificationManager.IMPORTANCE_LOW))
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "pioneer-debug") else Notification.Builder(this)
@@ -61,6 +59,12 @@ class PioneerDebugService : Service() {
                 PioneerDebugRuntime.log(this, "TCP_DEBUG_LISTEN 0.0.0.0:$port")
                 break
             } catch (error: Exception) { server.close(); PioneerDebugRuntime.log(this, "TCP bind $port failed: ${error.message}") }
+        }
+        // Best effort: an active upload/session keeps its lease; the next upload also prunes.
+        runCatching {
+            PioneerDebugUpdateGuard.withCacheMaintenance { PioneerDebugUpdater.cleanup(this) }
+        }.onSuccess {
+            PioneerDebugRuntime.log(this, "APK_CACHE_CLEAN reclaimedBytes=${it.reclaimedBytes} remainingBytes=${it.remainingBytes} protected=${it.protectedApks} failed=${it.failedDeletes}")
         }
         val server = listener ?: run { PioneerDebugRuntime.listenerState = "8721 / 9911 / 9912 均不可用"; stopSelf(); return }
         while (!closed) {
@@ -109,6 +113,10 @@ class PioneerDebugService : Service() {
                 PioneerDebugRuntime.log(this, "AUDIO_SOURCE $state")
                 send(socket, reply.put("audio", state))
             }
+            "transport-timings" -> send(socket, reply
+                .put("metrics", JSONArray(PioneerDiagnostics.drain()))
+                .put("queues", JSONArray(PioneerDiagnostics.queues()))
+                .put("slow", JSONArray(PioneerDiagnostics.drainSlow())))
             "system-load" -> send(socket, reply, PioneerSystemLoad.snapshot().toString(2).toByteArray())
             "touch-coalescing" -> {
                 require(PioneerUsbPolicy.matchesDevice())
@@ -141,7 +149,13 @@ class PioneerDebugService : Service() {
                 val bytes = PioneerDebugRuntime.videoSnapshot?.invoke() ?: error("CarPlay host unavailable")
                 send(socket, reply.put("format", "png"), bytes)
             }
-            "status" -> send(socket, status().put("ok", true))
+            "status" -> send(socket, status(request.optBoolean("compact", false)).put("ok", true))
+            "vpn-permission" -> send(socket, reply.put("vpnPermission", PioneerVpnPermissionGrant.run(
+                this, request.optString("action", "STATUS"))))
+            "vpn-native" -> send(socket, reply.put(
+                "metrics",
+                PioneerDebugRuntime.vpnNativeSnapshot?.invoke() ?: error("No active native VPN bridge"),
+            ))
             "usb-permission-probe" -> send(socket, reply.put("probe", PioneerUsbPermissionProbe.run(
                 this, request.optString("action", "STATUS"), request.optString("node").takeIf { it.isNotBlank() })))
             "video-settings" -> {
@@ -172,14 +186,7 @@ class PioneerDebugService : Service() {
             "video-tap" -> send(socket, reply.put("tap", PioneerDebugRuntime.tapVideo(request)))
             "video-gesture" -> send(socket, reply.put("gesture", PioneerDebugRuntime.startVideoGesture(request.optString("kind", "SWIPE"))))
             "network" -> send(socket, reply, networkDiagnostics().toString(2).toByteArray())
-            "runtime" -> send(socket, reply, runtimeDiagnostics().toString(2).toByteArray())
-            "usb-tx-batch" -> {
-                val count = request.getInt("frames")
-                require(count in listOf(1, 4, 8))
-                PioneerDebugRuntime.usbTxBatchFrames = count
-                getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putInt("usb_tx_batch_frames", count).apply()
-                send(socket, reply.put("frames", count).put("message", "立即生效；仅合并已排队数据，不等待凑包"))
-            }
+            "runtime" -> send(socket, reply, runtimeDiagnostics(request.optBoolean("compact", false), request.optBoolean("stacks", false)).toString(2).toByteArray())
             "phone-diagnostics" -> {
                 val mode = request.getString("mode")
                 require(mode in listOf("ON", "OFF"))
@@ -258,23 +265,30 @@ class PioneerDebugService : Service() {
                 getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putBoolean("lwip_diagnostics", PioneerDiagnostics.enabled).apply()
                 send(socket, reply.put("mode", mode).put("message", "聚合计时开关立即生效；连接与错误日志继续保留"))
             }
+            "native-ncm-startup" -> {
+                require(PioneerUsbPolicy.matchesDevice())
+                fun choice(key: String): Boolean? = if (!request.has(key)) null else
+                    request.getString(key).also { require(it == "ON" || it == "OFF") } == "ON"
+                val warm = choice("warmWorker")
+                val prewarm = choice("prewarm")
+                if (warm != null || prewarm != null) PioneerDebugUpdateGuard.withCacheMaintenance {
+                    PioneerNativeNcmStartupPolicy.save(this, warm, prewarm)
+                }
+                send(socket, reply.put("warmWorker", PioneerNativeNcmStartupPolicy.warmWorkerEnabled(this))
+                    .put("prewarm", PioneerNativeNcmStartupPolicy.prewarmEnabled(this))
+                    .put("message", "仅调整NCM启动策略；预热开关须重启应用进程后对比，不重启车机、不切换后端"))
+            }
             "network-backend" -> {
                 val mode = request.getString("mode")
                 val backend = PioneerWiredBackend.Mode.entries.firstOrNull { it.name == mode }
-                require(backend != null || mode == "VPN") { "mode must be LWIP, NATIVE_NCM, LWIP_OPTIMIZED or VPN" }
+                require(backend != null) { "mode must be LWIP, NATIVE_NCM, LWIP_OPTIMIZED or VPN" }
                 val state = PioneerDebugRuntime.snapshot()
                 require(!state.optBoolean("controllerRunning") && !state.optBoolean("backgroundSession") &&
                     !state.optBoolean("hostAttached") && !state.optBoolean("hostStateTimeout") &&
                     !state.has("hostStateError") && !PioneerWiredSession.active && !PioneerLwipRuntime.active) {
                     "Stop the session and wait for complete cleanup before changing backend"
                 }
-                if (backend != null) PioneerWiredBackend.save(this, backend)
-                else {
-                    // Explicit legacy diagnostic choice, never a failure fallback.
-                    getSharedPreferences("pioneer-adapter", MODE_PRIVATE).edit()
-                        .remove("wired_backend").putBoolean("native_ncm_enabled", false).commit()
-                    getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putString("network_backend", mode).commit()
-                }
+                PioneerWiredBackend.save(this, requireNotNull(backend))
                 send(socket, reply.put("mode", mode).put("message", "手动选择已保存，下次连接生效；失败不会自动回退"))
             }
             "update-storage", "clear-update-cache" -> {
@@ -282,21 +296,16 @@ class PioneerDebugService : Service() {
                 var reclaimed = 0L
                 if (command == "clear-update-cache") {
                     PioneerDebugUpdateGuard.withCacheMaintenance {
-                        updates.listFiles()?.filter {
-                            it.isFile && it.name.endsWith(".apk") && PioneerDebugUpdateGuard.canDelete(it)
-                        }?.forEach {
-                            val bytes = it.length()
-                            if (it.delete()) {
-                                reclaimed += bytes
-                                File(it.path + ".installing").delete()
-                            }
-                        }
+                        reclaimed = PioneerDebugUpdater.cleanup(this).reclaimedBytes
                     }
                 }
                 val disk = android.os.StatFs(cacheDir.absolutePath)
                 send(socket, reply.put("availableBytes", disk.availableBytes).put("reclaimedBytes", reclaimed)
+                    .put("maxApks", PioneerUpdateCache.MAX_APKS).put("maxCacheBytes", PioneerUpdateCache.MAX_BYTES)
+                    .put("minimumFreeBytes", PioneerUpdateCache.FREE_RESERVE_BYTES)
                     .put("updateApks", org.json.JSONArray(updates.listFiles()?.filter { it.isFile }?.map {
                         JSONObject().put("name", it.name).put("bytes", it.length())
+                            .put("installerProtected", it.name.endsWith(".apk") && !PioneerDebugUpdateGuard.canDelete(it))
                     } ?: emptyList<JSONObject>())))
             }
             "companion-status" -> {
@@ -348,6 +357,18 @@ class PioneerDebugService : Service() {
     }
 
     /** Read only bounded, fixed helper records; never expose lease tokens or peer identities. */
+    private fun vpnFirewallLeaseDiagnostics(): JSONArray = JSONArray(
+        File(filesDir, "vpn-firewall").listFiles().orEmpty().filter { it.isDirectory }
+            .sortedByDescending { it.lastModified() }.take(8).map { directory ->
+                JSONObject().put("token", directory.name).apply {
+                    for (name in listOf("request.json", "result.json", "firewall-journal.json")) {
+                        val file = File(directory, name)
+                        if (file.length() in 1..8192) put(name, runCatching { JSONObject(file.readText()) }
+                            .getOrElse { JSONObject().put("error", "unreadable") })
+                    }
+                }
+            })
+
     private fun nativeNcmLeaseDiagnostics(): JSONArray {
         val root = File(filesDir, "native-ncm")
         val records = root.listFiles().orEmpty().filter {
@@ -370,9 +391,20 @@ class PioneerDebugService : Service() {
         })
     }
 
-    fun status(): JSONObject {
-        val consent = runCatching { VpnService.prepare(this) }
-        val vpn = JSONObject().put("authorized", consent.isSuccess && consent.getOrNull() == null)
+    fun status(compact: Boolean = false): JSONObject {
+        if (compact) return JSONObject().put("host", PioneerDebugRuntime.snapshot())
+            .put("networkBackend", PioneerWiredBackend.mode(this).name)
+            .put("lwipActive", PioneerLwipRuntime.active).put("lwipStatus", PioneerLwipRuntime.summary)
+            .put("pioneerWiredSession", JSONObject().apply {
+                val session = PioneerWiredSession.current
+                put("active", session != null).put("backend", session?.backend?.name ?: "NONE")
+                put("sessionId", session?.id ?: 0L)
+            })
+        val conflict = runCatching { PioneerVpnPermissionGrant.conflict(this) }.getOrDefault("VPN_CONFLICT_QUERY_FAILED")
+        // prepare() can replace a previously authorized VPN; status queries must not do that.
+        val consent = runCatching { if (conflict == null) VpnService.prepare(this) else null }
+        val vpn = JSONObject().put("authorized", if (conflict == null) consent.isSuccess && consent.getOrNull() == null else JSONObject.NULL)
+            .put("prepareChecked", conflict == null).put("conflict", conflict ?: JSONObject.NULL)
             .put("consentComponent", consent.getOrNull()?.component?.flattenToShortString() ?: "")
             .put("tunNodeExists", File("/dev/tun").exists() || File("/dev/net/tun").exists())
         consent.exceptionOrNull()?.let { vpn.put("error", it.toString()) }
@@ -400,6 +432,14 @@ class PioneerDebugService : Service() {
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
             .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
+            .put("vpnPermission", PioneerVpnPermissionGrant.status(this))
+             .put("rootInitialization", PioneerRootSession.status())
+            .put("connectionTasks", JSONArray(PioneerConnectionTasks.snapshot().map { event ->
+                JSONObject().put("id",event.id).put("state",event.state).put("detail",event.detail)
+                    .put("startedAtMs",event.startedAtMillis).put("updatedAtMs",event.atMillis)
+                    .put("durationMs",event.atMillis-event.startedAtMillis)
+            }))
+            .put("vpnFirewallLeases", vpnFirewallLeaseDiagnostics())
             .put("pioneerWiredSession", JSONObject().apply {
                 val session = PioneerWiredSession.current
                 put("active", session != null).put("adaptationActive", session?.verifiedDevice == true)
@@ -409,9 +449,15 @@ class PioneerDebugService : Service() {
             })
             .put("lwipActive", PioneerLwipRuntime.active).put("lwipStatus", PioneerLwipRuntime.summary)
             .put("lwipQueues", JSONArray(PioneerDiagnostics.queues()))
+            .put("transportQueues", JSONArray(PioneerDiagnostics.queues()))
             .put("lwipDiagnostics", PioneerDiagnostics.enabled)
             .put("phoneDiagnostics", PioneerDebugRuntime.phoneDiagnosticsEnabled)
             .put("usbTxBatchFrames", PioneerDebugRuntime.usbTxBatchFrames)
+            .put("vpnIo", JSONObject()
+                .put("rxMode", "NATIVE_URB")
+                .put("urbSlots", PioneerVpnIoPolicy.RECEIVE_REQUESTS)
+                .put("txDepth", PioneerVpnIoPolicy.SEND_REQUESTS)
+                .put("batchWindowUs", 0))
             .put("videoSettings", PioneerDebugRuntime.videoSettings?.invoke(JSONObject()))
             .put("lwipSessionId", PioneerLwipRuntime.sessionId).put("lwipAttemptId", PioneerLwipRuntime.attemptId)
             .put("lwipControlPort", PioneerLwipRuntime.controlPort)
@@ -441,17 +487,21 @@ class PioneerDebugService : Service() {
 
     private fun memorySnapshot(): JSONObject {
         val runtime = Runtime.getRuntime()
-        return JSONObject().put("javaUsed", runtime.totalMemory() - runtime.freeMemory())
+        return JSONObject().put("fdCount",File("/proc/self/fd").list()?.size ?: -1).put("javaUsed", runtime.totalMemory() - runtime.freeMemory())
             .put("javaTotal", runtime.totalMemory()).put("javaMax", runtime.maxMemory())
             .put("nativeAllocated", android.os.Debug.getNativeHeapAllocatedSize())
             .put("threads", Thread.activeCount())
     }
 
     /** Fixed read-only capture: no remotely supplied command or path. */
-    private fun runtimeDiagnostics(): JSONObject = JSONObject().apply {
+    private fun runtimeDiagnostics(compact: Boolean = false, stacks: Boolean = false): JSONObject = JSONObject().apply {
         val pid = android.os.Process.myPid()
         put("pid", pid).put("atNs", System.nanoTime())
             .put("processCpuMs", android.os.Process.getElapsedCpuTime())
+        if (stacks) put("stacks", JSONArray(Thread.getAllStackTraces().entries.take(192).map { (thread, trace) ->
+            JSONObject().put("name", thread.name).put("state", thread.state.name)
+                .put("trace", JSONArray(trace.take(32).map { it.toString() }))
+        }))
         put("memory", memorySnapshot())
         put("systemStat", runCatching { File("/proc/stat").readLines().take(5).joinToString("\n") }.getOrDefault("unavailable"))
         put("threads", JSONArray(File("/proc/self/task").listFiles().orEmpty().mapNotNull { task ->
@@ -465,7 +515,7 @@ class PioneerDebugService : Service() {
         put("cpuFrequency", JSONArray((0..7).mapNotNull { index ->
             runCatching { "cpu$index=" + File("/sys/devices/system/cpu/cpu$index/cpufreq/scaling_cur_freq").readText().trim() }.getOrNull()
         }))
-        put("logcat", runCatching {
+        if (!compact) put("logcat", runCatching {
             val process = ProcessBuilder("logcat", "-d", "-t", "1200", "-v", "threadtime").redirectErrorStream(true).start()
             try {
                 val own = Regex("^\\d\\d-\\d\\d\\s+\\S+\\s+$pid\\s+\\d+\\s")
@@ -483,6 +533,17 @@ class PioneerDebugService : Service() {
             fun add(name: String, data: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(data); zip.closeEntry() }
             add("status.json", status().toString(2).toByteArray())
             add("network.json", networkDiagnostics().toString(2).toByteArray())
+            add("vpn-permission.json", PioneerVpnPermissionGrant.status(this).toString(2).toByteArray())
+            for (family in listOf("vpn-firewall", "vpn-permission")) {
+                File(filesDir, family).listFiles().orEmpty().filter { it.isDirectory }
+                    .sortedByDescending { it.lastModified() }.take(16).forEach { directory ->
+                        for (name in listOf("request.json", "result.json", "firewall-journal.json")) {
+                            val record = File(directory, name)
+                            if (record.isFile && record.length() in 1..32768)
+                                add("$family/${directory.name}/$name", record.readBytes())
+                        }
+                    }
+            }
             add("usb-permission-probe.json", PioneerUsbPermissionProbe.status(this).toString(2).toByteArray())
             File(filesDir, "usb-permission-probe").listFiles().orEmpty().filter { it.isDirectory }
                 .sortedByDescending { it.lastModified() }.take(12).forEach { directory ->

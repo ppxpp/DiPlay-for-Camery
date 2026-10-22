@@ -8,8 +8,9 @@ export const site = {
   // 待填：与本 APK 对应的 tag 或 commit，GPL-3.0 要求分发安装包时能取到对应源码
   sourceRefUrl: '',
 
-  // 待填：三篇飞书文档链接，站内只放链接、不放正文，内容后续在飞书里更新
+  // 待填：飞书文档索引页；为空时首页“查看全部文档”显示为待发布
   docs: {
+    index: '',
     install: 'https://my.feishu.cn/wiki/DrNzwzq6miBWFUk6t1gcYSVwn3g',
     features: '',
     knownIssues: ''

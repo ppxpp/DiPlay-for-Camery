@@ -24,14 +24,20 @@ public final class PioneerUsbPermissionHelper {
     public static void main(String[] args) {
         if (args.length != 1 || Process.myUid() != 0) return;
         Thread watchdog = new Thread(() -> {
-            try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
+            try { Thread.sleep(8000); } catch (InterruptedException ended) { return; }
             System.exit(3);
-        }, "usb-permission-probe-deadline");
+        }, "permission-task-deadline");
         watchdog.setDaemon(true); watchdog.start();
+        runTask(new File(args[0]));
+        System.exit(0);
+    }
+
+    static void runTask(File task) {
+        long helperEntryMs = SystemClock.elapsedRealtime();
         File directory = null;
         JSONObject result = new JSONObject();
         try {
-            File candidate = new File(args[0]).getCanonicalFile();
+            File candidate = task.getCanonicalFile();
             if (!candidate.getPath().matches("/data/(?:data|user/0)/[A-Za-z0-9_.]+/files/usb-permission-probe/[0-9a-f-]{36}"))
                 throw new IOException("INVALID_PROBE_DIRECTORY");
             StructStat stat = Os.lstat(candidate.getPath());
@@ -47,7 +53,8 @@ public final class PioneerUsbPermissionHelper {
             requireAction(action);
             String token = request.getString("token");
             if (!token.equals(directory.getName())) throw new IOException("INVALID_PROBE_TOKEN");
-            result.put("token", token).put("helperUid", Process.myUid()).put("helperPid", Process.myPid());
+            result.put("token", token).put("helperUid", Process.myUid()).put("helperPid", Process.myPid())
+                .put("helperStartupMs", helperEntryMs - request.optLong("requestedAtMs", helperEntryMs));
             Context context = systemContext();
             ApplicationInfo app = context.getPackageManager().getApplicationInfo(pkg, 0);
             if (app.uid != stat.st_uid || app.uid != request.getInt("uid") || app.uid / 100000 != 0 ||
@@ -72,21 +79,47 @@ public final class PioneerUsbPermissionHelper {
                 .put("identityHash", identity(device));
             try { result.put("defaultBefore", defaultFor(device)); }
             catch (Exception denied) { result.put("defaultBefore", "UNKNOWN").put("defaultReadError", denied.getClass().getSimpleName()); }
-            if (action.equals("GRANT")) {
+            if (action.equals("GRANT") || action.equals("AUTO_GRANT")) {
                 guard.check(); device = current(usb, request);
                 invoke("grantDevicePermission", service, new Class<?>[]{UsbDevice.class, int.class}, device, app.uid);
                 result.put("grantCallSucceeded", true);
-            } else if (action.equals("CLEAR_DEFAULT")) {
+                guard.check(); device = current(usb, request);
+                NativeNcmFirewall.Result permissionDump = NativeNcmCommand.run(new String[]{"/system/bin/dumpsys", "usb"}, 1500);
+                boolean granted = permissionDump.exit == 0 && PioneerUsbPermissionReadback.granted(permissionDump.output,device.getDeviceName(),app.uid);
+                result.put("targetPermissionVerified",granted);
+                if (!granted) throw new IOException("USB_TARGET_PERMISSION_UNCONFIRMED");
+                if (action.equals("AUTO_GRANT")) {
+                    // Persist only our own default. Default selection failure must not undo a valid grant.
+                    try {
+                        guard.check(); device = current(usb, request);
+                        requireOwnDefault(defaultFor(device), pkg);
+                        guard.check();
+                        invoke("setDevicePackage", service, new Class<?>[]{UsbDevice.class, String.class, int.class}, device, pkg, 0);
+                        result.put("defaultSetCallSucceeded", true);
+                    } catch (Exception unavailable) {
+                        result.put("defaultSetError", unavailable.getClass().getSimpleName() + ": " + unavailable.getMessage());
+                    }
+                }
+            } else if (action.equals("CLEAR_DEFAULT") || action.equals("SET_DEFAULT")) {
                 String existing = result.getString("defaultBefore");
                 requireOwnDefault(existing, pkg);
                 guard.check(); device = current(usb, request);
                 // Recheck immediately before mutation; never clear a newly observed other-app default.
                 requireOwnDefault(defaultFor(device), pkg);
                 guard.check();
-                invoke("setDevicePackage", service, new Class<?>[]{UsbDevice.class, String.class, int.class}, device, null, 0);
+                boolean setting = action.equals("SET_DEFAULT");
+                invoke("setDevicePackage", service, new Class<?>[]{UsbDevice.class, String.class, int.class}, device, setting ? pkg : null, 0);
+                result.put(setting ? "defaultSetCallSucceeded" : "defaultClearCallSucceeded", true);
+                String expected = setting ? pkg : "NONE";
                 String after = defaultFor(current(usb, request));
-                result.put("defaultAfter", after).put("defaultClearCallSucceeded", true)
-                    .put("defaultClearVerified", after.equals("NONE"));
+                long until = Math.min(SystemClock.elapsedRealtime() + 1200, request.getLong("deadline") - 150);
+                while (!after.equals(expected) && SystemClock.elapsedRealtime() < until) {
+                    Thread.sleep(100);
+                    guard.check();
+                    after = defaultFor(current(usb, request));
+                }
+                result.put("defaultAfter", after)
+                    .put(setting ? "defaultSetVerified" : "defaultClearVerified", after.equals(expected));
             }
             result.put("code", "COMPLETED");
         } catch (Throwable error) {
@@ -94,13 +127,62 @@ public final class PioneerUsbPermissionHelper {
             try { result.put("code", "ERROR").put("error", cause.getClass().getSimpleName() + ": " + String.valueOf(cause.getMessage())); }
             catch (Exception ignored) { }
         }
+        try { result.put("helperOperationMs", SystemClock.elapsedRealtime() - helperEntryMs); } catch (Exception ignored) { }
         if (directory != null) try { publish(directory, result); } catch (Throwable ignored) { }
-        System.exit(0);
+    }
+
+    /** Reuse the already running module-prewarm process; never start a second ART process at boot. */
+    static JSONObject grantDuringPrewarm(String apk, int ownerUid, NativeNcmModule.Guard guard) throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean pending = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Thread watchdog = new Thread(() -> {
+            try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
+            if (pending.get()) System.exit(4);
+        }, "usb-prewarm-grant-deadline");
+        watchdog.setDaemon(true); watchdog.start();
+        JSONObject result = new JSONObject();
+        long started = SystemClock.elapsedRealtime();
+        try {
+            guard.check();
+            Context context = systemContext();
+            String[] packages = context.getPackageManager().getPackagesForUid(ownerUid);
+            if (packages == null || packages.length != 1 || ownerUid < 10000 || ownerUid / 100000 != 0)
+                throw new IOException("PREWARM_PACKAGE_UID_AMBIGUOUS");
+            String pkg = packages[0];
+            ApplicationInfo app = context.getPackageManager().getApplicationInfo(pkg, 0);
+            if (app.uid != ownerUid || !app.sourceDir.equals(apk)) throw new IOException("PREWARM_PACKAGE_UID_MISMATCH");
+            Context target = context.createPackageContext(pkg, Context.CONTEXT_IGNORE_SECURITY);
+            if (target.getSharedPreferences("pioneer-debug", 0).getBoolean("usb_permission_probe_hold", false))
+                return result.put("code", "HELD");
+            UsbManager usb = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+            UsbDevice device = null;
+            for (UsbDevice candidate : usb.getDeviceList().values()) if (candidate.getVendorId() == 0x05ac) {
+                if (device != null) throw new IOException("PREWARM_IPHONE_AMBIGUOUS");
+                device = candidate;
+            }
+            if (device == null) return result.put("code", "NO_IPHONE");
+            JSONObject selected = new JSONObject().put("node", device.getDeviceName()).put("deviceId", device.getDeviceId())
+                .put("vid", device.getVendorId()).put("pid", device.getProductId()).put("identityHash", identity(device));
+            Object service = usbService();
+            guard.check(); device = current(usb, selected);
+            invoke("grantDevicePermission", service, new Class<?>[]{UsbDevice.class, int.class}, device, app.uid);
+            result.put("grantCallSucceeded", true).put("targetUid", app.uid).put("node", device.getDeviceName());
+            try {
+                guard.check(); device = current(usb, selected);
+                requireOwnDefault(defaultFor(device), pkg);
+                guard.check();
+                invoke("setDevicePackage", service, new Class<?>[]{UsbDevice.class, String.class, int.class}, device, pkg, 0);
+                result.put("defaultSetCallSucceeded", true);
+            } catch (Exception unavailable) { result.put("defaultSetError", unavailable.getClass().getSimpleName()); }
+            return result.put("code", "GRANT_CALLED_APP_MUST_VERIFY");
+        } finally {
+            pending.set(false);
+            result.put("elapsedMs", SystemClock.elapsedRealtime() - started);
+        }
     }
 
     interface Guard { void check() throws Exception; }
     static void requireAction(String action) throws IOException {
-        if (!action.equals("INSPECT") && !action.equals("GRANT") && !action.equals("CLEAR_DEFAULT"))
+        if (!action.equals("INSPECT") && !action.equals("GRANT") && !action.equals("CLEAR_DEFAULT") && !action.equals("SET_DEFAULT") && !action.equals("AUTO_GRANT"))
             throw new IOException("UNSUPPORTED_PROBE_ACTION");
     }
     public static String identity(UsbDevice device) throws Exception {
@@ -126,10 +208,7 @@ public final class PioneerUsbPermissionHelper {
         return current;
     }
     private static Context systemContext() throws Exception {
-        if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
-        Class<?> thread = Class.forName("android.app.ActivityThread");
-        Object instance = thread.getMethod("systemMain").invoke(null);
-        return (Context) thread.getMethod("getSystemContext").invoke(instance);
+        return PioneerVpnPermissionHelper.systemContext();
     }
     private static Object usbService() throws Exception {
         IBinder binder = (IBinder) Class.forName("android.os.ServiceManager").getMethod("checkService", String.class).invoke(null, "usb");
@@ -204,8 +283,8 @@ public final class PioneerUsbPermissionHelper {
     private static void publish(File directory, JSONObject value) throws Exception {
         StructStat owner = Os.lstat(directory.getPath());
         File temp = new File(directory, "result.tmp");
-        try (FileOutputStream out = new FileOutputStream(Os.open(temp.getPath(),
-                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_NOFOLLOW | OsConstants.O_WRONLY, 0600))) {
+        try (FileOutputStream out = PioneerRootFiles.output(temp.getPath(),
+                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_NOFOLLOW | OsConstants.O_WRONLY, 0600)) {
             out.write(value.toString().getBytes("UTF-8")); out.getFD().sync();
         }
         Os.chown(temp.getPath(), owner.st_uid, owner.st_gid); Os.chmod(temp.getPath(), 0600);

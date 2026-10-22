@@ -60,8 +60,14 @@ def main():
     parser.add_argument("--timeout", type=float, default=45)
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
+    ncm_startup = commands.add_parser("native-ncm-startup", help="空闲时设置NCM预热/复用对照；预热开关重启应用后生效")
+    ncm_startup.add_argument("--warm-worker", dest="warmWorker", choices=["ON", "OFF"])
+    ncm_startup.add_argument("--prewarm", choices=["ON", "OFF"])
+    vpn_permission = commands.add_parser("vpn-permission", help="先锋VPN授权状态、只读检查或root授权；写任务须先停止会话")
+    vpn_permission.add_argument("--action", choices=["STATUS", "INSPECT", "GRANT"], default="STATUS")
+    commands.add_parser("vpn-native", help="读取当前 VPN native 数据面和批量分布")
     permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
-    permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT"], default="STATUS")
+    permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT"], default="STATUS")
     permission.add_argument("--node", help="多台Apple设备时指定status显示的node")
     audio_source = commands.add_parser("audio-source", help="读取先锋音源或执行FM/爱趣听切换实验")
     audio_source.add_argument("--mode", choices=["STATUS", "FM", "WECARFLOW", "OFF", "NEXT", "BT"], default="STATUS")
@@ -70,7 +76,7 @@ def main():
     commands.add_parser("companion-status", help="读取WeCarFlow安装版本、保护服务进程与签名")
     commands.add_parser("restart-app", help="仅已知车机：结束本应用进程并定时重开，验证进程回收恢复")
     ui = commands.add_parser("host-ui", help="仅已知车机：应用内设置/前后台验证，不修改偏好")
-    ui.add_argument("--action", choices=["AUDIO_TAKE", "AUDIO_RELEASE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
+    ui.add_argument("--action", choices=["AUDIO_TAKE", "AUDIO_RELEASE", "MEDIA_PAUSE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
     video = commands.add_parser("video-settings", help="读取或修改视频设置，下次连接生效")
     video.add_argument("--fps", type=int, choices=[30, 60])
     video.add_argument("--resolution-percent", type=int, help="30..160，下次连接生效")
@@ -98,8 +104,6 @@ def main():
     crypto.add_argument("--mode", choices=["ON", "OFF"], required=True)
     snapshot = commands.add_parser("video-snapshot", help="读取当前CarPlay视频Surface的PNG，非系统截图")
     snapshot.add_argument("--output", default="carplay-surface.png")
-    batch = commands.add_parser("usb-tx-batch", help="实时切换NCM已排队数据聚合上限，1为原模式")
-    batch.add_argument("--frames", type=int, choices=[1, 4, 8], required=True)
     commands.add_parser("usb-reset", help="会话完全停止后，通过已授权FD复位唯一iPhone；随后重新查询状态")
     commands.add_parser("start-wired", help="停止旧会话后启动有线 CarPlay")
     commands.add_parser("stop", help="停止 CarPlay，保留 TCP 服务")
@@ -141,15 +145,16 @@ def main():
                 time.sleep(1)
         else:
             fields = {"mode": args.mode} if args.cmd in ("audio-source", "usb-mode", "usb-configuration", "network-backend", "lwip-diagnostics", "phone-diagnostics", "native-crypto", "video-priority", "touch-coalescing", "async-session-logs", "freescale-reorder", "audio-clock-trim") else {}
+            if args.cmd == "native-ncm-startup":
+                fields = {key: getattr(args, key) for key in ("warmWorker", "prewarm") if getattr(args, key) is not None}
             if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
             if args.cmd == "video-gesture": fields = {"kind": args.kind}
             if args.cmd == "host-ui": fields = {"action": args.action}
-            if args.cmd == "usb-permission-probe":
+            if args.cmd in ("usb-permission-probe", "vpn-permission"):
                 fields = {"action": args.action}
-                if args.node is not None: fields["node"] = args.node
+                if getattr(args, "node", None) is not None: fields["node"] = args.node
             if args.cmd == "video-tap": fields = {"x": args.x, "y": args.y}
             if args.cmd == "toast": fields = {"text": args.text}
-            if args.cmd == "usb-tx-batch": fields = {"frames": args.frames}
             if args.cmd == "video-settings":
                 if args.fps is not None: fields["fps"] = args.fps
                 if args.resolution_percent is not None: fields["resolutionPercent"] = args.resolution_percent

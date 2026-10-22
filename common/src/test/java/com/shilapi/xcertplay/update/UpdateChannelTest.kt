@@ -28,12 +28,14 @@ class UpdateChannelTest {
         appInfo().metaData = originalMetaData
     }
 
-    @Test fun stableIsTheFallbackWithoutBuildMetadataAndTheChoicePersists() {
-        assertEquals(UpdateChannel.STABLE, UpdateChannelStore.load(context))
-
-        UpdateChannelStore.save(context, UpdateChannel.BETA)
-
+    @Test fun unmarkedBuildDefaultsToBetaAndManualStableChoicePersists() {
+        appInfo().metaData = null
         assertEquals(UpdateChannel.BETA, UpdateChannelStore.load(context))
+
+        UpdateChannelStore.save(context, UpdateChannel.STABLE)
+
+        assertEquals(UpdateChannel.STABLE, UpdateChannelStore.load(context))
+        assertEquals(UpdateChannel.STABLE, UpdateChannelStore.selected(context))
     }
 
     @Test fun theBuildManifestProvidesTheDefaultUntilTheUserChooses() {
@@ -42,6 +44,7 @@ class UpdateChannelTest {
         }
 
         assertEquals(UpdateChannel.BETA, UpdateChannelStore.load(context))
+        assertEquals(null, UpdateChannelStore.selected(context))
 
         UpdateChannelStore.save(context, UpdateChannel.STABLE)
         assertEquals(UpdateChannel.STABLE, UpdateChannelStore.load(context))
@@ -50,6 +53,14 @@ class UpdateChannelTest {
     @Test fun eachChannelUsesItsOwnLatestManifest() {
         assertTrue(UpdateClient.releasesUrl(UpdateChannel.STABLE).endsWith("/android/stable/latest"))
         assertTrue(UpdateClient.releasesUrl(UpdateChannel.BETA).endsWith("/android/beta/latest"))
+    }
+
+    @Test fun theClientIdIsSentAsAnEncodedQueryParameter() {
+        assertTrue(
+            UpdateClient.releasesUrl(UpdateChannel.STABLE, "AbC123_-xy")
+                .endsWith("/android/stable/latest?id=AbC123_-xy"),
+        )
+        assertTrue(UpdateClient.releasesUrl(UpdateChannel.BETA, " ").endsWith("/android/beta/latest"))
     }
 
     private fun appInfo() = requireNotNull(

@@ -7,6 +7,9 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
+import com.shilapi.xcertplay.orchestration.progress.ConnectionTask
+import com.shilapi.xcertplay.orchestration.progress.ConnectionTaskState
 import com.shilapi.xcertplay.DiPlayPalette
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.orchestration.CarPlayRuntimeConfig
@@ -17,6 +20,7 @@ import java.text.NumberFormat
 
 /** A self-contained waiting-screen widget. Transport events go to the model, never this view. */
 internal class ConnectionProgressPanel(context: Context) : LinearLayout(context) {
+    private val TASK_LIST_HEIGHT_DP = 280
     private val history = ConnectionProgressHistory(context)
     private var model: ConnectionProgress? = null
     private var palette = DiPlayPalette.DARK
@@ -40,7 +44,8 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
         orientation = VERTICAL
         setPadding(dp(12), dp(10), dp(12), dp(10))
         addView(summary, LayoutParams(-1, -2))
-        addView(nodes, LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(8) })
+        addView(ScrollView(context).apply { addView(nodes); isFillViewport = false },
+            LayoutParams(-1, dp(TASK_LIST_HEIGHT_DP)).apply { topMargin = dp(8); bottomMargin = dp(8) })
         addView(estimate, LayoutParams(-1, -2))
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         setNight(true)
@@ -88,9 +93,18 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
     }
 
     private fun render() {
+        model?.let { progress ->
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.snapshot().forEach { event ->
+                ConnectionTask.entries.firstOrNull { it.id == event.id }?.let { task ->
+                    runCatching { ConnectionTaskState.valueOf(event.state) }.getOrNull()?.let { value ->
+                        progress.task(task, value, event.detail, event.atMillis, event.startedAtMillis)
+                    }
+                }
+            }
+        }
         val state = model?.snapshot()
         val steps = state?.steps ?: ConnectionStep.entries
-        val columns = if (width >= dp(560)) 6 else 3
+        val columns = if (width >= dp(560)) 3 else 2
         val key = columns to steps
         if (layoutKey != key) {
             layoutKey = key
@@ -139,29 +153,92 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
             }
         }
         steps.forEachIndexed { index, step ->
-            val current = state != null && state.current == step && state.outcome != ConnectionOutcome.COMPLETE
+            val tasks = state?.tasks.orEmpty().filter { it.task.step == step }
+            val current = tasks.any { it.state in setOf(ConnectionTaskState.RUNNING, ConnectionTaskState.RETRYING) }
             val visited = state != null && step in state.visited
-            val finished = visited && !current
+            val finished = tasks.isNotEmpty() && tasks.all { it.state in setOf(ConnectionTaskState.COMPLETE, ConnectionTaskState.REUSED, ConnectionTaskState.SKIPPED) }
+            val failed = tasks.any { it.state == ConnectionTaskState.FAILED }
             val color = when {
-                current && state?.outcome == ConnectionOutcome.FAILED -> palette.danger
+                failed -> palette.danger
                 current -> palette.accent
                 finished -> palette.success
                 else -> palette.secondaryText
             }
-            val marker = when { current -> "●"; finished -> "✓"; else -> "○" }
+            val marker = when { failed -> "✕"; current -> "●"; finished -> "✓"; else -> "○" }
             val (label, time) = cells[index]
             label.text = "$marker ${context.getString(title(step))}"
             label.setTextColor(color)
-            time.text = when {
-                visited -> context.getString(R.string.connect_progress_seconds, seconds(state!!.durations.getValue(step)))
-                state?.outcome == ConnectionOutcome.COMPLETE -> context.getString(R.string.connect_progress_skipped)
-                else -> context.getString(R.string.connect_progress_pending)
+            time.text = if (tasks.isEmpty()) context.getString(R.string.connect_progress_pending)
+            else tasks.joinToString("\n") { item ->
+                val symbol = when (item.state) {
+                    ConnectionTaskState.PENDING -> "○"
+                    ConnectionTaskState.RUNNING -> "●"
+                    ConnectionTaskState.COMPLETE, ConnectionTaskState.REUSED -> "✓"
+                    ConnectionTaskState.RETRYING -> "↻"
+                    ConnectionTaskState.FAILED -> "✕"
+                    ConnectionTaskState.CANCELLED, ConnectionTaskState.SKIPPED -> "—"
+                }
+                val statusText = when (item.state) {
+                    ConnectionTaskState.RUNNING -> if (item.detail == "waiting-root")
+                        context.getString(R.string.connect_progress_wait_root, seconds(item.elapsedMillis))
+                        else context.getString(R.string.connect_progress_seconds, seconds(item.elapsedMillis))
+                    ConnectionTaskState.PENDING -> context.getString(R.string.connect_progress_pending)
+                    ConnectionTaskState.REUSED -> context.getString(R.string.connect_progress_task_reused)
+                    ConnectionTaskState.SKIPPED -> context.getString(R.string.connect_progress_task_skipped)
+                    ConnectionTaskState.FAILED -> context.getString(R.string.connect_progress_task_failed)
+                    ConnectionTaskState.CANCELLED -> context.getString(R.string.connect_progress_cancelled)
+                    ConnectionTaskState.RETRYING -> item.detail.removePrefix("attempt=").toIntOrNull()?.let {
+                        context.getString(R.string.connect_progress_task_retry_count,it)
+                    } ?: context.getString(R.string.connect_progress_task_retrying)
+                    else -> context.getString(R.string.connect_progress_seconds, seconds(item.elapsedMillis))
+                }
+                val title = context.getString(if (item.task == ConnectionTask.DETECT && model?.wireless == true)
+                    R.string.connect_task_wireless_detect else taskTitle(item.task))
+                "$symbol $title · $statusText"
             }
             time.setTextColor(palette.secondaryText)
         }
     }
 
+    private fun taskTitle(task: ConnectionTask): Int = when (task) {
+        ConnectionTask.ROOT -> R.string.connect_task_root
+        ConnectionTask.CONFIG -> R.string.connect_task_config
+        ConnectionTask.DETECT -> R.string.connect_task_device_detect
+        ConnectionTask.COMPONENTS -> R.string.connect_task_components
+        ConnectionTask.BUFFERS -> R.string.connect_task_buffers
+        ConnectionTask.PERMISSION_CHECK -> R.string.connect_task_permission_check
+        ConnectionTask.PERMISSION_REQUEST -> R.string.connect_task_permission_request
+        ConnectionTask.USB_PERMISSION -> R.string.connect_task_usb_permission
+        ConnectionTask.WIRELESS_LINK -> R.string.connect_task_wireless_link
+        ConnectionTask.USB_OPEN -> R.string.connect_task_usb_open
+        ConnectionTask.USB_INTERFACES -> R.string.connect_task_usb_interfaces
+        ConnectionTask.PAIR -> R.string.connect_task_pair
+        ConnectionTask.AUTHENTICATE -> R.string.connect_task_authenticate
+        ConnectionTask.VPN_PERMISSION -> R.string.connect_task_vpn_permission
+        ConnectionTask.TUN -> R.string.connect_task_tun
+        ConnectionTask.TUN_INFO -> R.string.connect_task_tun_info
+        ConnectionTask.RULE_CHECK -> R.string.connect_task_rules_check
+        ConnectionTask.NETWORK_READY -> R.string.connect_task_network_ready
+        ConnectionTask.RULES -> R.string.connect_task_rules
+        ConnectionTask.DRIVER -> R.string.connect_task_driver
+        ConnectionTask.INTERFACE -> R.string.connect_task_interface
+        ConnectionTask.WIRELESS_NETWORK -> R.string.connect_task_wireless_network
+        ConnectionTask.STACK -> R.string.connect_task_stack
+        ConnectionTask.IO -> if (model?.channel == com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.VPN)
+            R.string.connect_task_io_native else R.string.connect_task_io_init
+        ConnectionTask.BRIDGE -> R.string.connect_task_bridge
+        ConnectionTask.CHANNEL_READY -> R.string.connect_task_channel_ready
+        ConnectionTask.SESSION_AUTH -> R.string.connect_task_session_auth
+        ConnectionTask.SESSION -> R.string.connect_task_session
+        ConnectionTask.MEDIA -> R.string.connect_task_media
+        ConnectionTask.VIDEO_RECEIVE -> R.string.connect_task_video_receive
+        ConnectionTask.VIDEO_DECODE -> R.string.connect_task_video_decode
+        ConnectionTask.VIDEO_RENDER -> R.string.connect_task_video_render
+    }
+
     private fun title(step: ConnectionStep) = when (step) {
+        ConnectionStep.PERMISSIONS -> R.string.connect_progress_permissions
+        ConnectionStep.CHANNEL -> R.string.connect_progress_channel
         ConnectionStep.PREPARATION -> R.string.connect_progress_preparation
         ConnectionStep.DEVICE -> R.string.connect_progress_device
         ConnectionStep.CONTROL -> R.string.connect_progress_control

@@ -16,6 +16,14 @@ object PioneerDebugUpdateGuard {
     fun isBusy(): Boolean = owner != null
     fun requireStartAllowed() { check(!isBusy()) { "APK update in progress; wait for installer handoff" } }
 
+    /** Process-start maintenance; protected installer inputs and matching installed copies are retained. */
+    fun cleanupCachedApks(context: android.content.Context): String =
+        withCacheMaintenance {
+            val result = PioneerDebugUpdater.cleanup(context.applicationContext)
+            "APK_CACHE_STARTUP_CLEAN reclaimedBytes=${result.reclaimedBytes} " +
+                "remainingBytes=${result.remainingBytes} protected=${result.protectedApks} failed=${result.failedDeletes}"
+        }
+
     internal fun requireIdle(state: JSONObject = PioneerDebugRuntime.snapshot()) {
         check(!state.has("hostStateError") && !state.optBoolean("hostStateTimeout") &&
             listOf("controllerRunning", "backgroundSession", "hostAttached").all { state.opt(it) == false } &&
@@ -62,10 +70,7 @@ object PioneerDebugUpdateGuard {
         } finally { releaseOnMain(token) }
     }
 
-    internal fun canDelete(file: File): Boolean {
-        val marker = File(file.path + ".installing")
-        return !marker.exists() || System.currentTimeMillis() - marker.lastModified() > 86_400_000L
-    }
+    internal fun canDelete(file: File): Boolean = !PioneerUpdateCache.isProtected(file)
 
     /** Cache cleanup and upload admission acquire the same main-thread lease. */
     internal fun <T> withCacheMaintenance(action: () -> T): T {

@@ -118,6 +118,7 @@ class AirPlaySession(
     private var keepAliveThread: Thread? = null
     private val eventWriteLock = Any()
     internal val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
     private val pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.sessionId
     private var eventPortLease: Closeable? = null
     private var keepAlivePortLease: Closeable? = null
@@ -365,7 +366,7 @@ class AirPlaySession(
         }
     }
     private fun measure(name: String, before: Long, failed: Boolean = false) {
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, name, System.nanoTime()-before, failed)
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, name, System.nanoTime()-before, failed)
     }
 
     /**
@@ -451,7 +452,7 @@ class AirPlaySession(
         measure("touch-hid-build", hidStart)
         val sendStartNs = System.nanoTime()
         val sent = sendHidReport(AirPlayHid.TOUCH_HID_UID, report)
-        if (sent) com.shilapi.xcertplay.media.TouchLatencyProbe.sent(lwipSession, touchId, gestureId, enteredNs, sendStartNs, System.nanoTime())
+        if (sent) com.shilapi.xcertplay.media.TouchLatencyProbe.sent(diagnosticSession, touchId, gestureId, enteredNs, sendStartNs, System.nanoTime())
         if (sent && firstTouchSendLogged.compareAndSet(false, true)) {
             val first = scaled.firstOrNull()
             Log.i(
@@ -614,7 +615,7 @@ class AirPlaySession(
                             path.endsWith("/info") -> "info"
                             else -> "pair-verify"
                         }
-                        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "control-handler-$stage", System.nanoTime()-handlingStarted)
+                        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "control-handler-$stage", System.nanoTime()-handlingStarted)
                         if ((response.status ?: 200) in 200..299 && (stage != "pair-verify" || pairVerify.controlKeys != null)) answeredStages.add("$stage-response-flushed")
                     }
                     debugLog(
@@ -637,7 +638,7 @@ class AirPlaySession(
                 }
                 val flushStarted = System.nanoTime()
                 output.flush()
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "control-response-flush", System.nanoTime()-flushStarted)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "control-response-flush", System.nanoTime()-flushStarted)
                 answeredStages.forEach { stage -> com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
                     .milestone(lwipSession, stage)?.let { listener.onDebugLog(it) } }
                 if (setupAnswered) com.shilapi.xcertplay.pioneer.PioneerLwipRuntime

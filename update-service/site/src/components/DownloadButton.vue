@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, useId } from 'vue';
 import { site } from '../data/site.ts';
-import { displayVersion, formatUpdateSize, type UpdateChannel } from '../data/updates.ts';
+import {
+  displayShortVersion,
+  displayVersion,
+  formatUpdateSize,
+  type UpdateChannel,
+} from '../data/updates.ts';
 
 const props = withDefaults(
   defineProps<{
     channel: UpdateChannel | null;
     label: string;
     tone?: 'primary' | 'secondary';
+    icon?: 'download' | 'flask';
     unavailableText?: string;
   }>(),
-  { tone: 'primary', unavailableText: '暂无版本' },
+  { tone: 'primary', icon: 'download', unavailableText: '暂无版本' },
 );
 
 const STORAGE_KEY = 'diplay-camry.disclaimer-accepted.v1';
@@ -18,22 +24,23 @@ const titleId = useId();
 const dialog = ref<HTMLDialogElement | null>(null);
 const agreed = ref(false);
 const accepted = ref(false);
-const hint = ref('');
 const version = computed(() => (props.channel ? displayVersion(props.channel.manifest) : ''));
-const ready = () => Boolean(props.channel?.artifact.url.trim());
+const shortVersion = computed(() =>
+  props.channel ? displayShortVersion(props.channel.manifest) : '',
+);
+const available = computed(() => Boolean(props.channel?.artifact.url?.trim()));
 
 onMounted(() => {
   accepted.value = localStorage.getItem(STORAGE_KEY) === '1';
 });
 
 function open() {
-  if (!props.channel) return;
-  if (accepted.value && ready()) {
+  if (!available.value) return;
+  if (accepted.value) {
     download();
     return;
   }
   agreed.value = false;
-  hint.value = ready() ? '' : '下载地址尚未配置，请稍后再试。';
   dialog.value?.showModal();
 }
 
@@ -42,7 +49,7 @@ function close() {
 }
 
 function download() {
-  if (!props.channel) return;
+  if (!props.channel || !available.value) return;
   const link = document.createElement('a');
   link.href = props.channel.artifact.url;
   link.rel = 'noopener';
@@ -52,7 +59,7 @@ function download() {
 }
 
 function confirmAndDownload() {
-  if (!agreed.value || !ready()) return;
+  if (!agreed.value || !available.value) return;
   localStorage.setItem(STORAGE_KEY, '1');
   accepted.value = true;
   close();
@@ -62,23 +69,39 @@ function confirmAndDownload() {
 
 <template>
   <div>
-    <button :class="['btn', tone]" type="button" :disabled="!channel" @click="open">
-      <span class="btn-copy">
-        <span class="btn-label">{{ label }}</span>
-        <span class="btn-version">{{ channel ? `v${version}` : unavailableText }}</span>
-      </span>
-      <svg v-if="channel" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <button
+      :class="['btn', tone]"
+      type="button"
+      :disabled="!available"
+      :title="available ? `v${version}` : undefined"
+      @click="open"
+    >
+      <svg v-if="icon === 'flask'" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
-          d="M8 2.5v8m0 0L4.5 7M8 10.5 11.5 7M3 13.5h10"
+          d="M9.5 3.5h5M10.5 3.5v4.7L6.4 16a1.9 1.9 0 0 0 1.7 2.8h7.8a1.9 1.9 0 0 0 1.7-2.8l-4.1-7.8V3.5"
           stroke="currentColor"
-          stroke-width="1.6"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path d="M8.2 14h7.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+      <svg v-else viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M12 4v9m0 0-3.4-3.4M12 13l3.4-3.4M5 16v2.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V16"
+          stroke="currentColor"
+          stroke-width="1.5"
           stroke-linecap="round"
           stroke-linejoin="round"
         />
       </svg>
+      <span class="btn-copy">
+        <span class="btn-label">{{ label }}</span>
+        <span class="btn-version">{{ available ? `v${shortVersion}` : unavailableText }}</span>
+      </span>
     </button>
 
-    <dialog v-if="channel" ref="dialog" :aria-labelledby="titleId" @click.self="close">
+    <dialog v-if="available" ref="dialog" :aria-labelledby="titleId" @click.self="close">
       <div class="dialog-inner">
         <div class="dialog-head">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -122,7 +145,6 @@ function confirmAndDownload() {
       </div>
 
       <div class="dialog-foot">
-        <p v-if="hint" class="dialog-hint">{{ hint }}</p>
         <label class="agree">
           <input v-model="agreed" type="checkbox" />
           <span>我已阅读并同意上述免责声明</span>

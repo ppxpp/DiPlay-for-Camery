@@ -51,6 +51,7 @@ internal class BackgroundUpdateWorker(context: Context, parameters: WorkerParame
                 userAgent = "DiPlay/$installedVersionName",
                 channel = channel,
                 openConnection = network::openConnection,
+                clientId = StableClientId.get(applicationContext),
             )
             UpdateAvailability.recordAttempt(applicationContext, now)
             when (result) {

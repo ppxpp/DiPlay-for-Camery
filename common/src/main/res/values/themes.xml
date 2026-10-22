@@ -10,6 +10,13 @@
         <item name="android:windowSplashScreenBackground" tools:targetApi="31">#0C111B</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
+    <!-- Route repeated OEM launch requests without bringing the Home task's old content forward. -->
+    <style name="Theme.Xcertplay.Launcher" parent="android:Theme.NoDisplay">
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+    <style name="Theme.Xcertplay.Connection" parent="Theme.Xcertplay">
+        <item name="android:windowBackground">@drawable/diplay_starting_window</item>
+    </style>
     <style name="Theme.Xcertplay.Light">
         <item name="android:colorAccent">#245A9C</item>
         <item name="android:windowLightStatusBar">true</item>

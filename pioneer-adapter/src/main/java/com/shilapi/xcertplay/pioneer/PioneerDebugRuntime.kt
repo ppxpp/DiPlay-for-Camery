@@ -26,6 +26,8 @@ object PioneerDebugRuntime {
     @Volatile var videoTap: ((JSONObject) -> JSONObject)? = null
     @Volatile var videoSnapshot: (() -> ByteArray)? = null
     @Volatile var hostUi: ((String) -> JSONObject)? = null
+    @Volatile var vpnNativeSnapshot: (() -> JSONObject)? = null
+    @Volatile var vpnEnableBatching: (() -> Boolean)? = null
     @Volatile var nativeCryptoComparisonEnabled: Boolean? = null
     @Volatile var phoneDiagnosticsEnabled = false
     @Volatile var asyncSessionLogs = true
@@ -40,7 +42,7 @@ object PioneerDebugRuntime {
         set(value) { PioneerPlaybackPolicy.audioClockTrimEnabled = value }
     @Volatile var touchCoalescingComparisonEnabled = false
     @Volatile var lwipReceiveWaitMillis = 1
-    @Volatile var usbTxBatchFrames = 8
+    const val usbTxBatchFrames = 8
     @Volatile var redact: (String) -> String? = { it }
     private val main = Handler(Looper.getMainLooper())
     private val logLock = Any()
@@ -90,7 +92,7 @@ object PioneerDebugRuntime {
     }
 
     fun runHostUi(action: String): JSONObject {
-        require(action in listOf("AUDIO_TAKE", "AUDIO_RELEASE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"))
+        require(action in listOf("AUDIO_TAKE", "AUDIO_RELEASE", "MEDIA_PAUSE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"))
         val latch = CountDownLatch(1)
         var result: Result<JSONObject>? = null
         main.post {

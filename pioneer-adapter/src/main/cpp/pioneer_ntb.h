@@ -8,6 +8,7 @@
 #define PN_NDP 0x304d434eu
 #define PN_MAX_BLOCK 65535u
 #define PN_OUT_LIMIT 16383u
+#define PN_MAX_BATCH 16u
 struct pn_frame { const unsigned char *data; size_t size; };
 static uint16_t pn_u16(const unsigned char *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
 static uint32_t pn_u32(const unsigned char *p) { return (uint32_t)pn_u16(p) | ((uint32_t)pn_u16(p+2) << 16); }
@@ -16,8 +17,8 @@ static void pn_w32(unsigned char *p, uint32_t n) { pn_w16(p,n); pn_w16(p+2,n>>16
 
 /* Identical wire layout to Ntb16Codec.buildBatch, including short-packet padding. */
 static size_t pn_build(unsigned char *out, size_t capacity, const struct pn_frame *frames, unsigned count, uint16_t sequence) {
-    if (!out || !frames || count < 1 || count > 8) return 0;
-    size_t offsets[8], ndp=8+4*(count+1), length=12+ndp;
+    if (!out || !frames || count < 1 || count > PN_MAX_BATCH) return 0;
+    size_t offsets[PN_MAX_BATCH], ndp=8+4*(count+1), length=12+ndp;
     for (unsigned i=0;i<count;i++) {
         if (!frames[i].data || frames[i].size==0 || frames[i].size>PN_OUT_LIMIT) return 0;
         length=(length+3)&~(size_t)3; offsets[i]=length; length+=frames[i].size;
@@ -25,12 +26,17 @@ static size_t pn_build(unsigned char *out, size_t capacity, const struct pn_fram
     }
     size_t transfer=length+(length%512==0);
     if (transfer>capacity) return 0;
-    memset(out,0,transfer); pn_w32(out,PN_NTH); pn_w16(out+4,12); pn_w16(out+6,sequence);
+    /* Only metadata/alignment/pad need zeroes. Payload is overwritten exactly once. */
+    size_t written=12+ndp;
+    memset(out,0,written); pn_w32(out,PN_NTH); pn_w16(out+4,12); pn_w16(out+6,sequence);
     pn_w16(out+8,(unsigned)length); pn_w16(out+10,12); pn_w32(out+12,PN_NDP); pn_w16(out+16,(unsigned)ndp);
     for (unsigned i=0;i<count;i++) {
         pn_w16(out+20+4*i,(unsigned)offsets[i]); pn_w16(out+22+4*i,(unsigned)frames[i].size);
+        memset(out+written,0,offsets[i]-written);
         memcpy(out+offsets[i],frames[i].data,frames[i].size);
+        written=offsets[i]+frames[i].size;
     }
+    if(transfer>written)memset(out+written,0,transfer-written);
     return transfer;
 }
 

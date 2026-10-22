@@ -45,9 +45,10 @@ internal class PioneerDebugConnections(private val handle: (Socket, JSONObject) 
                     }
                     val request = JSONObject(header.toString("UTF-8"))
                     val isBulk = request.getString("cmd") in setOf("update", "export", "runtime", "video-snapshot", "logs", "usb-permission-probe")
+                    val rootTask = request.getString("cmd") == "vpn-permission"
                     val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - accepted)
                     val deadline = timer.schedule({ close(socket) },
-                        ((if (isBulk) 120_000L else 10_000L) - elapsed).coerceAtLeast(0), TimeUnit.MILLISECONDS)
+                        ((if (isBulk) 120_000L else if (rootTask) 30_000L else 10_000L) - elapsed).coerceAtLeast(0), TimeUnit.MILLISECONDS)
                     headerDeadline.cancel(false)
                     val task = Runnable {
                         try {

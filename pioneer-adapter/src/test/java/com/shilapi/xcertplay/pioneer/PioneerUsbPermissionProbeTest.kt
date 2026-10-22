@@ -53,6 +53,17 @@ class PioneerUsbPermissionProbeTest {
             assertThrows(java.io.IOException::class.java) { PioneerUsbPermissionHelper.requireOwnDefault(other, "com.example.diplay") }
     }
 
+    @Test fun settingDefaultIsNotProofThatTheSystemPopupIsGone() {
+        val helper = JSONObject().put("helperUid", 0).put("code", "COMPLETED")
+            .put("defaultSetCallSucceeded", true)
+        assertEquals("DEFAULT_SET_NOT_CONFIRMED", PioneerUsbPermissionProbe.verdict("SET_DEFAULT", true, true, true, false, helper))
+        helper.put("defaultSetVerified", true)
+        assertEquals("DEFAULT_SET_REPLUG_REQUIRED", PioneerUsbPermissionProbe.verdict("SET_DEFAULT", true, true, true, false, helper))
+        assertEquals("DEVICE_CHANGED_NO_PROOF", PioneerUsbPermissionProbe.verdict("SET_DEFAULT", true, false, true, false, helper))
+        helper.put("helperUid", 2000)
+        assertEquals("HELPER_FAILED", PioneerUsbPermissionProbe.verdict("SET_DEFAULT", true, true, true, false, helper))
+    }
+
     @Test fun deviceSelectionAndIdentityRejectAmbiguityOrReplacement() {
         val a = device("/dev/bus/usb/001/003", "serial-a")
         val b = device("/dev/bus/usb/001/004", "serial-b")
@@ -80,7 +91,7 @@ class PioneerUsbPermissionProbeTest {
     }
 
     @Test fun rootHelperDoesNotAcceptArbitraryOperations() {
-        for (action in listOf("INSPECT", "GRANT", "CLEAR_DEFAULT")) PioneerUsbPermissionHelper.requireAction(action)
+        for (action in listOf("INSPECT", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT")) PioneerUsbPermissionHelper.requireAction(action)
         for (action in listOf("SHELL", "REVOKE_ALL", "", "GRANT;reboot"))
             assertThrows(java.io.IOException::class.java) { PioneerUsbPermissionHelper.requireAction(action) }
     }

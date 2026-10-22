@@ -1013,4 +1013,6 @@
     <string name="connection_help_wifi_direct_beside_hotspot">Disattiva l’hotspot dell’auto e riprova, oppure scegli Hotspot integrato dell’auto in Configurazione connessione e salva nome e password.</string>
     <string name="settings_pioneer_lan_debug">Debug della rete locale</string>
     <string name="disclaimer_agree_swipe_hint">Accetta e continua\nScorri a destra o sinistra</string>
+    <string name="settings_update_client_id">ID client: %1$s</string>
+    <string name="settings_update_client_id_unavailable">ID client non disponibile</string>
 </resources>

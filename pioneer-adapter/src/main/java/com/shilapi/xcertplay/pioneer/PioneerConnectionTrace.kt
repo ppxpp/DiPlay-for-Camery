@@ -19,8 +19,14 @@ object PioneerConnectionTrace {
         requested = true
         mark("command-start-wired")
     }
+    @Synchronized fun appStart() {
+        if (PioneerWiredSession.active || PioneerLwipRuntime.active) return
+        begin()
+        mark("app-start")
+    }
     @Synchronized fun controllerStart() {
-        if (!requested || System.nanoTime() - startNs > 60_000_000_000L) begin()
+        if (startNs == 0L || System.nanoTime() - startNs > 60_000_000_000L ||
+            (!requested && events.any { it.contains("stage=controller-start ") })) begin()
         requested = false
         mark("controller-start")
     }

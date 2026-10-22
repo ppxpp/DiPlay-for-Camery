@@ -29,7 +29,7 @@ class NativeNcmSettingsTest {
         app.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit()
     }
 
-    @Test fun threeManualChoicesLiveInConnectionAndPersistIndependently() {
+    @Test fun fourManualChoicesLiveInConnectionAndPersistIndependently() {
         ShadowBuild.setModel("SABRESD_MX6DQ")
         ShadowBuild.setDevice("tamago")
         val screen = open()
@@ -38,10 +38,10 @@ class NativeNcmSettingsTest {
         fun control() = descendants(screen.window.decorView).filterIsInstance<TextView>()
             .single { it.text.toString().startsWith("$title · ") }
         assertEquals(PioneerWiredBackend.Mode.LWIP, PioneerWiredBackend.mode(screen))
-        for (mode in listOf(PioneerWiredBackend.Mode.NATIVE_NCM, PioneerWiredBackend.Mode.LWIP_OPTIMIZED, PioneerWiredBackend.Mode.LWIP)) {
+        for (mode in listOf(PioneerWiredBackend.Mode.NATIVE_NCM, PioneerWiredBackend.Mode.LWIP_OPTIMIZED, PioneerWiredBackend.Mode.VPN, PioneerWiredBackend.Mode.LWIP)) {
             control().performClick()
             val dialog = ShadowAlertDialog.getLatestAlertDialog()
-            assertEquals(3, dialog.listView.adapter.count)
+            assertEquals(4, dialog.listView.adapter.count)
             dialog.listView.performItemClick(null, mode.ordinal, dialog.listView.adapter.getItemId(mode.ordinal))
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()

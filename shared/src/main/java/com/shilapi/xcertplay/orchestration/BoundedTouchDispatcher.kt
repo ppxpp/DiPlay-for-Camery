@@ -13,6 +13,7 @@ internal class BoundedTouchDispatcher<S>(
     private val diagnostic: (String) -> Unit = {},
     private val capacity: Int = 64,
     private val nowNs: () -> Long = System::nanoTime,
+    private val sendTimed: ((S, List<AirPlayContact>, Long) -> Boolean)? = null,
 ) : Closeable {
     private data class Pending<S>(val session: S, val token: Any, val contacts: List<AirPlayContact>, val move: Boolean, val at: Long)
     private val lock = Any()
@@ -66,7 +67,7 @@ internal class BoundedTouchDispatcher<S>(
         } ?: return
         if (runCatching { isCurrent(report.session, report.token) }.getOrDefault(false)) {
             val start = nowNs()
-            val success = runCatching { send(report.session, report.contacts) }.getOrDefault(false)
+            val success = runCatching { sendTimed?.invoke(report.session, report.contacts, report.at) ?: send(report.session, report.contacts) }.getOrDefault(false)
             val failure = synchronized(lock) {
                 waitMax = maxOf(waitMax, start - report.at); sendMax = maxOf(sendMax, nowNs() - start)
                 if (success) { sent++; false }

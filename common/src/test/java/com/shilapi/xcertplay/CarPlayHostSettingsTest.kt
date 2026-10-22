@@ -82,10 +82,10 @@ class CarPlayHostSettingsTest {
         controllers.close()
     }
 
-    @Test fun openingUnchangedSettingsReusesThePreparedMenu() {
-        val prepared = menu()
+    @Test fun openingUnchangedSettingsBuildsLazilyAndReusesThePreparedMenu() {
+        assertNull(field("settingsMenu"))
         invoke("openSettingsMenu")
-        assertSame(prepared, menu())
+        val prepared = menu()
         invoke("cancelSettingsEdits")
         invoke("openSettingsMenu")
         assertSame(prepared, menu())
@@ -103,7 +103,9 @@ class CarPlayHostSettingsTest {
     }
 
     @Test fun externallySavedSettingsRebuildCachedControls() {
+        invoke("openSettingsMenu")
         val before = menu()
+        invoke("cancelSettingsEdits")
         val nextFps = if (field("fps") == 60) 30 else 60
         AirPlayPersistence.saveFps(activity, nextFps)
         invoke("openSettingsMenu")

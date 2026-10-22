@@ -30,11 +30,11 @@
 #define RX_CAP (256 * 1024)
 #define TX_CAP 16384
 #define QUEUE_CAP 1024
-struct frame { struct frame *next; int size; uint64_t queued_ns; unsigned char data[]; };
+struct frame { struct frame *next; int size, capacity; uint64_t queued_ns; unsigned char data[]; };
 struct connection {
-  struct tcp_pcb *pcb; int fd, connecting, peer_eof, local_eof;
-  unsigned char *rx; int rx_size;
-  unsigned char tx[TX_CAP]; int tx_size;
+  struct tcp_pcb *pcb; int fd, connecting, peer_eof, local_eof, local_fin;
+  unsigned char *rx; int rx_head, rx_size;
+  unsigned char tx[TX_CAP]; int tx_offset, tx_size;
   unsigned short port; unsigned long rx_total, tx_total, id, would_block; uint64_t rx_since, tx_since, progress_ns;
 };
 struct tcp_port { unsigned short port; struct tcp_pcb *pcb; int refs; u32_t seen; };
@@ -47,6 +47,17 @@ static struct peer_udp peer_udps[MAX_PEER_UDP]; static int npeer;
 static struct netif link_netif;
 static ip_addr_t peer_ip;
 static int initialized, active, debug_port, peer_known;
+static struct frame *free_frames;static int free_count,optimized_io;
+static struct frame *allocate_frame(int size){
+ struct frame *f=NULL;
+ if(optimized_io&&size<=1600&&free_frames){f=free_frames;free_frames=f->next;free_count--;}
+ else{int capacity=optimized_io&&size<=1600?1600:size;f=malloc(sizeof(*f)+capacity);if(f)f->capacity=capacity;}
+ return f;
+}
+static void release_frame(struct frame *f){
+ if(optimized_io&&f->capacity==1600&&free_count<64){f->next=free_frames;free_frames=f;free_count++;}
+ else free(f);
+}
 static struct frame *qhead, *qtail; static int qcount, qbytes, qpeak; static unsigned long conn_ids, queue_full;
 static char message_buffer[32768]; static int message_size;
 static unsigned long frames_in, frames_out; static u32_t refresh_at;
@@ -87,7 +98,7 @@ static void timing_note(const char *name,struct timing *t){
  note("LWIP_NATIVE_TIMING name=%s n=%lu p50Us=%llu p95Us=%llu p99Us=%llu maxUs=%llu errors=%lu",name,t->count,(unsigned long long)(t->count?quantile(t,50):0),(unsigned long long)(t->count?quantile(t,95):0),(unsigned long long)(t->count?quantile(t,99):0),(unsigned long long)(t->max/1000),t->errors);memset(t,0,sizeof(*t));}
 static err_t link_output(struct netif *netif, struct pbuf *p) {
  (void)netif; if(qcount>=QUEUE_CAP||qbytes+p->tot_len>1024*1024){queue_full++;return ERR_MEM;}
- struct frame *f=malloc(sizeof(*f)+p->tot_len);if(!f)return ERR_MEM;
+ struct frame *f=allocate_frame(p->tot_len);if(!f)return ERR_MEM;
  f->next=NULL;f->size=p->tot_len;f->queued_ns=mono_ns();qbytes+=f->size;if(qbytes>qpeak)qpeak=qbytes;pbuf_copy_partial(p,f->data,p->tot_len,0);
  if(packet_budget>0&&f->size>=55){unsigned char *b=f->data;note("LWIP_PACKET_OUT next=%u icmp=%u bytes=%d",b[20],b[54],f->size);packet_budget--;}
  if(qtail)qtail->next=f;else qhead=f;qtail=f;qcount++;frames_out++;return ERR_OK;
@@ -109,7 +120,12 @@ static err_t on_tcp_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
  (void)pcb; struct connection *c=arg;if(error!=ERR_OK)return error;
  if(!p){c->peer_eof=1;return ERR_OK;}
  if(p->tot_len>RX_CAP-c->rx_size)return ERR_MEM;
- pbuf_copy_partial(p,c->rx+c->rx_size,p->tot_len,0);if(!c->rx_size)c->rx_since=mono_ns();c->rx_size+=p->tot_len;c->rx_total+=p->tot_len;pbuf_free(p);return ERR_OK;
+ // A ring avoids moving up to RX_CAP bytes after every partial local socket write.
+ int tail=(c->rx_head+c->rx_size)%RX_CAP;
+ int first=p->tot_len;if(first>RX_CAP-tail)first=RX_CAP-tail;
+ pbuf_copy_partial(p,c->rx+tail,(u16_t)first,0);
+ if(first<p->tot_len)pbuf_copy_partial(p,c->rx,(u16_t)(p->tot_len-first),(u16_t)first);
+ if(!c->rx_size)c->rx_since=mono_ns();c->rx_size+=p->tot_len;c->rx_total+=p->tot_len;pbuf_free(p);return ERR_OK;
 }
 static err_t on_tcp_accept(void *arg, struct tcp_pcb *pcb, err_t error) {
  struct tcp_port *port=arg;if(error!=ERR_OK)return error;
@@ -179,16 +195,13 @@ static void scan_ports(void){
  if(!scan_file){scan_index=(scan_index+1)%4;scan_next=now+(scan_index==0?1000:0);}
  timed(&scan_time,mono_ns()-before,0);
 }
-static void pump_tcp(struct connection *c) {
+static void pump_tcp(struct connection *c, short events) {
  if(!c->pcb)return;
  if (c->connecting) {
-  // poll accepts process-wide descriptor numbers beyond FD_SETSIZE.
-  struct pollfd pending = {.fd = c->fd, .events = POLLOUT};
-  int ready = poll(&pending, 1, 0);
-  if (ready == 0 || (ready < 0 && errno == EINTR)) return;
+  if(!(events&(POLLOUT|POLLERR|POLLHUP|POLLNVAL)))return;
   int error = 0;
   socklen_t length = sizeof(error);
-  if (ready < 0 || (pending.revents & POLLNVAL)) error = ready < 0 ? errno : EBADF;
+  if (events & POLLNVAL) error = EBADF;
   else if (getsockopt(c->fd, SOL_SOCKET, SO_ERROR, &error, &length) < 0) error = errno;
   if (error) {
    note("LWIP_LOCAL_CONNECT_FAIL port=%u errno=%d", c->port, error);
@@ -199,19 +212,26 @@ static void pump_tcp(struct connection *c) {
   note("LWIP_LOCAL_CONNECTED port=%u", c->port);
  }
 
- if(c->rx_size){int n=send(c->fd,c->rx,c->rx_size>65535?65535:c->rx_size,MSG_NOSIGNAL);
-  if(n>0){memmove(c->rx,c->rx+n,c->rx_size-n);c->rx_size-=n;c->progress_ns=mono_ns();if(!c->rx_size){timed(&tcp_rx_age,c->progress_ns-c->rx_since,0);c->rx_since=0;}tcp_recved(c->pcb,(u16_t)n);}
+ if(c->rx_size&&(events&(POLLOUT|POLLERR|POLLHUP))){
+  int length=c->rx_size;if(length>RX_CAP-c->rx_head)length=RX_CAP-c->rx_head;if(length>65535)length=65535;
+  int n=send(c->fd,c->rx+c->rx_head,length,MSG_NOSIGNAL);
+  if(n>0){c->rx_head=(c->rx_head+n)%RX_CAP;c->rx_size-=n;c->progress_ns=mono_ns();if(!c->rx_size){timed(&tcp_rx_age,c->progress_ns-c->rx_since,0);c->rx_since=0;}tcp_recved(c->pcb,(u16_t)n);}
   else if(n<0&&(errno==EAGAIN||errno==EWOULDBLOCK))c->would_block++;
   else if(n<0&&errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR){note("LWIP_LOCAL_SEND_FAIL port=%u errno=%d",c->port,errno);tcp_abort(c->pcb);return;}
  }
- if(c->peer_eof&&c->rx_size==0){shutdown(c->fd,SHUT_WR);c->peer_eof=2;}
- if(!c->tx_size&&!c->local_eof){int want=tcp_sndbuf(c->pcb);if(want>TX_CAP)want=TX_CAP;
-  if(want>0){int n=recv(c->fd,c->tx,want,0);if(n>0){c->tx_size=n;c->tx_since=mono_ns();c->tx_total+=n;}else if(n==0)c->local_eof=1;
+ if(c->peer_eof==1&&c->rx_size==0){shutdown(c->fd,SHUT_WR);c->peer_eof=2;}
+ if(!c->tx_size&&!c->local_eof&&(events&(POLLIN|POLLHUP|POLLERR))){int want=tcp_sndbuf(c->pcb);if(want>TX_CAP)want=TX_CAP;
+  if(want>0){int n=recv(c->fd,c->tx,want,0);if(n>0){c->tx_offset=0;c->tx_size=n;c->tx_since=mono_ns();c->tx_total+=n;}else if(n==0)c->local_eof=1;
   else if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR){note("LWIP_LOCAL_READ_FAIL port=%u errno=%d",c->port,errno);tcp_abort(c->pcb);return;}}
  }
  if(c->tx_size){int n=c->tx_size;if(n>tcp_sndbuf(c->pcb))n=tcp_sndbuf(c->pcb);
-  if(n>0&&tcp_write(c->pcb,c->tx,n,TCP_WRITE_FLAG_COPY)==ERR_OK){memmove(c->tx,c->tx+n,c->tx_size-n);c->tx_size-=n;c->progress_ns=mono_ns();if(!c->tx_size){timed(&tcp_tx_age,c->progress_ns-c->tx_since,0);c->tx_since=0;}tcp_output(c->pcb);}}
- if(c->local_eof&&!c->tx_size&&!c->rx_size){struct tcp_pcb *p=c->pcb;tcp_arg(p,NULL);tcp_recv(p,NULL);tcp_err(p,NULL);
+  if(n>0&&tcp_write(c->pcb,c->tx+c->tx_offset,n,TCP_WRITE_FLAG_COPY)==ERR_OK){c->tx_offset+=n;c->tx_size-=n;c->progress_ns=mono_ns();if(!c->tx_size){timed(&tcp_tx_age,c->progress_ns-c->tx_since,0);c->tx_since=0;}tcp_output(c->pcb);}}
+ // A local read EOF only closes the local->peer direction. Keep receiving a peer response
+ // until its FIN; tcp_close here would discard a legitimate half-closed request/response.
+ if(c->local_eof&&!c->tx_size&&!c->rx_size&&!c->local_fin){
+  if(tcp_shutdown(c->pcb,0,1)==ERR_OK){c->local_fin=1;tcp_output(c->pcb);}
+ }
+ if(c->local_fin&&c->peer_eof&&!c->tx_size&&!c->rx_size){struct tcp_pcb *p=c->pcb;tcp_arg(p,NULL);tcp_recv(p,NULL);tcp_err(p,NULL);
   if(tcp_close(p)==ERR_OK){note("LWIP_TCP_LOCAL_EOF port=%u rx=%lu tx=%lu",c->port,c->rx_total,c->tx_total);forget_connection(c);}
   else{tcp_arg(p,c);tcp_recv(p,on_tcp_recv);tcp_err(p,on_tcp_error);}}
 }
@@ -219,7 +239,17 @@ static void poll_link(void) {
  if(!active)return;uint64_t begin=mono_ns();u32_t now=sys_now();scan_ports();
  uint64_t timer=mono_ns();if(timer_last&&timer-timer_last>timer_gap_max)timer_gap_max=timer-timer_last;timer_last=timer;sys_check_timeouts();
  uint64_t before=mono_ns();
- for(int k=0;k<MAX_CONN;k++){int i=tcp_cursor++%MAX_CONN;pump_tcp(&conns[i]);if(mono_ns()-before>1000000)break;}
+ // One readiness query replaces a nonblocking recv/send syscall on each idle stream.
+ // poll (rather than fd_set) accepts process-wide descriptor values above FD_SETSIZE.
+ struct pollfd ready[MAX_CONN];
+ for(int i=0;i<MAX_CONN;i++){
+  struct connection *c=&conns[i];ready[i].fd=c->pcb?c->fd:-1;ready[i].events=0;ready[i].revents=0;
+  if(c->connecting||c->rx_size)ready[i].events|=POLLOUT;
+  if(!c->local_eof&&!c->tx_size&&c->pcb&&tcp_sndbuf(c->pcb)>0)ready[i].events|=POLLIN;
+ }
+ int polled=poll(ready,MAX_CONN,0);
+ if(polled<0&&errno!=EINTR)note("LWIP_LOCAL_POLL_FAIL errno=%d",errno);
+ for(int k=0;k<MAX_CONN;k++){int i=tcp_cursor++%MAX_CONN;pump_tcp(&conns[i],polled>0?ready[i].revents:0);if(mono_ns()-before>1000000)break;}
  timed(&tcp_time,mono_ns()-before,0);
  before=mono_ns();int datagrams=0,bytes=0;
  if(peer_known){unsigned char buffer[65536];
@@ -265,6 +295,7 @@ static void close_link(void) {
  if(scan_file){fclose(scan_file);scan_file=NULL;}
  netif_set_down(&link_netif);netif_set_link_down(&link_netif);netif_remove(&link_netif);
  while(qhead){struct frame *f=qhead;qhead=f->next;free(f);}qtail=NULL;qcount=0;qbytes=0;
+ while(free_frames){struct frame *f=free_frames;free_frames=f->next;free(f);}free_count=0;optimized_io=0;
  note("LWIP_CLOSED framesIn=%lu framesOut=%lu",frames_in,frames_out);
 }
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_create(JNIEnv *env,jobject self,jbyteArray mac,jbyteArray addr,jint debug,jstring path) {
@@ -318,7 +349,7 @@ static int accept_ntb_frame(void *context, const unsigned char *data, size_t siz
  accept_ethernet(p,(int)size);return 0;
 }
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_configureOptimized(JNIEnv *env,jobject self,jint packet_size) {
- (void)env;(void)self;pn_stream_init(&ntb_input,(unsigned)packet_size);ntb_sequence=0;ntb_error_window=mono_ns();ntb_window_errors=0;
+ (void)env;(void)self;optimized_io=1;pn_stream_init(&ntb_input,(unsigned)packet_size);ntb_sequence=0;ntb_error_window=mono_ns();ntb_window_errors=0;
 }
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_inputNtb(JNIEnv *env,jobject self,jobject buffer,jint length) {
  (void)self;unsigned char *data=(*env)->GetDirectBufferAddress(env,buffer);jlong cap=(*env)->GetDirectBufferCapacity(env,buffer);
@@ -332,10 +363,10 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_inpu
  }
  return count;
 }
-JNIEXPORT jlongArray JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_outputNtb(JNIEnv *env,jobject self,jobject buffer,jint maximum) {
+JNIEXPORT jboolean JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_outputNtb(JNIEnv *env,jobject self,jobject buffer,jint maximum,jlongArray result) {
  (void)self;unsigned char *out=(*env)->GetDirectBufferAddress(env,buffer);jlong cap=(*env)->GetDirectBufferCapacity(env,buffer);
- if(!active||!out||cap<16384||maximum<1||maximum>8){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/lang/IllegalArgumentException"),"Invalid direct NTB output buffer");return NULL;}
- if(!qhead)return NULL;
+ if(!active||!out||cap<16384||maximum<1||maximum>8||!result||(*env)->GetArrayLength(env,result)<4){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/lang/IllegalArgumentException"),"Invalid direct NTB output buffer");return JNI_FALSE;}
+ if(!qhead)return JNI_FALSE;
  struct pn_frame spans[8];unsigned count=0;size_t payload=0;struct frame *f=qhead;
  while(f&&count<(unsigned)maximum){
   spans[count].data=f->data;spans[count].size=(size_t)f->size;
@@ -345,20 +376,19 @@ JNIEXPORT jlongArray JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNativ
   if(estimate>PN_OUT_LIMIT)break;
   payload+=spans[count].size;count++;f=f->next;
  }
- if(!count){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/io/IOException"),"Ethernet frame exceeds optimized NTB limit");return NULL;}
+ if(!count){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/io/IOException"),"Ethernet frame exceeds optimized NTB limit");return JNI_FALSE;}
  size_t bytes=pn_build(out,(size_t)cap,spans,count,ntb_sequence);
- if(!bytes){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/io/IOException"),"Could not build optimized NTB");return NULL;}
+ if(!bytes){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/io/IOException"),"Could not build optimized NTB");return JNI_FALSE;}
  jlong values[4]={(jlong)bytes,(jlong)count,(jlong)payload,(jlong)qhead->queued_ns};
- jlongArray result=(*env)->NewLongArray(env,4);if(!result)return NULL;
- (*env)->SetLongArrayRegion(env,result,0,4,values);if((*env)->ExceptionCheck(env))return NULL;
+ (*env)->SetLongArrayRegion(env,result,0,4,values);if((*env)->ExceptionCheck(env))return JNI_FALSE;
  ntb_sequence++;
- for(unsigned i=0;i<count;i++){f=qhead;qhead=f->next;qcount--;qbytes-=f->size;timed(&output_age,mono_ns()-f->queued_ns,0);free(f);}
+ for(unsigned i=0;i<count;i++){f=qhead;qhead=f->next;qcount--;qbytes-=f->size;timed(&output_age,mono_ns()-f->queued_ns,0);release_frame(f);}
  if(!qhead)qtail=NULL;
- return result;
+ return JNI_TRUE;
 }
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_poll(JNIEnv *env,jobject self){(void)env;(void)self;poll_link();}
 JNIEXPORT jbyteArray JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_output(JNIEnv *env,jobject self){(void)self;if(!qhead)return NULL;struct frame *f=qhead;qhead=f->next;if(!qhead)qtail=NULL;qcount--;qbytes-=f->size;timed(&output_age,mono_ns()-f->queued_ns,0);jbyteArray a=(*env)->NewByteArray(env,f->size);if(a)(*env)->SetByteArrayRegion(env,a,0,f->size,(jbyte*)f->data);free(f);return a;}
-JNIEXPORT jstring JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_messages(JNIEnv *env,jobject self){(void)self;jstring s=(*env)->NewStringUTF(env,message_buffer);message_size=0;message_buffer[0]=0;return s;}
+JNIEXPORT jstring JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_messages(JNIEnv *env,jobject self){(void)self;if(!message_size)return NULL;jstring s=(*env)->NewStringUTF(env,message_buffer);message_size=0;message_buffer[0]=0;return s;}
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_peerUdp(JNIEnv *env,jobject self,jint port){(void)env;(void)self;if(active)peer_socket(port);}
 JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerLwipNative_close(JNIEnv *env,jobject self){(void)env;(void)self;close_link();}
 

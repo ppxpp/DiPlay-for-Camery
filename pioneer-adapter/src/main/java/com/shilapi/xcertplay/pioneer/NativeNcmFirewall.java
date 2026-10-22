@@ -34,6 +34,13 @@ final class NativeNcmFirewall {
         this.name = name; this.token = token; this.runner = runner; this.guard = guard; this.journal = journal;
     }
 
+    /** Only for a fenced, dead-owner journal: delete and verify exact owned rules, never install. */
+    static List<String> recover(String name, String token, Runner runner, Journal journal) {
+        NativeNcmFirewall firewall = new NativeNcmFirewall(name, token, runner, () -> { }, journal);
+        firewall.attempted = true;
+        return firewall.restore();
+    }
+
     void install() throws Exception {
         guard.check();
         String[] snapshots = { chain(0), chain(2) };
@@ -43,26 +50,91 @@ final class NativeNcmFirewall {
             guard.check();
             if (state(id, snapshots[id / 2]) != State.ABSENT) throw new IOException("FIREWALL_RULE_CONFLICT id=" + id);
             mutate(id, "-I");
-            snapshots[id / 2] = chain(id);
-            if (state(id, snapshots[id / 2]) != State.PRESENT) throw new IOException("FIREWALL_INSERT_UNCONFIRMED id=" + id);
+            // A matching -C proves the complete rule after this insert. The full snapshots below
+            // still prove head position and uniqueness; repeating a chain dump here only
+            // duplicates that work while delaying detection of a missing insert.
+            if (runner.run(arguments(name, token, id, "-C")).exit != 0)
+                throw new IOException("FIREWALL_INSERT_UNCONFIRMED id=" + id);
             guard.check();
         }
+        // The caller verifies complete match after network setup, so install does not duplicate
+        // the same chain snapshots and -C checks here.
         installed = ownedLines(chain(0), chain(2), token);
-        verify();
+    }
+
+    /** Idempotent persistent rules: keep exact matches, insert only missing rules. */
+    int ensure() throws Exception {
+        int changed = 0;
+        guard.check();
+        String[] dumps = { chain(0), chain(2) };
+        requireChain(dumps[0], "CARNET_IN", true);
+        requireChain(dumps[1], "CARNET_OUT", true);
+        for (int id = 0; id < 4; id++) {
+            guard.check();
+            State before = state(id, dumps[id / 2]);
+            if (before == State.CONFLICT) throw new IOException("FIREWALL_RULE_CONFLICT id="+id);
+            if (before == State.ABSENT) { mutate(id, "-I"); changed++; }
+        }
+        installed = ownedLines(chain(0), chain(2), token);
+        return changed;
+    }
+
+    /** Full -S snapshots already contain the kernel rule match; avoid per-rule -C forks. */
+    int ensureFromSnapshots() throws Exception {
+        guard.check();
+        String[] dumps = { chain(0), chain(2) };
+        requireChain(dumps[0], "CARNET_IN", true);
+        requireChain(dumps[1], "CARNET_OUT", true);
+        List<Integer> missing = new ArrayList<>();
+        for (int id = 0; id < 4; id++) {
+            int found = 0;
+            String[] args = arguments(name,token,id,"-C");
+            Map<String,String> expected = canonicalRule("-A " + args[4] + " " + String.join(" ",Arrays.copyOfRange(args,5,args.length)));
+            for (String line : lines(dumps[id/2])) if (comment(token,id).equals(ruleComment(line))) {
+                found++;
+                if (!expected.equals(canonicalRule(line))) throw new IOException("FIREWALL_RULE_CONFLICT id="+id);
+            }
+            if (found > 1) throw new IOException("FIREWALL_RULE_CONFLICT id="+id);
+            if (found == 0) missing.add(id);
+        }
+        for (int id : missing) { guard.check(); mutate(id,"-I"); }
+        if (!missing.isEmpty()) { dumps[0] = chain(0); dumps[1] = chain(2); }
+        installed = ownedLines(dumps[0],dumps[1],token);
+        // Verify full contents after mutation, as well as head position and uniqueness.
+        for (int id=0; id<4; id++) {
+            String[] args = arguments(name,token,id,"-C");
+            Map<String,String> expected = canonicalRule("-A " + args[4] + " " + String.join(" ",Arrays.copyOfRange(args,5,args.length)));
+            if (!expected.equals(canonicalRule(installed.get(id)))) throw new IOException("FIREWALL_RULE_CHANGED id="+id);
+        }
+        guard.check();
+        return missing.size();
+    }
+
+    private static Map<String,String> canonicalRule(String line) throws IOException {
+        String[] tokens = line.trim().split("\\s+");
+        if (tokens.length % 2 != 0) throw new IOException("FIREWALL_RULE_PARSE");
+        Map<String,String> fields = new HashMap<>();
+        Set<String> supported = new HashSet<>(Arrays.asList("-A","-s","-d","-i","-o","-p","-m","--comment","-j"));
+        for (int i=0; i<tokens.length; i+=2) {
+            String key=tokens[i], value=tokens[i+1];
+            if (!supported.contains(key)) throw new IOException("FIREWALL_RULE_OPTION "+key);
+            if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) value=value.substring(1,value.length()-1);
+            if (key.equals("-p") && (value.equals("ipv6-icmp") || value.equals("58"))) value="icmpv6";
+            if (fields.put(key,value)!=null) throw new IOException("FIREWALL_RULE_DUPLICATE_OPTION "+key);
+        }
+        return fields;
     }
 
     void verify() throws Exception {
         guard.check();
-        Map<Integer, String> current = ownedLines(chain(0), chain(2), token);
+        String input = chain(0), output = chain(2);
+        Map<Integer, String> current = ownedLines(input, output, token);
         if (installed == null || !installed.equals(current)) throw new IOException("FIREWALL_RULE_CHANGED");
         // The dump alone cannot prove that the complete intended match is still installed.
-        for (int id = 0; id < 4; id++) if (state(id, id < 2 ? cachedInput(current) : cachedOutput(current)) != State.PRESENT)
+        for (int id = 0; id < 4; id++) if (state(id, id < 2 ? input : output) != State.PRESENT)
             throw new IOException("FIREWALL_RULE_CHANGED id=" + id);
         guard.check();
     }
-
-    private String cachedInput(Map<Integer, String> lines) { return lines.get(0) + "\n" + lines.get(1); }
-    private String cachedOutput(Map<Integer, String> lines) { return lines.get(2) + "\n" + lines.get(3); }
 
     List<String> restore() {
         List<String> errors = new ArrayList<>();
