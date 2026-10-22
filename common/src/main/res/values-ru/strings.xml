@@ -923,4 +923,6 @@
     <string name="settings_hotspot_interface">Интерфейс точки доступа (необязательно)</string>
     <string name="settings_hotspot_interface_description">Только для головных устройств, которые держат точку доступа на сетевом интерфейсе, не считающемся в Android точкой доступа Wi-Fi, например eth0.3 на некоторых устройствах Geely, Lynk &amp; Co и других Qualcomm. Оставьте пустым для автоматического поиска.</string>
     <string name="disclaimer_agree_swipe_hint">Принять и продолжить\nЛистайте влево или вправо</string>
+    <string name="settings_update_client_id">ID клиента: %1$s</string>
+    <string name="settings_update_client_id_unavailable">ID клиента недоступен</string>
 </resources>

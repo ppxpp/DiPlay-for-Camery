@@ -25,6 +25,8 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
 ```
 
+A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client and is served the beta channel. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request; a disabled beta release is still unavailable.
+
 The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 
 The Function reads this private metadata object:

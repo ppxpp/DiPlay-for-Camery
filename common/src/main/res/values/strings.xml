@@ -1045,4 +1045,6 @@
     <string name="settings_hotspot_interface_description">Only for head units that run their hotspot on a network interface Android does not report as a Wi-Fi hotspot, for example eth0.3 on some Geely, Lynk &amp; Co and other Qualcomm units. Leave empty to find it automatically.</string>
     <string name="home_title">DiPlay凯美瑞A导航适配版</string>
     <string name="disclaimer_agree_swipe_hint">Agree and continue\nSwipe left or right</string>
+    <string name="settings_update_client_id">Client ID: %1$s</string>
+    <string name="settings_update_client_id_unavailable">Client ID unavailable</string>
 </resources>

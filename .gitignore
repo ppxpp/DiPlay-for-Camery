@@ -45,9 +45,32 @@ release-signing.properties
 *.apk
 *.aab
 
-# Explicitly supplied head-unit boot launcher companion APKs
-!/boot-launcher/开机启动（A）替换车机微信.apk
+# Local-only proprietary material and internal notes. Files stay on disk, not in Git.
+/wecarflow/*
+!/wecarflow/release/
+/wecarflow/release/*
+/vehicle-support/
+/update-service/site/docs/
+/docs/ANDROID6_COMPATIBILITY.md
+/docs/ANDROID_A_HARDWARE_RESEARCH.md
+/docs/ANDROID_A_MANAGEMENT_REQUIREMENTS.md
+/docs/ANDROID_A_RFCOMM_VALIDATION.md
+/docs/CURRENT_PROGRESS.md
+/docs/PIONEER_CARPLAY_AUDIO.md
+/docs/PROJECT_AGENT_REQUIREMENTS.md
+/docs/vehicle-adaptation/
+/docs/厂商适配接入与上游同步说明.md
+/scripts/build-usb-permission-probe.sh
+/scripts/check_vehicle_adaptation.sh
+/scripts/provision-signing.sh
+/scripts/provision_vehicle_sdk.py
+/.github/workflows/vehicle-adaptation.yml
+/update-service/DESIGN_SPEC.md
+/update-service/DiPlay凯美瑞版响应式产品页.png
+
+# Explicitly reviewed companion APKs; all other APKs stay ignored.
 !/boot-launcher/开机启动（A）替换车机微信_开关版.apk
+!/wecarflow/release/爱趣听_v2.7.1.36971303_DiPlay适配_修复播放列表只循环20首_20261019.apk
 
 # Generated Python bytecode
 __pycache__/

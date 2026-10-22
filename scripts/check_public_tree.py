@@ -8,12 +8,20 @@ root = Path(__file__).resolve().parents[1]
 names = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
 blocked_suffixes = {'.pk8', '.p7b', '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.apk', '.aab'}
 private_block = re.compile(rb'-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{40,}')
+# Reviewed companion applications that ship as installable APKs. Keep exact paths.
+approved_distribution = {
+    'boot-launcher/开机启动（A）替换车机微信_开关版.apk',
+    'wecarflow/release/爱趣听_v2.7.1.36971303_DiPlay适配_修复播放列表只循环20首_20261019.apk',
+}
 failures = []
 for name in filter(None, names):
     path = root / name
     if not path.is_file():
         continue
-    if '.private' in path.relative_to(root).parts or path.suffix.lower() in blocked_suffixes:
+    relative = path.relative_to(root)
+    if relative.as_posix() in approved_distribution:
+        continue
+    if '.private' in relative.parts or path.suffix.lower() in blocked_suffixes:
         failures.append(name)
     elif private_block.search(path.read_bytes()):
         failures.append(name)
