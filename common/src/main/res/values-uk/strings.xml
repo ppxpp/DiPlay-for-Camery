@@ -195,6 +195,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">Скасувати зміни й вийти з налаштувань</string>
     <string name="disconnect">Відключити</string>
+    <string name="disconnect_this_session">Відключити це підключення</string>
     <string name="discovering_iphone">Пошук iPhone</string>
     <string name="display_and_performance">Екран і продуктивність</string>
     <string name="done">Готово</string>

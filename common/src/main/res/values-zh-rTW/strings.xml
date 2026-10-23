@@ -191,6 +191,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">放棄變更並離開設定</string>
     <string name="disconnect">中斷連線</string>
+    <string name="disconnect_this_session">中斷此次連線</string>
     <string name="discovering_iphone">正在尋找 iPhone</string>
     <string name="display_and_performance">顯示方式與效能</string>
     <string name="done">完成</string>

@@ -190,6 +190,7 @@
     <string name="diagnostics">Диагностика</string>
     <string name="discard_changes_and_exit_settings">Отменить изменения и выйти из настроек</string>
     <string name="disconnect">Отключить</string>
+    <string name="disconnect_this_session">Отключить это подключение</string>
     <string name="discovering_iphone">Поиск iPhone</string>
     <string name="display_and_performance">Экран и производительность</string>
     <string name="done">Готово</string>

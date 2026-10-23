@@ -492,6 +492,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var settingsMenuRenderedState: List<Any?>? = null
     private var settingsMenuNeedsRebuild = false
     private var settingsMenuContentScroll: ScrollView? = null
+    private var disconnectSessionButton: DiPlayButton? = null
     private var mfiTargetGroup: RadioGroup? = null
     private var mfiI2cFields: View? = null
     private var mfiRemoteFields: View? = null
@@ -3445,6 +3446,15 @@ class CarPlayHostActivity : ComponentActivity() {
             style(DiPlayButtonKind.PRIMARY, overlayPalette, overlay = true)
             setOnClickListener { saveSettingsAndReconnect() }
         }
+        val disconnectButton = DiPlayButton(this).apply {
+            text = getString(R.string.disconnect_this_session)
+            textSize = 17f
+            minHeight = dp(SWIPE_ACTION_HEIGHT_DP)
+            visibility = if (CarPlayBackgroundSession.hasSession()) View.VISIBLE else View.GONE
+            style(DiPlayButtonKind.TONAL_DANGER, overlayPalette, overlay = true)
+            setOnClickListener { disconnectSession() }
+        }
+        disconnectSessionButton = disconnectButton
         val exitApplicationButton = DiPlayButton(this).apply {
             text = getString(R.string.exit_application)
             textSize = 17f
@@ -3650,6 +3660,8 @@ class CarPlayHostActivity : ComponentActivity() {
                 dp(SWIPE_CHROME_PADDING_DP), dp(SWIPE_CHROME_PADDING_DP))
             addView(save, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(disconnectButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
         }
         panel.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -6449,6 +6461,8 @@ class CarPlayHostActivity : ComponentActivity() {
         val builtAt = System.nanoTime()
         menuOpen = true
         updateCallPopupGuard()
+        disconnectSessionButton?.visibility =
+            if (CarPlayBackgroundSession.hasSession()) View.VISIBLE else View.GONE
         gestureOverlay?.visibility = View.GONE
         settingsMenu?.visibility = View.VISIBLE
         focusSettingsMenuRoot()
@@ -6610,6 +6624,15 @@ class CarPlayHostActivity : ComponentActivity() {
         } else {
             maybeStartCarPlay()
         }
+    }
+
+    private fun disconnectSession() {
+        if (shuttingDown.get()) return
+        if (!CarPlayBackgroundSession.hasSession()) return
+        appendLog("Disconnect requested from settings")
+        // Return to DiPlay before the projection task tears down, like the home screen's Disconnect.
+        showDiPlayHome()
+        CarPlayBackgroundSession.stop()
     }
 
     private fun exitApplication() {

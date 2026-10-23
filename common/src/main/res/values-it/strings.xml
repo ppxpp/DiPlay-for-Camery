@@ -194,6 +194,7 @@
     <string name="diagnostics">Diagnostica</string>
     <string name="discard_changes_and_exit_settings">Annulla le modifiche ed esci dalle impostazioni</string>
     <string name="disconnect">Disconnetti</string>
+    <string name="disconnect_this_session">Disconnetti questa connessione</string>
     <string name="discovering_iphone">Ricerca dell’iPhone</string>
     <string name="display_and_performance">Schermo e prestazioni</string>
     <string name="done">Fine</string>

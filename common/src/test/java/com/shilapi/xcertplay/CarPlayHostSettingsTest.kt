@@ -91,6 +91,21 @@ class CarPlayHostSettingsTest {
         assertSame(prepared, menu())
     }
 
+    @Test fun disconnectButtonIsPinnedInTheFooterWhileASessionRuns() {
+        CarPlayBackgroundSession.store(
+            mock(CarPlayController::class.java),
+            mock(com.shilapi.xcertplay.media.AndroidMediaSink::class.java),
+            1, 1, activity,
+            CarPlaySessionDisplay(1, 1, 0, false, false, 1, 1),
+        ) { it() }
+        invoke("openSettingsMenu")
+        val button = views(menu()).filterIsInstance<Button>()
+            .single { it.text == activity.getString(R.string.disconnect_this_session) }
+
+        assertEquals(View.VISIBLE, button.visibility)
+        assertTrue(button.isClickable)
+    }
+
     @Test fun cancellingEditedSettingsInvalidatesCachedControls() {
         invoke("openSettingsMenu")
         val before = menu()

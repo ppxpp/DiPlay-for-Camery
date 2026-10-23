@@ -195,6 +195,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">変更を破棄して設定を終了</string>
     <string name="disconnect">切断</string>
+    <string name="disconnect_this_session">この接続を切断</string>
     <string name="discovering_iphone">iPhoneを検索しています</string>
     <string name="display_and_performance">表示とパフォーマンス</string>
     <string name="done">完了</string>
