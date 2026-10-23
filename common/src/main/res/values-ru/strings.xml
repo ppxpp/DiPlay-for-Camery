@@ -722,6 +722,9 @@
     <string name="update_install">Установить %1$s</string>
     <string name="update_failed">Не удалось обновить</string>
     <string name="update_available_home">Доступно обновление</string>
+    <string name="update_available_connection">Доступна новая версия %1$s</string>
+    <string name="update_available_connection_beta">Доступна новая бета-версия %1$s</string>
+    <string name="update_available_connection_action">Нажмите, чтобы обновиться в разделе «О программе»</string>
     <string name="update_saved_to">Сохранено в %1$s</string>
     <string name="backup_title">Резервная копия настроек</string>
     <string name="backup_open">Резервная копия на телефоне</string>

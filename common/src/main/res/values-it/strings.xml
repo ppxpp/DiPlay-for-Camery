@@ -862,6 +862,9 @@
     <string name="update_install">Installa %1$s</string>
     <string name="update_failed">Aggiornamento non riuscito</string>
     <string name="update_available_home">Aggiornamento disponibile</string>
+    <string name="update_available_connection">Nuova versione %1$s disponibile</string>
+    <string name="update_available_connection_beta">Nuova versione beta %1$s disponibile</string>
+    <string name="update_available_connection_action">Tocca per aggiornare in Informazioni</string>
     <string name="update_saved_to">Salvato in %1$s</string>
     <string name="backup_title">Backup delle impostazioni</string>
     <string name="backup_open">Backup o ripristino su un telefono</string>

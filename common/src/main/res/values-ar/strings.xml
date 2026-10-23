@@ -722,6 +722,9 @@
     <string name="update_install">تثبيت %1$s</string>
     <string name="update_failed">فشل التحديث</string>
     <string name="update_available_home">يتوفر تحديث</string>
+    <string name="update_available_connection">يتوفر إصدار جديد %1$s</string>
+    <string name="update_available_connection_beta">يتوفر إصدار بيتا جديد %1$s</string>
+    <string name="update_available_connection_action">انقر للترقية من صفحة «حول»</string>
     <string name="update_saved_to">تم الحفظ في %1$s</string>
     <string name="backup_title">نسخة احتياطية من الإعدادات</string>
     <string name="backup_open">نسخ احتياطي أو استعادة عبر هاتف</string>

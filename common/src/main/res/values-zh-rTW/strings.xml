@@ -787,6 +787,9 @@
     <string name="update_install">安裝 %1$s</string>
     <string name="update_failed">更新失敗</string>
     <string name="update_available_home">有可用更新</string>
+    <string name="update_available_connection">發現新版本 %1$s</string>
+    <string name="update_available_connection_beta">發現新測試版 %1$s</string>
+    <string name="update_available_connection_action">點擊前往「關於」頁升級</string>
     <string name="update_saved_to">已儲存至 %1$s</string>
     <string name="backup_title">備份設定</string>
     <string name="backup_open">在手機上備份或還原</string>

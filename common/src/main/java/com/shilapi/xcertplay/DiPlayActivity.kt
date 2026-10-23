@@ -439,10 +439,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         // Consent was checked above. A recreated gate must continue into the app rather than
         // restoring the disclaimer page saved just before the user pressed Agree.
-        page = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
+        val requestedPage = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
             ?: intent.getStringExtra("page")
+        page = requestedPage
             ?: if (RemoteGatewaySettings.loadSelected(this) == null && setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
+        if (requestedPage == "update") {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            availableUpdate?.let {
+                updateRelease = it
+                updateStage = UpdateStage.AVAILABLE
+            }
+        }
         render()
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -478,7 +487,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE home redirect-to-host without-render action=${intent.action}")
             openProjection(); return
         }
-        page = intent.getStringExtra("page") ?: "home"; render()
+        val requestedPage = intent.getStringExtra("page")
+        page = requestedPage ?: "home"
+        if (requestedPage == "update") {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            refreshAvailableUpdate()
+            availableUpdate?.let {
+                updateRelease = it
+                updateStage = UpdateStage.AVAILABLE
+            }
+        }
+        render()
         automaticVehicleValidationStarted = false
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -2863,6 +2883,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             userAgent(),
             channel,
             clientId = StableClientId.get(this),
+        )
+    }
+
+    private fun refreshAvailableUpdate() {
+        availableUpdate = UpdateAvailability.available(
+            this,
+            installedVersionCode(),
+            UpdateChannelStore.load(this),
         )
     }
 

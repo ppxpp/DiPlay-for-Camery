@@ -26,6 +26,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.RippleDrawable
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.net.Uri
@@ -68,6 +69,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -119,6 +121,10 @@ import com.shilapi.xcertplay.transport.BluetoothRadioCheck
 import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
+import com.shilapi.xcertplay.update.UpdateAvailability
+import com.shilapi.xcertplay.update.UpdateChannel
+import com.shilapi.xcertplay.update.UpdateChannelStore
+import com.shilapi.xcertplay.update.UpdateRelease
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
@@ -151,6 +157,69 @@ class CarPlayHostActivity : ComponentActivity() {
         val intervalMillis: Int,
         val triggerDelayMillis: Int,
     )
+
+    private class WaitingUpdateNotice(
+        context: Context,
+        title: String,
+        action: String,
+        onClick: () -> Unit,
+    ) : LinearLayout(context) {
+        private val icon = ImageView(context)
+        private val titleView = TextView(context)
+        private val actionView = TextView(context)
+
+        init {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(36)
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            isClickable = true
+            isFocusable = true
+            contentDescription = "$title. $action"
+            icon.apply {
+                setImageResource(R.drawable.ic_dp_update)
+                importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            titleView.apply {
+                text = title
+                textSize = 11f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                gravity = Gravity.START
+            }
+            actionView.apply {
+                text = action
+                textSize = 9.5f
+                gravity = Gravity.START
+            }
+            addView(icon, LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(6) })
+            addView(LinearLayout(context).apply {
+                orientation = VERTICAL
+                addView(titleView, LayoutParams(-1, -2))
+                addView(actionView, LayoutParams(-1, -2).apply { topMargin = dp(1) })
+            }, LayoutParams(0, -2, 1f))
+            setOnClickListener { onClick() }
+        }
+
+        fun setNight(night: Boolean) {
+            val palette = DiPlayPalette.of(night)
+            val tint = { alpha: Int -> (palette.warning and 0x00FFFFFF) or (alpha shl 24) }
+            val shell = GradientDrawable().apply {
+                setColor(tint(0x26))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), tint(0xB3))
+            }
+            background = RippleDrawable(
+                ColorStateList.valueOf(palette.ripple),
+                shell,
+                GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(12).toFloat() },
+            )
+            icon.imageTintList = ColorStateList.valueOf(palette.warning)
+            titleView.setTextColor(palette.warning)
+            actionView.setTextColor(palette.primaryText)
+        }
+
+        private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
+    }
 
     private var connectionPanel: View? = null
     private val connectionProgressPanel by lazy { com.shilapi.xcertplay.connection.ConnectionProgressPanel(this) }
@@ -2075,6 +2144,11 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private fun cachedUpdateRelease(): UpdateRelease? = runCatching {
+        val installedVersionCode = PackageInfoCompat.getLongVersionCode(packageManager.getPackageInfo(packageName, 0))
+        UpdateAvailability.available(this, installedVersionCode, UpdateChannelStore.load(this))
+    }.getOrNull()
+
     private fun buildContentView(): View {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         val video = TextureView(this).apply {
@@ -2123,7 +2197,29 @@ class CarPlayHostActivity : ComponentActivity() {
                 else getString(R.string.use_a_usb_data_cable_and_unlock_your_iphone_allow_trust_an)
             gravity = Gravity.CENTER
         }
-        panel.addView(instructions)
+        val updateNotice = cachedUpdateRelease()?.let { release ->
+            val title = getString(
+                if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_connection_beta
+                else R.string.update_available_connection,
+                release.tagName,
+            )
+            WaitingUpdateNotice(this, title, getString(R.string.update_available_connection_action)) {
+                showDiPlayHome("update")
+            }
+        }
+        // A wide screen floats the smaller notice at the left of the guidance, directly
+        // under the progress card; it takes no space, so no text is pushed or squeezed.
+        if (updateNotice != null && resources.configuration.screenWidthDp >= 800) {
+            panel.addView(FrameLayout(this).apply {
+                addView(instructions, FrameLayout.LayoutParams(-1, -2))
+                addView(updateNotice, FrameLayout.LayoutParams(dp(146), -2, Gravity.TOP or Gravity.START))
+            }, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            if (updateNotice != null) {
+                panel.addView(updateNotice, LinearLayout.LayoutParams(dp(146), -2).apply { bottomMargin = dp(4) })
+            }
+            panel.addView(instructions)
+        }
         val help = TextView(this).apply {
             gravity = Gravity.CENTER
             visibility = View.GONE
@@ -2171,6 +2267,7 @@ class CarPlayHostActivity : ComponentActivity() {
             val colors = WaitingScreenColors.of(appNight)
             viewport.setBackgroundColor(colors.background)
             connectionProgressPanel.setNight(appNight)
+            updateNotice?.setNight(appNight)
             title.setTextColor(colors.text)
             stage.setTextColor(colors.text)
             instructions.setTextColor(colors.secondary)
@@ -2209,6 +2306,12 @@ class CarPlayHostActivity : ComponentActivity() {
             for (button in listOf(back, recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
                     button.layoutParams = button.layoutParams.apply { width = buttonWidth }
+                }
+            }
+            updateNotice?.let { notice ->
+                val noticeWidth = minOf(dp(146), availableWidth.coerceAtLeast(dp(48)))
+                if (notice.layoutParams.width != noticeWidth) {
+                    notice.layoutParams = notice.layoutParams.apply { width = noticeWidth }
                 }
             }
             if (preparationHeight == height) return

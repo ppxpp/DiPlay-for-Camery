@@ -888,6 +888,9 @@
     <string name="update_install">Install %1$s</string>
     <string name="update_failed">Update failed</string>
     <string name="update_available_home">Update available</string>
+    <string name="update_available_connection">New version %1$s is available</string>
+    <string name="update_available_connection_beta">New beta version %1$s is available</string>
+    <string name="update_available_connection_action">Tap to upgrade in About</string>
     <string name="update_saved_to">Saved to %1$s</string>
     <string name="backup_title">Back up settings</string>
     <string name="backup_open">Back up or restore on a phone</string>
