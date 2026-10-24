@@ -19,6 +19,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    lint {
+        // Legacy findings are baselined; only new findings fail the build.
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+    }
+
     buildFeatures {
         compose = true
     }

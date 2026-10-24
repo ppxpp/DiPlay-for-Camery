@@ -8,7 +8,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
 import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 internal class HttpStatusException(val statusCode: Int, message: String) : IOException(message)
 
@@ -20,7 +19,7 @@ internal object UpdateClient {
 
     internal fun releasesUrl(channel: UpdateChannel, clientId: String? = null): String =
         "https://diplay.mgulu.com/api/v1/apps/diplay/android/${channel.apiName}/latest" +
-            clientId?.takeIf { it.isNotBlank() }?.let { "?id=${URLEncoder.encode(it, StandardCharsets.UTF_8)}" }.orEmpty()
+            clientId?.takeIf { it.isNotBlank() }?.let { "?id=${URLEncoder.encode(it, "UTF-8")}" }.orEmpty()
 
     internal fun fetchText(
         url: String,
