@@ -132,4 +132,71 @@ class MicrophonePacketizerTest {
         codec = codec,
         opusClockRate = opusClockRate,
     )
+    @org.junit.Test fun shortenOnlyOversizedPcmWithoutChangingItsRate() {
+        val phone = config(AudioCodecKind.LPCM).copy(sampleRate = 32_000, channels = 1, frameMillis = 20)
+        org.junit.Assert.assertEquals(20, phone.withPcmPacketBudget(10, 1500, true).frameMillis)
+        val wechat = phone.copy(sampleRate = 48_000)
+        val short = wechat.withPcmPacketBudget(10, 1500, true)
+        org.junit.Assert.assertEquals(48_000, short.sampleRate)
+        org.junit.Assert.assertEquals(960, short.frameBytes)
+        org.junit.Assert.assertEquals(480, short.rtpSamplesPerPacket)
+        org.junit.Assert.assertTrue(short.frameBytes + 84 <= 1500)
+        org.junit.Assert.assertEquals(20, wechat.withPcmPacketBudget(0, 1500, true).frameMillis)
+    }
+
+    @org.junit.Test fun packetBudgetAdaptsToSmallerInterfacesAndStereo() {
+        val mono = config(AudioCodecKind.LPCM).copy(sampleRate = 32_000, channels = 1, frameMillis = 20)
+        org.junit.Assert.assertEquals(10, mono.withPcmPacketBudget(10, 1280, true).frameMillis)
+        val stereo = mono.copy(sampleRate = 48_000, channels = 2)
+        org.junit.Assert.assertEquals(5, stereo.withPcmPacketBudget(10, 1280, true).frameMillis)
+        org.junit.Assert.assertEquals(20, stereo.withPcmPacketBudget(10, 9000, true).frameMillis)
+    }
+
+    @org.junit.Test fun packetBudgetCountsAddressFamilyAndRejectsImpossibleFrames() {
+        val pcm = config(AudioCodecKind.LPCM).copy(sampleRate = 48_000, channels = 1, frameMillis = 10)
+        org.junit.Assert.assertEquals(10, pcm.withPcmPacketBudget(10, 1030, false).frameMillis)
+        org.junit.Assert.assertEquals(5, pcm.withPcmPacketBudget(10, 1030, true).frameMillis)
+        try { pcm.withPcmPacketBudget(10, 100, true); org.junit.Assert.fail() }
+        catch (_: IllegalArgumentException) { }
+        val opus = config(AudioCodecKind.OPUS)
+        org.junit.Assert.assertSame(opus, opus.withPcmPacketBudget(10, 1280, true))
+    }
+
+    @Test fun exactPacketBoundaryFitsButOneByteLessSelectsASmallerFrame() {
+        val pcm = config(AudioCodecKind.LPCM).copy(frameMillis = 10)
+        assertEquals(10, pcm.withPcmPacketBudget(10, 1044, true).frameMillis)
+        assertEquals(5, pcm.withPcmPacketBudget(10, 1043, true).frameMillis)
+        val short = pcm.copy(frameMillis = 5)
+        org.junit.Assert.assertSame(short, short.withPcmPacketBudget(10, 1280, true))
+        for ((duration, mtu) in listOf(3 to 1280, 10 to 0, 10 to -1)) {
+            try { pcm.withPcmPacketBudget(duration, mtu, true); org.junit.Assert.fail() }
+            catch (_: IllegalArgumentException) { }
+        }
+    }
+    @Test fun splitPcmPacketsPreserveAudioAndClockAcrossEncryption() {
+        val original = config(AudioCodecKind.LPCM).copy(frameMillis = 20)
+        val shortened = original.withPcmPacketBudget(10, 1280, true)
+        val pcm = ByteArray(original.frameBytes) { (it * 37).toByte() }
+        val expectedWire = MicrophonePacketizer.toWirePcm(pcm)
+        val counters = MicrophoneCounters()
+        val decoded = java.io.ByteArrayOutputStream()
+        for (index in 0 until original.frameBytes / shortened.frameBytes) {
+            val body = MicrophonePacketizer.toWirePcm(pcm.copyOfRange(index * shortened.frameBytes, (index + 1) * shortened.frameBytes))
+            val packet = MicrophonePacketizer.sealPacket(original.key, original.payloadType, counters, body, shortened.rtpSamplesPerPacket)
+            org.junit.Assert.assertTrue(packet.size + 48 <= 1280)
+            assertEquals(index, java.nio.ByteBuffer.wrap(packet).getShort(2).toInt() and 65535)
+            assertEquals(index * shortened.samplesPerPacket, java.nio.ByteBuffer.wrap(packet).getInt(4))
+            val end = packet.size - MicrophonePacketizer.NONCE_LEN
+            val nonce = ByteArray(12)
+            packet.copyInto(nonce, 4, end, packet.size)
+            val plain = AirPlayCrypto.chachaOpen(original.key, nonce,
+                packet.copyOfRange(MicrophonePacketizer.RTP_HEADER_LEN, end), packet.copyOfRange(4, MicrophonePacketizer.RTP_HEADER_LEN))
+            decoded.write(plain)
+        }
+        assertArrayEquals(expectedWire, decoded.toByteArray())
+        assertEquals(original.samplesPerPacket, counters.timestamp)
+        assertEquals(2, counters.sequence)
+        assertEquals(2L, counters.nonce)
+    }
+
 }

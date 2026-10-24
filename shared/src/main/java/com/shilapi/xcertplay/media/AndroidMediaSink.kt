@@ -662,8 +662,15 @@ class AndroidMediaSink(
             val speakerphoneCall = config.audioType == "telephony" &&
                 appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)
             if (config.audioType == "telephony" && !speakerphoneCall) enterCommunicationMode(id)
+            val budget = if (VehicleAudioRouting.available) MicrophonePacketBudget.resolve(config, appContext) else null
+            val effectiveConfig = if (budget != null) config.withPcmPacketBudget(
+                MicrophonePacketBudget.DEFAULT_MAX_SHORTENED_MILLIS,
+                budget.mtu, budget.ipv6) else config
+            val wireBytes = if (effectiveConfig.codec == AudioCodecKind.LPCM)
+                (effectiveConfig.frameBytes + 36 + 8 + if (config.host is java.net.Inet4Address) 20 else 40).toString() else "VARIABLE_ENCODED"
+            onAudioDiagnostic("Microphone: packet layout rate=${effectiveConfig.sampleRate} channels=${effectiveConfig.channels} codec=${effectiveConfig.codec} requestedFrameMs=${config.frameMillis} frameMs=${effectiveConfig.frameMillis} pcmBytes=${effectiveConfig.frameBytes} ipBytes=$wireBytes mtu=${budget?.mtu} interfaceMtu=${budget?.interfaceMtu} mtuSource=${budget?.source ?: "UNCHANGED_OTHER_VEHICLE"} interface=${budget?.interfaceName}")
             val uplink = microphoneUplinks.computeIfAbsent(id) {
-                MicrophoneUplink(config, onAudioDiagnostic,
+                MicrophoneUplink(effectiveConfig, onAudioDiagnostic,
                     applicationPackage = appContext?.packageName,
                     speakerphoneCall = speakerphoneCall,
                     echoReference = if (config.audioType == TELEPHONY_AUDIO_TYPE) callEchoReferences[id] else null)
