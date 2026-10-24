@@ -191,6 +191,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">放弃更改并退出设置</string>
     <string name="disconnect">断开连接</string>
+    <string name="disconnect_this_session">断开此次连接</string>
     <string name="discovering_iphone">正在查找 iPhone</string>
     <string name="display_and_performance">显示与性能</string>
     <string name="done">完成</string>
@@ -826,6 +827,16 @@
     <string name="settings_interface_size_auto">自动</string>
     <string name="settings_interface_size_hint">DiPlay 自身界面中文字和控件的大小。自动模式会在大尺寸低密度屏幕上放大它们。不影响 CarPlay。</string>
     <string name="settings_update_flavor_note">这里的更新用于 DiPlay 凯美瑞A导航适配版，不是更新 DiPlay 原版。</string>
+    <string name="settings_update_channel">更新渠道</string>
+    <string name="update_channel_stable">稳定版</string>
+    <string name="update_channel_beta">测试版</string>
+    <string name="settings_update_beta_warning">测试版可能不稳定；可随时切回稳定版，已安装的测试版不会自动降级。</string>
+    <string name="settings_update_channel_busy">请等待当前下载完成后再切换渠道。</string>
+    <string name="update_channel_unavailable">当前渠道暂无可用版本。</string>
+    <string name="update_channel_switch_title">切换更新渠道</string>
+    <string name="update_channel_switch_discard">切换渠道会丢弃当前已下载的更新，是否继续？</string>
+    <string name="update_channel_switch_confirm">切换</string>
+    <string name="update_available_home_beta">有测试版更新</string>
     <string name="update_check">检查更新</string>
     <string name="update_checking">正在检查…</string>
     <string name="update_up_to_date">已是最新版本</string>
@@ -835,6 +846,9 @@
     <string name="update_install">安装 %1$s</string>
     <string name="update_failed">更新失败</string>
     <string name="update_available_home">有可用更新</string>
+    <string name="update_available_connection">发现新版本 %1$s</string>
+    <string name="update_available_connection_beta">发现新测试版 %1$s</string>
+    <string name="update_available_connection_action">点击前往“关于”页升级</string>
     <string name="update_saved_to">已保存到 %1$s</string>
     <string name="backup_title">备份设置</string>
     <string name="backup_open">在手机上备份或恢复</string>
@@ -991,4 +1005,6 @@
     <string name="settings_hotspot_interface">热点网络接口（可选）</string>
     <string name="settings_hotspot_interface_description">仅用于把热点放在 Android 不认为是 Wi-Fi 热点的网络接口上的车机，例如部分吉利、领克及其它高通车机上的 eth0.3。留空则自动查找。</string>
     <string name="disclaimer_agree_swipe_hint">同意并继续\n左右滑动翻页</string>
+    <string name="settings_update_client_id">客户端 ID：%1$s</string>
+    <string name="settings_update_client_id_unavailable">客户端 ID 不可用</string>
 </resources>

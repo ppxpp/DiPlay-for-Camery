@@ -42,6 +42,7 @@ internal object PioneerAudioRouteAdapter : AudioRouteController {
             val controller = controllerClass.getMethod("getInstance").invoke(null)
             val current = controllerClass.getMethod("getCurSource", Int::class.javaPrimitiveType)
                 .invoke(controller, 1) as Int
+            report("Audio: Pioneer source check current=$current requiresMedia=${current != 300}")
             if (current != 300) {
                 val result = controllerClass.getMethod("change2Source", Int::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType).invoke(controller, 1, 300)

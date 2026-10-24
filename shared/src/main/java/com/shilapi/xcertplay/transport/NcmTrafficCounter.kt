@@ -10,6 +10,8 @@ internal class NcmTrafficCounter {
     private var ipv6 = 0L
     private var ipv4 = 0L
     private var toIphone = 0L
+    private var nativeHeaders = false
+    @Synchronized fun receivedNative(count: Int) { fromIphone += count; nativeHeaders = true }
     private val synsByPort = LinkedHashMap<Int, Int>()
 
     @Synchronized fun received(frame: ByteArray) {
@@ -42,7 +44,8 @@ internal class NcmTrafficCounter {
         val toAirPlay = airPlayPort?.let { synsByPort[it] } ?: 0
         val others = synsByPort.filterKeys { it != airPlayPort }.entries.joinToString(",") { "${it.key}:${it.value}" }
         return "fromIphone=$fromIphone ipv6=$ipv6 ipv4=$ipv4 tcpConnectToAirPlay=$toAirPlay " +
-            "tcpConnectOther=${others.ifEmpty { "none" }} toIphone=$toIphone"
+            "tcpConnectOther=${others.ifEmpty { "none" }} toIphone=$toIphone" +
+            if (nativeHeaders) " headersProcessedInNative=true" else ""
     }
 
     private fun u8(frame: ByteArray, offset: Int): Int? = frame.getOrNull(offset)?.toInt()?.and(0xff)

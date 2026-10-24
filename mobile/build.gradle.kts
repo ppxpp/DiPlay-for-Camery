@@ -6,6 +6,13 @@ plugins {
 // Source validation builds never bundle the private runtime identity, even on developer machines.
 // Normal local/release builds still require it; opt in explicitly only for source verification.
 val sourceOnlyBuild = providers.gradleProperty("diplaySourceOnly").map { it.toBooleanStrict() }.getOrElse(false)
+val requestedUpdateChannel = providers.gradleProperty("diplayUpdateChannel").orNull
+    ?: providers.environmentVariable("DIPLAY_UPDATE_CHANNEL").orNull
+require(requestedUpdateChannel == null || requestedUpdateChannel in setOf("stable", "beta")) {
+    "diplayUpdateChannel must be stable or beta"
+}
+fun updateChannelFor(buildType: String): String =
+    requestedUpdateChannel ?: if (buildType == "debug") "beta" else "stable"
 
 // Local builds bundle the project-local identity by default. Keep it outside Git.
 // DIPLAY_AUTH_ASSETS_DIR can explicitly select a different runtime identity directory.
@@ -34,9 +41,11 @@ android {
 
     buildTypes {
         debug {
+            manifestPlaceholders["updateChannel"] = updateChannelFor("debug")
 //            versionNameSuffix = "-hud-test"
         }
         release {
+            manifestPlaceholders["updateChannel"] = updateChannelFor("release")
             optimization {
                 enable = false
             }

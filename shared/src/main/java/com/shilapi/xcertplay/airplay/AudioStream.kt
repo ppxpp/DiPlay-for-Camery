@@ -38,10 +38,14 @@ class AudioStream(
     private val preferredDataPorts: IntArray? = null,
     /** The control connection's local address; its family picks the data socket's wildcard. */
     private val bindAddress: InetAddress? = null,
+    private val exactBindAddress: Boolean = false,
+    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val expectedPeer: InetAddress? = null,
 ) : Closeable {
     interface Listener {
         fun onStarted(firstSample: Int) {}
         fun onRtp(rtp: ByteArray, sample: Int) {}
+        fun onClosed(error: Throwable) {}
         fun onPacket(
             wire: ByteArray,
             rtp: ByteArray?,
@@ -66,7 +70,8 @@ class AudioStream(
     fun listen(listener: Listener): Pair<Int, Int> {
         // Only the RTP data port handles inbound media; the control port ignores its datagrams, so
         // it stays ephemeral and never consumes a forwarded firewall port.
-        val data = CarFirewallPorts.udpSocket(bindAddress, preferredDataPorts)
+        val data = if (nativeBinding != null) DatagramSocket(null).also { nativeBinding.bind(it) }
+            else CarFirewallPorts.udpSocket(bindAddress, preferredDataPorts, exactBindAddress)
         // Keep short Wi-Fi bursts in the kernel while decrypting or scheduling pauses
         // the receive thread. The platform may cap this request; log the actual size.
         val originalBufferBytes = runCatching { data.receiveBufferSize }.getOrDefault(0)
@@ -74,7 +79,10 @@ class AudioStream(
             runCatching { data.receiveBufferSize = AUDIO_RECEIVE_BUFFER_BYTES }
         }
         onDiagnostic("Audio UDP receive buffer type=$streamType original=$originalBufferBytes requested=$AUDIO_RECEIVE_BUFFER_BYTES actual=${runCatching { data.receiveBufferSize }.getOrDefault(0)}")
-        val control = CarFirewallPorts.udpSocket(null, null)
+        val control = try {
+            if (nativeBinding != null) DatagramSocket(null).also { nativeBinding.bind(it) }
+            else CarFirewallPorts.udpSocket(if (exactBindAddress) bindAddress else null, null, exactBindAddress)
+        } catch (error: Throwable) { data.close(); throw error }
         dataSocket = data
         controlSocket = control
         try {
@@ -85,7 +93,7 @@ class AudioStream(
             isDaemon = true
             start()
         }
-        controlThread = Thread({ runControl(control) }, "airplay-rtcp-rx").apply {
+        controlThread = Thread({ runControl(control, listener) }, "airplay-rtcp-rx").apply {
             isDaemon = true
             start()
         }
@@ -113,8 +121,11 @@ class AudioStream(
                 try {
                     stats.reading()
                     socket.receive(packet)
-                } catch (_: Exception) {
-                    if (closed.get()) return else continue
+                    nativeBinding?.validatePeer(packet.address, expectedPeer)
+                } catch (error: Exception) {
+                    if (closed.get()) return
+                    if (nativeBinding != null) { listener.onClosed(error); close(); return }
+                    continue
                 }
                 stats.received(
                     size = packet.length,
@@ -196,13 +207,16 @@ class AudioStream(
         } finally { stats.flush(ended = true) }
     }
 
-    private fun runControl(socket: DatagramSocket) {
+    private fun runControl(socket: DatagramSocket, listener: Listener) {
         val buffer = ByteArray(DATAGRAM_BYTES)
         while (!closed.get()) {
             try {
-                socket.receive(DatagramPacket(buffer, buffer.size))
-            } catch (_: Exception) {
+                val packet = DatagramPacket(buffer, buffer.size)
+                socket.receive(packet)
+                nativeBinding?.validatePeer(packet.address, expectedPeer)
+            } catch (error: Exception) {
                 if (closed.get()) return
+                if (nativeBinding != null) { listener.onClosed(error); close(); return }
             }
         }
     }

@@ -29,6 +29,9 @@ internal class BufferedAudioStream(
     private val nanoTime: () -> Long = System::nanoTime,
     private val pause: (Long) -> Unit = { Thread.sleep(it) },
     private val expectedPeer: InetAddress = InetAddress.getLoopbackAddress(),
+    private val bindAddress: InetAddress? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val onNativeFailure: (Throwable) -> Unit = {},
 ) : Closeable {
     internal class Frame(val sequence: Int, val timestamp: Long, val rtp: ByteArray)
 
@@ -38,7 +41,8 @@ internal class BufferedAudioStream(
     private var cleanupStarted = false // guarded by lock; permits reentrant close without recursion
     @Volatile internal var outputCleanupComplete = false
         private set
-    private val server = ServerSocket(0)
+    private val server = if (nativeBinding != null) ServerSocket().also { nativeBinding.bind(it) }
+        else if (bindAddress == null) ServerSocket(0) else ServerSocket(0, 50, bindAddress)
     private val portLease = try {
         com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(server.localPort, false)
     } catch (error: Throwable) { server.close(); throw error }
@@ -138,7 +142,10 @@ internal class BufferedAudioStream(
                 if (pacing) pause(pacedFrameMillis)
             }
         } catch (error: Exception) {
-            if (!closed.get()) log("Buffered audio: connection ended (${error.javaClass.simpleName})")
+            if (!closed.get()) {
+                log("Buffered audio: connection ended (${error.javaClass.simpleName})")
+                if (nativeBinding != null) onNativeFailure(error)
+            }
         } finally {
             runCatching { accepted?.close() }
             synchronized(lock) { if (client === accepted) client = null }
@@ -148,6 +155,7 @@ internal class BufferedAudioStream(
     private fun acceptPeer(): Socket? {
         while (!closed.get()) {
             val socket = server.accept()
+            nativeBinding?.validateAccepted(socket, expectedPeer)
             val accepted = synchronized(lock) {
                 if (closed.get()) {
                     runCatching { socket.close() }

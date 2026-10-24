@@ -40,27 +40,112 @@ class Ipv6NcmBridge(
     private var inboundTcpLogBudget = 16
     private var outboundLogBudget = 24
     private val running = AtomicBoolean(false)
+    private var nativeHandle = 0L
+    private val nativePackets get() = com.shilapi.xcertplay.pioneer.PioneerVpnPacketNative
     private lateinit var ncmToTunThread: Thread
     private lateinit var tunToNcmThread: Thread
 
     fun start() {
         check(running.compareAndSet(false, true)) { "bridge is already started" }
-        ncmToTunThread = Thread(::runNcmToTun, "ncm-ipv6-in").apply {
-            isDaemon = true
-            start()
-        }
-        tunToNcmThread = Thread(::runTunToNcm, "ncm-ipv6-out").apply {
-            isDaemon = true
-            start()
+        try {
+            if (neighborAddress != null && com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("buffers", "RUNNING")
+                nativeHandle = nativePackets.create(tun.fd, hostMac, neighborAddress)
+                check(nativeHandle != 0L) { "VPN native packet context unavailable; no fallback" }
+                check(nativePackets.prepareUsbContext(
+                    nativeHandle, ncm.usbFd, ncm.inEndpointAddress, ncm.outEndpointAddress,
+                ) == 0) { "VPN native USBFS context initialization failed" }
+                val ownerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.sessionId
+                val snapshot = {
+                    synchronized(this) {
+                        check(nativeHandle != 0L && com.shilapi.xcertplay.pioneer.PioneerWiredSession.isCurrent(ownerSession)) {
+                            "VPN native session already closed"
+                        }
+                        nativePackets.snapshotJson(nativeHandle)
+                    }
+                }
+                publishActiveSnapshot(snapshot)
+                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.vpnNativeSnapshot = snapshot
+                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.vpnEnableBatching = {
+                    synchronized(this) {
+                        nativeHandle != 0L && com.shilapi.xcertplay.pioneer.PioneerWiredSession.isCurrent(ownerSession) &&
+                            nativePackets.enableBatching(nativeHandle) == 0
+                    }
+                }
+                diagnostic("VPN_DATAPATH native USB receiveRequests=4 sendRequests=2 batchPackets=8; no batch wait")
+            }
+            ncmToTunThread = Thread({
+                if (nativeHandle == 0L) runNcmToTun()
+                else runNativeUrbReceiver()
+            }, "ncm-ipv6-in").apply { isDaemon = true }
+            tunToNcmThread = Thread({
+                if (nativeHandle == 0L) runTunToNcm()
+                else runNativeUrbSender()
+            }, "ncm-ipv6-out").apply { isDaemon = true }
+            ncmToTunThread.start()
+            tunToNcmThread.start()
+        } catch (error: Throwable) {
+            runCatching { close() }.onFailure(error::addSuppressed)
+            throw error
         }
     }
 
-    override fun close() {
-        if (!running.compareAndSet(true, false)) return
+    @Synchronized override fun close() {
+        if (!running.getAndSet(false) && nativeHandle == 0L) return
+        publishActiveSnapshot(null)
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.vpnNativeSnapshot = null
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.vpnEnableBatching = null
+        if (nativeHandle != 0L) nativePackets.stop(nativeHandle)
+        // Native workers must cancel/reap their URBs while the shared USB FD is still open.
+        if (nativeHandle != 0L) {
+            if (::ncmToTunThread.isInitialized) join(ncmToTunThread)
+            if (::tunToNcmThread.isInitialized) join(tunToNcmThread)
+            check((!::ncmToTunThread.isInitialized || !ncmToTunThread.isAlive) &&
+                (!::tunToNcmThread.isInitialized || !tunToNcmThread.isAlive)) { "VPN URBs did not quiesce; USB context retained" }
+        }
         ncm.close()
-        tun.close()
-        join(ncmToTunThread)
-        join(tunToNcmThread)
+        if (nativeHandle == 0L) tun.close() // Wake the legacy blocking FileInputStream reader.
+        if (nativeHandle == 0L) {
+            if (::ncmToTunThread.isInitialized) join(ncmToTunThread)
+            if (::tunToNcmThread.isInitialized) join(tunToNcmThread)
+        } else {
+            nativePackets.close(nativeHandle)
+            nativeHandle = 0L
+            tun.close()
+        }
+    }
+
+    private fun runNativeUrbReceiver() {
+        try {
+            val result = nativePackets.runUsbReceiver(
+                nativeHandle,
+                ncm.usbFd,
+                ncm.inEndpointAddress,
+                ncm.outEndpointAddress,
+                com.shilapi.xcertplay.pioneer.PioneerVpnIoPolicy.RECEIVE_REQUESTS,
+            )
+            if (running.get() && result < 0) {
+                onError(IOException("VPN_NATIVE_URB_RX_FAILED rc=$result"))
+            }
+        } catch (error: Exception) { if (running.get()) onError(error) }
+    }
+
+    private fun runNativeUrbSender() {
+        try {
+            // Idempotent promotion only: startup must never overwrite a concurrent
+            // first-frame callback by lowering its already-enabled batch limit.
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.firstFrame == true)
+                check(nativePackets.enableBatching(nativeHandle) == 0)
+            val result = nativePackets.runUsbSender(
+                nativeHandle,
+                ncm.usbFd,
+                ncm.outEndpointAddress,
+                com.shilapi.xcertplay.pioneer.PioneerVpnIoPolicy.SEND_REQUESTS,
+            )
+            if (running.get() && result < 0) {
+                onError(IOException("VPN_NATIVE_URB_TX_FAILED rc=$result"))
+            }
+        } catch (error: Exception) { if (running.get()) onError(error) }
     }
 
     private fun runNcmToTun() {
@@ -72,7 +157,7 @@ class Ipv6NcmBridge(
                 peerMac = ipv6.sourceMac
                 val neighborReply = neighborAddress?.let { PioneerNcmNeighborDiscovery.reply(frame, it, hostMac) }
                 if (neighborReply != null) {
-                    ncm.send(neighborReply, WRITE_TIMEOUT_MILLIS)
+                    sendFrame(neighborReply)
                     diagnostic("PIONEER_NDP_REPLY neighbor advertisement submitted bytes=${neighborReply.size}")
                     continue
                 }
@@ -141,13 +226,19 @@ class Ipv6NcmBridge(
                     )
                 }
                 val frame = EthernetIpv6Codec.build(hostMac, mac, ipv6)
-                ncm.send(frame, WRITE_TIMEOUT_MILLIS)
+                sendFrame(frame)
             }
         } catch (error: IOException) {
             if (running.get()) onError(error)
         } catch (error: RuntimeException) {
             if (running.get()) onError(error)
         }
+    }
+
+    private fun sendFrame(frame: ByteArray) {
+        // A failed ioctl may have delivered a prefix without reporting its length. Retain no
+        // silent drops and never blindly replay UDP/control packets with uncertain delivery.
+        requireCompleteWrite(ncm.sendMeasured(frame, WRITE_TIMEOUT_MILLIS))
     }
 
     private fun join(thread: Thread) {
@@ -186,7 +277,25 @@ class Ipv6NcmBridge(
     private fun ByteArray.u16(offset: Int): Int =
         ((this[offset].toInt() and 0xff) shl 8) or (this[offset + 1].toInt() and 0xff)
 
-    private companion object {
+    companion object {
+        @Synchronized fun prepare() {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("components", "RUNNING")
+            com.shilapi.xcertplay.pioneer.PioneerVpnPacketNative.prepare()
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("components", "COMPLETE")
+        }
+        @Volatile
+        var activeSnapshot: (() -> org.json.JSONObject)? = null
+            private set
+
+        private fun publishActiveSnapshot(snapshot: (() -> org.json.JSONObject)?) {
+            activeSnapshot = snapshot
+        }
+
+        internal fun requireCompleteWrite(result: NcmUsbBridge.WriteResult) {
+            if (!result.completed) throw IOException("VPN_NCM_WRITE_FAILED failure=${result.failure} " +
+                "transferred=${result.transferred} expected=${result.expected}; delivery unconfirmed, reconnect required")
+        }
+
         const val TAG = "xcertplay-usb"
         const val READ_TIMEOUT_MILLIS = 1_000L
         const val WRITE_TIMEOUT_MILLIS = 2_000

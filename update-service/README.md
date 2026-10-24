@@ -25,6 +25,8 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
 ```
 
+A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client and is served the beta channel. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request; a disabled beta release is still unavailable.
+
 The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 
 The Function reads this private metadata object:
@@ -110,6 +112,11 @@ node scripts/publish-update.mjs \
 
 The publisher computes SHA-256 and size, uploads the artifact and `SHA256SUMS.txt`, writes a version snapshot, then updates `latest.json` last. It does not read the previous manifest.
 
+The client's default update channel is embedded in the APK manifest. Build a beta artifact with
+`-PdiplayUpdateChannel=beta` (the release workflow passes the selected channel automatically);
+release builds without that property default to `stable`. A user's explicit in-app channel choice
+still overrides the build default.
+
 Use `--dry-run` to print the plan without writing R2.
 
 ## GitHub Actions
@@ -137,7 +144,6 @@ The Pages Function uses the existing private R2 `META` bucket for release snapsh
 - `ADMIN_SESSION_SECRET` (secret), a random value of at least 32 bytes (for example, `openssl rand -hex 32`)
 
 Set them with `npx wrangler pages secret put ADMIN_PASSWORD_HASH --project-name gtmc-app-updates` (and the same command for `ADMIN_SESSION_SECRET`), or in the Pages project's Settings → Variables and Secrets → Production. Changes require a new deployment. Cloudflare Workers WebCrypto caps PBKDF2 at 100,000 iterations; the hash generator and verifier both use 100,000, and hashes with another iteration count are rejected. Regenerate the hash if it was created with an older script.
-
 The admin console is at `/admin/`. Sessions are signed, expire after eight hours and use Secure, HttpOnly, SameSite=Strict cookies. Automatic delivery settings are stored alongside each release snapshot; admin edits update only its management metadata and, when editing the current version, the `latest.json` pointer as well. Rollback disables delivery for the version being rolled back from, then points `latest.json` at the selected historical snapshot without changing that snapshot's existing policy.
 
 For local login, run `npm run hash-admin-password` and put its output plus a local session secret in `update-service/.dev.vars`:

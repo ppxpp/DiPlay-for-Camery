@@ -1,7 +1,6 @@
 package com.shilapi.xcertplay.media
 
-import com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
-import com.shilapi.xcertplay.pioneer.PioneerUsbPolicy
+import com.shilapi.xcertplay.pioneer.PioneerWiredSession
 import java.io.Closeable
 
 /** The wired Pioneer microphone is gated separately from Android's RECORD_AUDIO permission. */
@@ -28,7 +27,9 @@ internal class PioneerMicrophoneLease private constructor(
     companion object {
         private var users = 0
         fun acquire(token: String?, report: (String) -> Unit): PioneerMicrophoneLease? = synchronized(PioneerMicrophoneLease::class.java) {
-            if (!PioneerUsbPolicy.matchesDevice() || !PioneerLwipRuntime.active) return@synchronized null
+            // The vehicle microphone gate belongs to the wired session, not its IP stack.
+            // Native NCM has no lwIP activity but needs the same requestMicOn/MIC path.
+            if (!PioneerWiredSession.adaptationActive) return@synchronized null
             val ownToken = checkNotNull(token) { "Microphone application identity unavailable" }
             val type = Class.forName("jp.pioneer.ceam.MediaManager.MediaController")
             val controller = checkNotNull(type.getMethod("getInstance").invoke(null))

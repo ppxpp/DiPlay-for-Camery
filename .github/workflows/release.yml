@@ -114,7 +114,11 @@ jobs:
           :common:testDebugUnitTest
           --tests "com.shilapi.xcertplay.update.*"
           --tests "com.shilapi.xcertplay.UpdateHomeAvailabilityTest"
+          :common:lintDebug
+          :shared:lintDebug
+          :pioneer-adapter:lintDebug
           :mobile:assembleRelease
+          -PdiplayUpdateChannel="${CHANNEL}"
           --stacktrace
 
       - name: Read and verify the built version
@@ -126,9 +130,16 @@ jobs:
           BADGING="$("$AAPT" dump badging "$APK")"
           VERSION_NAME="$(printf '%s\n' "$BADGING" | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" | head -n 1)"
           VERSION_CODE="$(printf '%s\n' "$BADGING" | sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" | head -n 1)"
+          BUILD_CHANNEL="$("$AAPT" dump xmltree "$APK" AndroidManifest.xml \
+            | awk '/com.shilapi.xcertplay.UPDATE_CHANNEL/{seen=1; next} seen && /android:value/{print; exit}' \
+            | sed -n 's/.*="\([^"]*\)".*/\1/p')"
           APP_VERSION="$(printf '%s' "$VERSION_NAME" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
           test -n "$VERSION_NAME" || { echo "::error::Could not read versionName"; exit 1; }
           test -n "$VERSION_CODE" || { echo "::error::Could not read versionCode"; exit 1; }
+          test "$BUILD_CHANNEL" = "$CHANNEL" || {
+            echo "::error::APK update channel '$BUILD_CHANNEL' does not match publishing channel '$CHANNEL'"
+            exit 1
+          }
           test -n "$APP_VERSION" || { echo "::error::versionName must start with x.y.z: $VERSION_NAME"; exit 1; }
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             case "${GITHUB_REF_NAME}" in

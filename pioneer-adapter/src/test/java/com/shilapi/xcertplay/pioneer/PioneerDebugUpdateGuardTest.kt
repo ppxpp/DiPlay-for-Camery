@@ -73,6 +73,15 @@ class PioneerDebugUpdateGuardTest {
         assertTrue(PioneerDebugUpdateGuard.isBusy())
     }
 
+    @Test fun bothWiredTransportsBlockUpdatesUntilTheirOwnerHasReleased() {
+        for (backend in PioneerWiredSession.Backend.entries) {
+            PioneerWiredSession.begin(backend, true).use {
+                reject { PioneerDebugUpdateGuard.requireIdle(idleState()) }
+            }
+            PioneerDebugUpdateGuard.requireIdle(idleState())
+        }
+    }
+
     @Test fun cacheMaintenanceHoldsTheSameLeaseUntilItsWorkFinishes() {
         PioneerDebugUpdateGuard.withCacheMaintenance {
             assertTrue(PioneerDebugUpdateGuard.isBusy())

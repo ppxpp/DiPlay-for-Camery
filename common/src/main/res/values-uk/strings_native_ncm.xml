@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">Нативний NCM (експериментально)</string>
+    <string name="settings_native_ncm_description">Увімкнено: системна мережа USB. Вимкнено: поточний спосіб підключення. Застосовується під час наступного підключення. У разі збою перемкніть вручну; автоматичного переходу між способами немає.</string>
+    <string name="settings_wired_backend">Спосіб дротового підключення</string>
+    <string name="settings_wired_backend_lwip">Початковий lwIP</string>
+    <string name="settings_wired_backend_optimized">Оптимізований lwIP (експериментально)</string>
+    <string name="settings_wired_backend_description">Виберіть один із чотирьох методів. VPN спочатку пробує автоматичну авторизацію. Зміна діє з наступного підключення. У разі помилки перемкніть вручну; автоматичного перемикання немає.</string>
+    <string name="settings_wired_backend_vpn">VPN (експериментально)</string>
+    <string name="vpn_root_authorizing">Авторизація VPN…</string>
+    <string name="vpn_root_failed">Не вдалося автоматично дозволити VPN. Повторіть спробу або дозвольте через систему. Метод підключення залишиться VPN.</string>
+    <string name="vpn_manual_authorize">Дозволити в системі</string>
+</resources>

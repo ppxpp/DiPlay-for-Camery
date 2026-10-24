@@ -8,6 +8,7 @@ import java.io.File
 /** Authenticated, bounded, read-only counters; no command lines or process control. */
 object PioneerSystemLoad {
     fun snapshot(): JSONObject = JSONObject().put("atNs", System.nanoTime())
+        .put("meminfo",runCatching { File("/proc/meminfo").readText().take(8192) }.getOrDefault("unavailable"))
         .put("processes", JSONArray(File("/proc").listFiles().orEmpty()
             .filter { it.name.all(Char::isDigit) }.take(512).mapNotNull { process ->
                 runCatching {
@@ -15,6 +16,8 @@ object PioneerSystemLoad {
                     val fields = stat.substringAfterLast(") ").split(' ')
                     JSONObject().put("pid", process.name).put("name", stat.substringAfter('(').substringBeforeLast(')'))
                         .put("userTicks", fields[11].toLong()).put("systemTicks", fields[12].toLong())
+                        .put("parentPid",fields[1].toInt()).put("residentPages",fields[21].toLong())
+                        .put("oomScoreAdj",runCatching { File(process,"oom_score_adj").readText().trim().toInt() }.getOrNull())
                 }.getOrNull()
             }))
         .put("thermal", JSONArray(File("/sys/class/thermal").listFiles().orEmpty()

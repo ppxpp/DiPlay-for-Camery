@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">Нативный NCM (экспериментально)</string>
+    <string name="settings_native_ncm_description">Включено: системная сеть USB. Выключено: текущий способ подключения. Применяется при следующем подключении. При сбое переключите вручную; автоматического перехода между способами нет.</string>
+    <string name="settings_wired_backend">Способ проводного подключения</string>
+    <string name="settings_wired_backend_lwip">Исходный lwIP</string>
+    <string name="settings_wired_backend_optimized">Оптимизированный lwIP (экспериментально)</string>
+    <string name="settings_wired_backend_description">Выберите один из четырёх методов. VPN сначала пробует автоматическую авторизацию. Изменение действует при следующем подключении. При ошибке переключите вручную; автоматического переключения нет.</string>
+    <string name="settings_wired_backend_vpn">VPN (экспериментально)</string>
+    <string name="vpn_root_authorizing">Авторизация VPN…</string>
+    <string name="vpn_root_failed">Не удалось автоматически разрешить VPN. Повторите попытку или разрешите через систему. Метод подключения останется VPN.</string>
+    <string name="vpn_manual_authorize">Разрешить в системе</string>
+</resources>

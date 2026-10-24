@@ -88,9 +88,9 @@ internal class MicrophoneUplink(
             return false
         }
 
-        if (config.audioType == "telephony") {
-            vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, onDiagnostic)
-        }
+        // Every negotiated input stream needs the Pioneer hardware gate, including Siri
+        // and app recording. Audio type only selects processing, not microphone ownership.
+        vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, onDiagnostic)
         val source = when {
             vehicleMicrophoneLease != null -> MediaRecorder.AudioSource.MIC
             config.audioType == "telephony" -> telephonyMicrophoneSource(
@@ -148,7 +148,10 @@ internal class MicrophoneUplink(
         val nextSocket = try {
             DatagramSocket(null).apply {
                 reuseAddress = true
-                bind(InetSocketAddress(InetAddress.getByName("::"), 0))
+                if (config.nativeBinding != null) {
+                    config.nativeBinding.bind(this)
+                    connect(config.nativeBinding.peerEndpoint(config.host, config.port))
+                } else bind(InetSocketAddress(config.bindAddress ?: InetAddress.getByName("::"), 0))
             }
         } catch (error: Exception) {
             Log.e(TAG, "microphone socket creation failed", error)
@@ -436,7 +439,8 @@ internal class MicrophoneUplink(
             samples = samples,
         )
         try {
-            socket.send(DatagramPacket(packet, packet.size, config.host, config.port))
+            val destination = config.nativeBinding?.peerEndpoint(config.host, config.port) ?: InetSocketAddress(config.host, config.port)
+            socket.send(DatagramPacket(packet, packet.size, destination))
             stats.sent()
         } catch (error: Exception) {
             stats.sendFailed()

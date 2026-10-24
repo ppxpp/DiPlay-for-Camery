@@ -103,6 +103,9 @@ internal class AudioFocusCoordinator(
         val focusStream = audioRouting.focusStream(attributes)
         if (closed || (!enabled && focusStream == null) || manager == null ||
             (channel == AudioChannel.NAVIGATION && focusStream == null)) return
+        // Pioneer speech uses an independent MIX focus request, but still needs TAI_AUDIO
+        // selected when Siri/navigation is the first sound after connection.
+        if (focusStream != null) ensureVehicleSource()
         if (audioRouting.independentSpeechFocus(attributes)) {
             independentSpeechTracks.add(track)
             if (independentSpeechRequest == null) {
@@ -117,9 +120,6 @@ internal class AudioFocusCoordinator(
             }
             return
         }
-        if (channel == AudioChannel.MEDIA && focusStream != null) {
-            audioRouting.selectMediaSource(report)
-        }
         active[track] = Entry(channel, attributes)
         recoveryOnly = false
         recoveryEpoch++
@@ -127,6 +127,11 @@ internal class AudioFocusCoordinator(
         applyMediaVolume(track, active.getValue(track))
         // The isolated playback guard pauses only already registered player peers. Never send
         // ACTION_MEDIA_BUTTON here: Android cold-starts the original music Application for it.
+    }
+
+    @Synchronized
+    fun ensureVehicleSource() {
+        if (!closed && audioRouting.available) audioRouting.selectMediaSource(report)
     }
 
     /** Retry only on an externally confirmed source return; never selects a native source. */
@@ -317,7 +322,7 @@ class AndroidMediaSink(
     fun hasMediaAudio(): Boolean = synchronized(mediaAudioTypes) { mediaAudioTypes.isNotEmpty() }
 
     fun canRecoverVehicleMedia(): Boolean = microphoneUplinks.isEmpty() &&
-        audioRenderers.keys.none { it.audioType in setOf("telephony", "speechRecognition", "alert") }
+        audioRenderers.keys.none { it.audioType.lowercase() in setOf("telephony", "speechrecognition", "alert") }
 
     fun recoverVehicleMediaFocus(): Boolean = canRecoverVehicleMedia() && audioFocusCoordinator.recoverVehicleMedia()
 
@@ -577,6 +582,11 @@ class AndroidMediaSink(
     }
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray) {
+        if (type == 110) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("media", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-receive", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-decode", "RUNNING")
+        }
         synchronized(videoOwnershipLock) {
             if (videoClosed) return
             videoDecoder(type).submit(naluBytes)
@@ -585,6 +595,11 @@ class AndroidMediaSink(
     }
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) {
+        if (type == 110) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("media", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-receive", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-decode", "RUNNING")
+        }
         synchronized(videoOwnershipLock) {
             if (videoClosed) return
             videoDecoder(type).submit(naluBytes, senderNanos, arrivalNanos)
@@ -647,8 +662,15 @@ class AndroidMediaSink(
             val speakerphoneCall = config.audioType == "telephony" &&
                 appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)
             if (config.audioType == "telephony" && !speakerphoneCall) enterCommunicationMode(id)
+            val budget = if (VehicleAudioRouting.available) MicrophonePacketBudget.resolve(config, appContext) else null
+            val effectiveConfig = if (budget != null) config.withPcmPacketBudget(
+                MicrophonePacketBudget.DEFAULT_MAX_SHORTENED_MILLIS,
+                budget.mtu, budget.ipv6) else config
+            val wireBytes = if (effectiveConfig.codec == AudioCodecKind.LPCM)
+                (effectiveConfig.frameBytes + 36 + 8 + if (config.host is java.net.Inet4Address) 20 else 40).toString() else "VARIABLE_ENCODED"
+            onAudioDiagnostic("Microphone: packet layout rate=${effectiveConfig.sampleRate} channels=${effectiveConfig.channels} codec=${effectiveConfig.codec} requestedFrameMs=${config.frameMillis} frameMs=${effectiveConfig.frameMillis} pcmBytes=${effectiveConfig.frameBytes} ipBytes=$wireBytes mtu=${budget?.mtu} interfaceMtu=${budget?.interfaceMtu} mtuSource=${budget?.source ?: "UNCHANGED_OTHER_VEHICLE"} interface=${budget?.interfaceName}")
             val uplink = microphoneUplinks.computeIfAbsent(id) {
-                MicrophoneUplink(config, onAudioDiagnostic,
+                MicrophoneUplink(effectiveConfig, onAudioDiagnostic,
                     applicationPackage = appContext?.packageName,
                     speakerphoneCall = speakerphoneCall,
                     echoReference = if (config.audioType == TELEPHONY_AUDIO_TYPE) callEchoReferences[id] else null)
@@ -1039,8 +1061,11 @@ private class VideoDecoder(
     private var parking: ParkingOutput? = null
     private var lastConfig: VideoJob.Config? = null
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
+    private val pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.sessionId
     private val interactionProbe = if (streamType == MAIN_SCREEN_TYPE && statsLabel == null &&
-        com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active) VideoInteractionProbe(lwipSession) else null
+        (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active ||
+            com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive)) VideoInteractionProbe(diagnosticSession) else null
     private val firstRenderCallback = java.util.concurrent.atomic.AtomicBoolean(false)
     private val connectionRunId = com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.runId
     private val frameCallbackThread = interactionProbe?.let { android.os.HandlerThread("carplay-frame-probe") }
@@ -1116,9 +1141,9 @@ private class VideoDecoder(
         // Pacing runs on the worker, in queue order: callbacks of a replaced stream may still deliver here.
         queue.offer(frame)
         val now = System.nanoTime()
-        if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active && now-queueObservedNs > 1_000_000_000L) {
+        if ((com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active || com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive) && now-queueObservedNs > 1_000_000_000L) {
             val snapshot = queue.snapshot(); queuePeak = maxOf(queuePeak,snapshot.frames)
-            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(lwipSession, "video-$streamType", snapshot.frames,snapshot.bytes,snapshot.oldestNs,queuePeak)
+            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(diagnosticSession, "video-$streamType", snapshot.frames,snapshot.bytes,snapshot.oldestNs,queuePeak)
             queueObservedNs = now
         }
     }
@@ -1179,8 +1204,8 @@ private class VideoDecoder(
                         is VideoJob.Frame -> {
                             diagnosticFrameId = job.frameId
                             val queueNs = System.nanoTime()-job.receivedNs
-                            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-queue", queueNs)
-                            if (queueNs > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(lwipSession,
+                            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-queue", queueNs)
+                            if (queueNs > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(diagnosticSession,
                                 "stage=video-queue frameId=${job.frameId} streamType=$streamType queueUs=${queueNs/1000}")
                             val backlog = queue.backlogAfterCurrent()
                             val overloaded = !referenceChain.needsKeyFrame && backlogRecovery.observe(
@@ -1237,9 +1262,9 @@ private class VideoDecoder(
         // MTK vendor failures may surface as CodecException or the broader IllegalStateException.
         // Retire the active experimental mode before recreating the decoder.
         if (error is IllegalStateException) {
-            if (com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder &&
+            if (com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled &&
                 com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder = false
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled = false
                 report("Freescale no-reorder comparison disabled after codec failure")
             }
             dropMtkTuning("codec failed during $stage")
@@ -1481,9 +1506,9 @@ private class VideoDecoder(
             if (streamType == MAIN_SCREEN_TYPE && statsLabel == null &&
                 mime == MediaFormat.MIMETYPE_VIDEO_AVC && createdName.startsWith("OMX.Freescale.") &&
                 com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() &&
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder) {
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled) {
                 // NXP ACodec vendor extension, not the unrelated Qualcomm low-latency keys.
-                // Explicit comparison only until validated on this firmware and this stream.
+                // Default for the verified VPN path; runtime override still supports comparisons.
                 format.setString("disreorder", "1")
                 report("Freescale disable AVC reorder requested via disreorder=1")
             }
@@ -1504,8 +1529,8 @@ private class VideoDecoder(
                 Log.w(TAG, "video decoder candidate release failed name=$codecName", it)
             }
             if (codecName.startsWith("OMX.Freescale.") &&
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder) {
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder = false
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled) {
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled = false
                 report("Freescale no-reorder comparison refused; next attempt uses default")
             }
             reportFailure("stage=configure phase=$phase phaseMs=$phaseMs elapsedMs=$elapsedMs " +
@@ -1668,7 +1693,7 @@ private class VideoDecoder(
             running = { running }, drain = { if (outputThread == null) drainOutput(codec) },
             dequeue = { codec.dequeueInputBuffer(INPUT_TIMEOUT_US) },
         )
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-input-buffer", System.nanoTime()-acquiring, index < 0)
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-input-buffer", System.nanoTime()-acquiring, index < 0)
         if (index < 0) {
             dropMtkTuning("video decoder input stalled")
             dropMtkCodec2LowLatency("video decoder input stalled")
@@ -1715,7 +1740,7 @@ private class VideoDecoder(
     private fun recover(reason: String) {
         Log.w(TAG, "Video recovery: $reason; waiting for keyframe")
         stats.onRecovery()
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(lwipSession, "stage=video-recovery frameId=$diagnosticFrameId streamType=$streamType reason=$reason")
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(diagnosticSession, "stage=video-recovery frameId=$diagnosticFrameId streamType=$streamType reason=$reason")
         report("recovery: $reason; waiting for keyframe")
         // Recreate with codec-specific data: flush can discard CSD before the first output.
         releaseDecoder()
@@ -1756,8 +1781,8 @@ private class VideoDecoder(
                 val queued = if (slot >= 0) queuedAtNanos[slot] else 0L
                 val heldOverGap = queued in 1 until resumedAtNanos
                 if (queued > 0 && !heldOverGap) {
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-codec-pipeline", now-queued)
-                    if (now-queued > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(lwipSession,
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-codec-pipeline", now-queued)
+                    if (now-queued > 250_000_000L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.slow(diagnosticSession,
                         "stage=video-codec-pipeline frameId=${queuedFrameIds[slot]} streamType=$streamType ptsUs=${info.presentationTimeUs} elapsedUs=${(now-queued)/1000}")
                     stats.onDecodeLatency(now - queued)
                     liveDecodeNanos.addAndGet(now - queued)
@@ -1780,13 +1805,18 @@ private class VideoDecoder(
                     if (shown && delay != null && !heldOverGap && !pauseHeld) stats.onLate()
                     codec.releaseOutputBuffer(index, render)
                 }
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-surface-release", System.nanoTime()-releasing)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-surface-release", System.nanoTime()-releasing)
                 if (shown) {
                     stats.onRendered()
                     liveRendered.incrementAndGet()
                 }
+                if (streamType == MAIN_SCREEN_TYPE) {
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-decode", "COMPLETE")
+                }
                 if (shown && !renderedFrameLogged) {
+                    if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("video-render", "COMPLETE")
                     renderedFrameLogged = true
+                    if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerWiredSession.firstFrame(pioneerSession)
                     if (streamType == MAIN_SCREEN_TYPE) com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
                         .milestone(lwipSession, "first-frame-release")?.let { report(it) }
                     report("first frame rendered")
@@ -1939,6 +1969,7 @@ private class AudioRenderer(
     voiceFilter: Boolean = false,
 ) : Closeable {
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
     private var queueObservedNs = 0L
     private var queuePeak = 0
     private data class AudioPacket(val rtp: ByteArray, val sample: Int, val queuedNs: Long = System.nanoTime())
@@ -2046,9 +2077,9 @@ private class AudioRenderer(
             }
         }
         val now = System.nanoTime()
-        if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active && now-queueObservedNs > 1_000_000_000L) {
+        if ((com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active || com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive) && now-queueObservedNs > 1_000_000_000L) {
             queuePeak = maxOf(queuePeak,queue.size)
-            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(lwipSession, "audio-${format.payloadType}-${format.audioType}",
+            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.queue(diagnosticSession, "audio-${format.payloadType}-${format.audioType}",
                 queue.size, queue.sumOf { it.rtp.size.toLong() }, queue.peek()?.queuedNs ?: 0L, queuePeak)
             queueObservedNs = now
         }
@@ -2087,15 +2118,19 @@ private class AudioRenderer(
             createTrack()
             diagnosticStage = "focus"
             requestAudioFocus()
+            var lastAudioInputNs = System.nanoTime()
             while (running) {
                 // Report Settings changes from this worker, never from the UI thread, also between prompts.
                 applyNavigationAttenuation()
                 diagnosticStage = "packet"
                 queue.poll(AUDIO_POLL_MILLIS, TimeUnit.MILLISECONDS)?.let {
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
+                    val now = System.nanoTime()
+                    if (now - lastAudioInputNs >= 500_000_000L) audioFocusCoordinator.ensureVehicleSource()
+                    lastAudioInputNs = now
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
                     val decoding = System.nanoTime()
                     handle(it)
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-handle-includes-write-${format.audioType}", System.nanoTime()-decoding)
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-handle-includes-write-${format.audioType}", System.nanoTime()-decoding)
                 }
                 // Output becomes ready asynchronously, including after the last packet of a burst.
                 // Waiting for the next UDP packet can strand decoded sound for hundreds of ms.
@@ -2498,7 +2533,7 @@ private class AudioRenderer(
             dequeue = { codec.dequeueInputBuffer(INPUT_TIMEOUT_US) },
             timeoutNs = AUDIO_INPUT_WAIT_NS,
         )
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-input-includes-output-write-${format.audioType}", System.nanoTime()-acquiring, index < 0)
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-input-includes-output-write-${format.audioType}", System.nanoTime()-acquiring, index < 0)
         if (index < 0) {
             inputDropped++
             if (inputDropped == 1) {
@@ -2626,7 +2661,7 @@ private class AudioRenderer(
                 // A vehicle policy can require bounded writes while its output bus is inactive.
                 val count = track.write(data, offset + written, writeLength,
                     if (VehicleAudioRouting.selected.nonBlockingWrites) AudioTrack.WRITE_NON_BLOCKING else AudioTrack.WRITE_BLOCKING)
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
                 maxWriteMs = maxOf(maxWriteMs, (System.nanoTime() - writeStarted) / 1_000_000L)
                 if (count < 0) {
                     writeErrorsThisWindow++

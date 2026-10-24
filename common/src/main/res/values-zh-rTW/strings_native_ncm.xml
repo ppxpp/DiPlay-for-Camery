@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">原生 NCM（實驗性）</string>
+    <string name="settings_native_ncm_description">開啟使用系統 USB 網路，關閉使用現有連線方案。下次連線時生效。連線失敗請手動切換，兩種方案皆不會自動退回。</string>
+    <string name="settings_wired_backend">有線連線方案</string>
+    <string name="settings_wired_backend_lwip">原始 lwIP</string>
+    <string name="settings_wired_backend_optimized">最佳化 lwIP（實驗性）</string>
+    <string name="settings_wired_backend_description">選擇四種方案之一。VPN 優先嘗試自動授權。下次連線時生效；失敗請手動切換，任何方案均不會自動回退。</string>
+    <string name="settings_wired_backend_vpn">VPN（實驗性）</string>
+    <string name="vpn_root_authorizing">正在授權 VPN…</string>
+    <string name="vpn_root_failed">VPN 自動授權失敗。可重試或手動進行系統授權，連線方案仍保持 VPN。</string>
+    <string name="vpn_manual_authorize">手動系統授權</string>
+</resources>

@@ -190,6 +190,7 @@
     <string name="diagnostics">Диагностика</string>
     <string name="discard_changes_and_exit_settings">Отменить изменения и выйти из настроек</string>
     <string name="disconnect">Отключить</string>
+    <string name="disconnect_this_session">Отключить это подключение</string>
     <string name="discovering_iphone">Поиск iPhone</string>
     <string name="display_and_performance">Экран и производительность</string>
     <string name="done">Готово</string>
@@ -703,6 +704,16 @@
     <string name="settings_interface_size_auto">Автоматически</string>
     <string name="settings_interface_size_hint">Размер текста и элементов управления на экранах DiPlay. В автоматическом режиме они увеличиваются на больших экранах с низкой плотностью. CarPlay не меняется.</string>
     <string name="settings_update_flavor_note">Это обновление для адаптации DiPlay для Camry A Navigation, а не обновление оригинального DiPlay.</string>
+    <string name="settings_update_channel">Канал обновлений</string>
+    <string name="update_channel_stable">Стабильная версия</string>
+    <string name="update_channel_beta">Бета-версия</string>
+    <string name="settings_update_beta_warning">Бета-версии могут быть нестабильными. Вернуться на стабильную версию можно в любое время; установленная бета-версия не будет понижена.</string>
+    <string name="settings_update_channel_busy">Дождитесь завершения текущей загрузки, чтобы сменить канал.</string>
+    <string name="update_channel_unavailable">Для этого канала нет доступных выпусков.</string>
+    <string name="update_channel_switch_title">Сменить канал обновлений</string>
+    <string name="update_channel_switch_discard">При смене канала загруженное обновление будет удалено. Продолжить?</string>
+    <string name="update_channel_switch_confirm">Сменить</string>
+    <string name="update_available_home_beta">Доступно обновление бета-версии</string>
     <string name="update_check">Проверить обновления</string>
     <string name="update_checking">Проверка…</string>
     <string name="update_up_to_date">У вас последняя версия</string>
@@ -712,6 +723,9 @@
     <string name="update_install">Установить %1$s</string>
     <string name="update_failed">Не удалось обновить</string>
     <string name="update_available_home">Доступно обновление</string>
+    <string name="update_available_connection">Доступна новая версия %1$s</string>
+    <string name="update_available_connection_beta">Доступна новая бета-версия %1$s</string>
+    <string name="update_available_connection_action">Нажмите, чтобы обновиться в разделе «О программе»</string>
     <string name="update_saved_to">Сохранено в %1$s</string>
     <string name="backup_title">Резервная копия настроек</string>
     <string name="backup_open">Резервная копия на телефоне</string>
@@ -913,4 +927,6 @@
     <string name="settings_hotspot_interface">Интерфейс точки доступа (необязательно)</string>
     <string name="settings_hotspot_interface_description">Только для головных устройств, которые держат точку доступа на сетевом интерфейсе, не считающемся в Android точкой доступа Wi-Fi, например eth0.3 на некоторых устройствах Geely, Lynk &amp; Co и других Qualcomm. Оставьте пустым для автоматического поиска.</string>
     <string name="disclaimer_agree_swipe_hint">Принять и продолжить\nЛистайте влево или вправо</string>
+    <string name="settings_update_client_id">ID клиента: %1$s</string>
+    <string name="settings_update_client_id_unavailable">ID клиента недоступен</string>
 </resources>

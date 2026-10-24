@@ -80,6 +80,7 @@ class AirPlaySession(
     private val mfi: MfiAuthenticator?,
     private val listener: AirPlaySessionListener,
     private val media: AirPlayMediaHandler,
+    internal val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
 ) : Closeable {
     internal val pairSetup = PairSetup(identity, pairings)
     internal val pairVerify = PairVerify(identity, pairings)
@@ -97,6 +98,7 @@ class AirPlaySession(
     private val closed = AtomicBoolean(false)
     internal val isClosed: Boolean get() = closed.get()
     private val notified = AtomicBoolean(false)
+    private val nativeFailureReported = AtomicBoolean(false)
     private var eventServer: ServerSocket? = null
     private var eventSocket: Socket? = null
     private var eventCipher: ControlCipher? = null
@@ -107,12 +109,17 @@ class AirPlaySession(
     private val touchSendFailureLogged = AtomicBoolean(false)
     private val ntp = NtpClock(
         if (config.pinInboundPorts) CarFirewallPorts.TIMING_UDP else null,
-        if (config.pinInboundPorts) socket.localAddress else null,
+        nativeBinding?.localAddress ?: if (config.pinInboundPorts) socket.localAddress else null,
+        exactBindAddress = nativeBinding != null,
+        nativeBinding = nativeBinding, expectedPeer = socket.inetAddress,
+        onFailure = { nativeTransportFailed("timing", it) },
     )
     private var keepAliveSocket: DatagramSocket? = null
     private var keepAliveThread: Thread? = null
     private val eventWriteLock = Any()
     internal val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
+    private val pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.sessionId
     private var eventPortLease: Closeable? = null
     private var keepAlivePortLease: Closeable? = null
     private val eventThreads = CopyOnWriteArrayList<Thread>()
@@ -126,10 +133,10 @@ class AirPlaySession(
     private var muxedScreenTurns = 0
 
     val host: String = socket.inetAddress?.hostAddress ?: ""
-    val localAddress: InetAddress? = socket.localAddress
-    private val peerAddress: InetAddress? = socket.inetAddress
+    val localAddress: InetAddress? = nativeBinding?.localAddress ?: socket.localAddress
+    private val peerAddress: InetAddress? = nativeBinding?.peer(socket.inetAddress) ?: socket.inetAddress
     internal val remoteAddress: InetAddress?
-        get() = (socket.remoteSocketAddress as? InetSocketAddress)?.address
+        get() = if (nativeBinding != null) peerAddress else (socket.remoteSocketAddress as? InetSocketAddress)?.address
     val controllerId: String? get() = pairVerify.verifiedControllerId
     val sharedSecret: ByteArray? get() = pairVerify.shared?.copyOf()
     val videoInCar: Boolean get() = config.videoInCar
@@ -144,6 +151,30 @@ class AirPlaySession(
 
     fun syncedNtp(): BigInteger = ntp.syncedNtp()
 
+    internal fun nativeTransportFailed(stage: String, error: Throwable) {
+        if (nativeBinding == null) return
+        reportTransportFailure("Native NCM", stage, error)
+    }
+
+    internal fun pioneerTransportFailed(stage: String, error: Throwable) {
+        if (!com.shilapi.xcertplay.pioneer.PioneerWiredSession.isCurrent(pioneerSession)) return
+        reportTransportFailure("Pioneer wired", stage, error)
+    }
+
+    private fun reportTransportFailure(transport: String, stage: String, error: Throwable) {
+        if (closed.get() || !nativeFailureReported.compareAndSet(false, true)) return
+        val message = "$transport $stage: ${error.message ?: error.javaClass.simpleName}"
+        debugLog(message)
+        // Keep the original syscall/errno and stack: the listener forwards only a message.
+        Log.e(TAG, message, error)
+        val failureTag = if (nativeBinding != null) "NATIVE_NCM_FAILURE" else "PIONEER_WIRED_FAILURE"
+        debugLog("$failureTag thread=${Thread.currentThread().name} " +
+            Log.getStackTraceString(error).take(6000), uiVisible = true)
+        // Callbacks can originate under a media lock. Teardown must not deadlock that receiver.
+        Thread({ try { listener.onTransportError(message) } finally { close() } }, "airplay-transport-failure")
+            .apply { isDaemon = true; start() }
+    }
+
     /** True when every iPhone-initiated connection must bind to a forwarded firewall port. */
     internal val pinsInboundPorts: Boolean get() = config.pinInboundPorts
 
@@ -153,7 +184,7 @@ class AirPlaySession(
 
     /** The control connection's local address when inbound ports are pinned; null otherwise. */
     internal fun firewallBindAddress(): InetAddress? =
-        if (config.pinInboundPorts) socket.localAddress else null
+        nativeBinding?.localAddress ?: if (config.pinInboundPorts) socket.localAddress else null
 
     /** The firewall port the event channel and screen streams share, or null before the first SETUP. */
     internal fun muxedScreenPort(): Int? = eventServer?.takeIf { !it.isClosed }?.localPort
@@ -335,7 +366,7 @@ class AirPlaySession(
         }
     }
     private fun measure(name: String, before: Long, failed: Boolean = false) {
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, name, System.nanoTime()-before, failed)
+        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, name, System.nanoTime()-before, failed)
     }
 
     /**
@@ -380,7 +411,7 @@ class AirPlaySession(
         measure("event-encode", encodeStart)
         val logging = System.nanoTime()
         // Diagnostics do not format full HID/command payloads on the target's hot path.
-        if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active)
+        if (com.shilapi.xcertplay.pioneer.PioneerWiredSession.isCurrent(pioneerSession))
             trace("airplay event tx cseq=$eventCseq bodyBytes=${body.size}")
         else trace("airplay event tx headers=$head bodyHex=${body.toHex()}")
         measure("event-log", logging)
@@ -390,9 +421,10 @@ class AirPlaySession(
             measure("event-encrypt", encryption)
             val output = socket.getOutputStream()
             val writeStart = System.nanoTime()
-            val watchdog = if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active &&
-                lwipSession == com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId)
+            val watchdog = if (com.shilapi.xcertplay.pioneer.PioneerWiredSession.isCurrent(pioneerSession))
                 eventWriteWatchdog.schedule({
+                    // Report before close invalidates the screen token/current-session checks.
+                    pioneerTransportFailed("event-write-timeout", java.net.SocketTimeoutException("Event write exceeded 2000ms"))
                     // Close the exact socket first to unblock its writer; no event lock needed.
                     safeClose(socket)
                     close()
@@ -405,6 +437,7 @@ class AirPlaySession(
             true
         } catch (error: Exception) {
             Log.w(TAG, "airplay event command failed type=${command["type"]}", error)
+            pioneerTransportFailed("event-write", error)
             close()
             false
         }
@@ -419,7 +452,7 @@ class AirPlaySession(
         measure("touch-hid-build", hidStart)
         val sendStartNs = System.nanoTime()
         val sent = sendHidReport(AirPlayHid.TOUCH_HID_UID, report)
-        if (sent) com.shilapi.xcertplay.media.TouchLatencyProbe.sent(lwipSession, touchId, gestureId, enteredNs, sendStartNs, System.nanoTime())
+        if (sent) com.shilapi.xcertplay.media.TouchLatencyProbe.sent(diagnosticSession, touchId, gestureId, enteredNs, sendStartNs, System.nanoTime())
         if (sent && firstTouchSendLogged.compareAndSet(false, true)) {
             val first = scaled.firstOrNull()
             Log.i(
@@ -582,7 +615,7 @@ class AirPlaySession(
                             path.endsWith("/info") -> "info"
                             else -> "pair-verify"
                         }
-                        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "control-handler-$stage", System.nanoTime()-handlingStarted)
+                        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "control-handler-$stage", System.nanoTime()-handlingStarted)
                         if ((response.status ?: 200) in 200..299 && (stage != "pair-verify" || pairVerify.controlKeys != null)) answeredStages.add("$stage-response-flushed")
                     }
                     debugLog(
@@ -605,7 +638,7 @@ class AirPlaySession(
                 }
                 val flushStarted = System.nanoTime()
                 output.flush()
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "control-response-flush", System.nanoTime()-flushStarted)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "control-response-flush", System.nanoTime()-flushStarted)
                 answeredStages.forEach { stage -> com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
                     .milestone(lwipSession, stage)?.let { listener.onDebugLog(it) } }
                 if (setupAnswered) com.shilapi.xcertplay.pioneer.PioneerLwipRuntime
@@ -670,6 +703,9 @@ class AirPlaySession(
             }
             path.endsWith("/info") -> {
                 val info = AirPlayInfoPlist.build(config)
+                val display = (info["displays"] as? List<*>)?.firstOrNull() as? Map<*, *>
+                debugLog("AIRPLAY_APPEARANCE declarations=${display?.containsKey("uiAppearanceMode")} " +
+                    "nativeNcm=${nativeBinding != null}")
                 if (request.body.isNotEmpty()) {
                     val requestInfo = try {
                         BplistCodec.decode(request.body).toString()
@@ -914,7 +950,8 @@ class AirPlaySession(
     private fun openKeepAlive(): Int {
         val socket = DatagramSocket(null)
         socket.reuseAddress = true
-        socket.bind(InetSocketAddress(InetAddress.getByName("::"), 0))
+        if (nativeBinding != null) nativeBinding.bind(socket)
+        else socket.bind(InetSocketAddress(InetAddress.getByName("::"), 0))
         keepAliveSocket = socket
         try { keepAlivePortLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(socket.localPort, true, lwipSession) }
         catch (error: Throwable) { socket.close(); throw error }
@@ -929,9 +966,12 @@ class AirPlaySession(
         val buffer = ByteArray(512)
         while (!closed.get()) {
             try {
-                socket.receive(DatagramPacket(buffer, buffer.size))
-            } catch (_: Exception) {
+                val packet = DatagramPacket(buffer, buffer.size)
+                socket.receive(packet)
+                nativeBinding?.validatePeer(packet.address, peerAddress)
+            } catch (error: Exception) {
                 if (closed.get()) return
+                if (nativeBinding != null) { nativeTransportFailed("keepalive", error); return }
             }
         }
     }
@@ -946,7 +986,8 @@ class AirPlaySession(
             spawnEvent("airplay-event-accept") { acceptEventConnections(server) }
             return server.localPort
         }
-        val server = ServerSocket(0, 50, InetAddress.getByName("::"))
+        val server = if (nativeBinding != null) ServerSocket().also { nativeBinding.bind(it) }
+            else ServerSocket(0, 50, InetAddress.getByName("::"))
         eventServer = server
         try { eventPortLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(server.localPort, false, lwipSession) }
         catch (error: Throwable) { server.close(); throw error }
@@ -973,6 +1014,7 @@ class AirPlaySession(
         } catch (error: Exception) {
             if (!closed.get()) {
                 Log.e(TAG, "airplay event accept failed", error)
+                nativeTransportFailed("event", error)
                 close()
             }
         }
@@ -1081,6 +1123,7 @@ class AirPlaySession(
     private fun acceptEvent(server: ServerSocket) {
         try {
             val socket = server.accept()
+            nativeBinding?.validateAccepted(socket, peerAddress)
             socket.setSoLinger(true, 0)
             // Avoid Nagle coalescing on this interactive event connection: small HID/event writes
             // need not wait for earlier unacknowledged data.
@@ -1090,6 +1133,7 @@ class AirPlaySession(
         } catch (error: Exception) {
             if (!closed.get()) {
                 Log.e(TAG, "airplay event accept failed", error)
+                nativeTransportFailed("event", error)
                 close()
             }
         }
@@ -1111,6 +1155,7 @@ class AirPlaySession(
     }
 
     private fun handleEventChannel(socket: Socket) {
+        nativeBinding?.validateAccepted(socket, peerAddress)
         eventSocket = socket
         val shared = pairVerify.shared
         if (shared == null) {
@@ -1213,7 +1258,10 @@ class AirPlaySession(
             if (eventSocket === socket) eventSocket = null
             eventCipher = null
             safeClose(socket)
-            if (!closed.get()) close()
+            if (!closed.get()) {
+                nativeTransportFailed("event", java.io.IOException(reason))
+                close()
+            }
         }
     }
 

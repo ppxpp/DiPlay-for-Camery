@@ -6,6 +6,8 @@ import android.view.ViewGroup
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.update.UpdateAvailability
+import com.shilapi.xcertplay.update.UpdateChannel
+import com.shilapi.xcertplay.update.UpdateChannelStore
 import com.shilapi.xcertplay.update.UpdateRelease
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -27,7 +29,8 @@ class UpdateHomeAvailabilityTest {
 
     @Test fun cachedUpdateAppearsBelowTheVersionAndOpensTheExistingDownloadFlow() {
         val release = release()
-        UpdateAvailability.save(application, release)
+        UpdateChannelStore.save(application, UpdateChannel.STABLE)
+        UpdateAvailability.save(application, release, UpdateChannel.STABLE)
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         val activity = controller.get()
         val text = activity.getString(R.string.update_available_home)
@@ -49,7 +52,8 @@ class UpdateHomeAvailabilityTest {
     @Config(sdk = [29], qualifiers = "en-w400dp-h900dp-port")
     @Test fun cachedUpdateKeepsAnArmLengthTargetInCompactHome() {
         val release = release()
-        UpdateAvailability.save(application, release)
+        UpdateChannelStore.save(application, UpdateChannel.STABLE)
+        UpdateAvailability.save(application, release, UpdateChannel.STABLE)
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         val activity = controller.get()
         val update = descendants(activity.window.decorView).filterIsInstance<TextView>().single {

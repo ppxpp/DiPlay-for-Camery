@@ -9,15 +9,27 @@ import com.shilapi.xcertplay.pioneer.PioneerDebugRuntime
 import com.shilapi.xcertplay.pioneer.PioneerUsbPolicy
 import org.json.JSONObject
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Local integration kept out of the upstream settings/controller implementation. */
 internal object PioneerDebugIntegration {
     private val main = Handler(Looper.getMainLooper())
     private var host = WeakReference<Activity>(null)
     private var retry: (() -> Unit)? = null
+    private val cacheCleanupStarted = AtomicBoolean()
 
     fun ensure(context: Context) {
         val app = context.applicationContext
+        if (cacheCleanupStarted.compareAndSet(false, true)) {
+            Thread({
+                runCatching {
+                    val report = com.shilapi.xcertplay.pioneer.PioneerDebugUpdateGuard.cleanupCachedApks(app)
+                    PioneerDebugRuntime.log(app, report)
+                }.onFailure {
+                    PioneerDebugRuntime.log(app, "APK_CACHE_STARTUP_CLEAN_FAILED ${it.message}")
+                }
+            }, "apk-cache-startup-cleanup").apply { isDaemon = true }.start()
+        }
         PioneerDebugRuntime.redact = { DiagnosticRedactor.redact(it) }
         PioneerDebugRuntime.videoSettings = { request ->
             val flags = listOf("lowLatencyDecoder", "smoothVideo", "directVideoOutput")
