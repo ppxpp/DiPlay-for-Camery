@@ -114,6 +114,9 @@ jobs:
           :common:testDebugUnitTest
           --tests "com.shilapi.xcertplay.update.*"
           --tests "com.shilapi.xcertplay.UpdateHomeAvailabilityTest"
+          :common:lintDebug
+          :shared:lintDebug
+          :pioneer-adapter:lintDebug
           :mobile:assembleRelease
           -PdiplayUpdateChannel="${CHANNEL}"
           --stacktrace
