@@ -311,7 +311,7 @@ class NcmUsbBridge internal constructor(
             readRequests.close()
             connection.close()
             requestToClose.forEach { runCatching { it.close() } }
-            check(readRequests.awaitStopped(1_000)) { "NCM read reaper did not stop" }
+            check(readRequests.awaitStopped(5_000)) { "NCM read reaper did not stop" }
             cleanupComplete = true
         }
     }

@@ -54,7 +54,7 @@ internal class MicrophoneUplink(
     private val running = AtomicBoolean(false)
     private val stats = MicrophoneCaptureStats(config, report = { message ->
         Log.i(TAG, message)
-        onDiagnostic(message)
+        reportDiagnostic(message)
     }, snapshot = { values ->
         com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.microphoneUplinkState = org.json.JSONObject(values).toString()
     })
@@ -71,6 +71,11 @@ internal class MicrophoneUplink(
         stats.failure(MicrophoneFailureStage.START, error)
         release()
         false
+    }
+
+    /** Diagnostics are advisory: a failing reporter must not abort or tear down capture. */
+    private fun reportDiagnostic(message: String) {
+        runCatching { onDiagnostic(message) }
     }
 
     private fun startCapture(): Boolean {
@@ -95,7 +100,7 @@ internal class MicrophoneUplink(
 
         // Every negotiated input stream needs the Pioneer hardware gate, including Siri
         // and app recording. Audio type only selects processing, not microphone ownership.
-        vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, onDiagnostic)
+        vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, ::reportDiagnostic)
         val source = when {
             vehicleMicrophoneLease != null -> when (experiment.micSource) {
                 "VOICE_RECOGNITION" -> MediaRecorder.AudioSource.VOICE_RECOGNITION
@@ -196,8 +201,8 @@ internal class MicrophoneUplink(
                 "softwareAecActive" to (echoCanceller != null), "platformEffectsActive" to effectState(),
                 "requestedRate" to config.sampleRate, "captureRate" to nextRecorder.sampleRate,
                 "audioMode" to mode, "micToken" to token))
-            onDiagnostic("Microphone: capture environment rate=${nextRecorder.sampleRate} mode=$mode micToken=$token")
-            onDiagnostic("Audio experiment microphone: ${experiment.json()} negotiatedRate=${config.sampleRate} codec=${config.codec} source=$source")
+            reportDiagnostic("Microphone: capture environment rate=${nextRecorder.sampleRate} mode=$mode micToken=$token")
+            reportDiagnostic("Audio experiment microphone: ${experiment.json()} negotiatedRate=${config.sampleRate} codec=${config.codec} source=$source")
             stats.started(routeType(nextRecorder))
             val workerLease = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.hold()
             try {
@@ -245,7 +250,7 @@ internal class MicrophoneUplink(
                 ?.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_MIC }
             if (builtIn != null) {
                 val accepted = recorder.setPreferredDevice(builtIn)
-                onDiagnostic("Microphone: Pioneer preferred built-in accepted=$accepted")
+                reportDiagnostic("Microphone: Pioneer preferred built-in accepted=$accepted")
             }
         }.onFailure { Log.w(TAG, "Pioneer preferred microphone unavailable", it) }
         return recorder
@@ -386,7 +391,7 @@ internal class MicrophoneUplink(
                     check(lease.restoreOwnership(force = true) && restartRecording(recorder)) { "Vehicle call delayed microphone grant failed" }
                     clock = canceller?.let { CaptureClock(config.sampleRate) }
                     filled = 0
-                    onDiagnostic("Microphone: delayed grant completed testId=${experiment.testId}")
+                    reportDiagnostic("Microphone: delayed grant completed testId=${experiment.testId}")
                 }
                 if (config.audioType == "telephony" && lease != null && experiment.ownershipRecovery && ownershipNow - ownershipCheckNs >= experiment.ownershipCheckMs * 1_000_000L) {
                     ownershipCheckNs = ownershipNow
@@ -395,7 +400,7 @@ internal class MicrophoneUplink(
                         check(restartRecording(recorder)) { "Vehicle call microphone restart failed" }
                         clock = canceller?.let { CaptureClock(config.sampleRate) }
                         filled = 0
-                        onDiagnostic("Microphone: call capture restarted after ownership change count=$ownershipRestores")
+                        reportDiagnostic("Microphone: call capture restarted after ownership change count=$ownershipRestores")
                     }
                 }
                 stats.reading()
@@ -544,7 +549,7 @@ internal class MicrophoneUplink(
         if (!running.get()) return // close/release already owns all recorder effects.
         check(!(pioneerExperiment && experiment.softwareAec == "ON")) { "Forced software AEC failed; refusing fallback to a different test strategy" }
         if (pioneerExperiment && experiment.platformEffects == "OFF") {
-            onDiagnostic("Audio experiment: software AEC failed; platform effects remain forced OFF testId=${experiment.testId}")
+            reportDiagnostic("Audio experiment: software AEC failed; platform effects remain forced OFF testId=${experiment.testId}")
             return
         }
         effects.filterIsInstance<NoiseSuppressor>().forEach { ns ->

@@ -38,10 +38,10 @@ class AudioClockTrimTest {
                 .build())
             .setBufferSizeInBytes(96_000)
             .build()
-        renderer = type.declaredConstructors.single { it.parameterCount == 13 }.apply { isAccessible = true }
+        renderer = type.declaredConstructors.single { it.parameterCount == 14 }.apply { isAccessible = true }
             .newInstance(AudioFormat(AudioCodecKind.LPCM, 48_000, 2, 96, "media"),
                 false, false, 0, 0, AudioFocusCoordinator(null, false, false),
-                0, 500, { message: String -> reports.add(message) }, 0L, false, null, false)
+                0, 500, { message: String -> reports.add(message) }, 0L, false, null, false, null)
         set("track", track)
         set("mappedChannel", AudioChannel.MEDIA)
         set("playbackStarted", true)
