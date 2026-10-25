@@ -53,7 +53,28 @@ function context(
   } as never;
 }
 
+function keyedContext(
+  params: Record<string, string>,
+  bodies: Record<string, unknown>,
+) {
+  return {
+    request: new Request("https://upd.example.com/api/v1/apps/diplay/android/stable/latest"),
+    env: {
+      ASSET_BASE_URL: "https://dl.example.com",
+      META: {
+        get: async (key: string) => {
+          const body = bodies[key];
+          return body === undefined ? null : { key, json: async () => body };
+        },
+      },
+    },
+    params,
+  } as never;
+}
+
 const params = { appId: "diplay", platform: "android", channel: "stable" };
+const stableKey = "apps/diplay/android/stable/latest.json";
+const betaKey = "apps/diplay/android/beta/latest.json";
 
 describe("latest update manifest", () => {
   it("expands stored keys into asset URLs without leaking keys", async () => {
@@ -182,28 +203,106 @@ describe("latest update manifest", () => {
   });
 
   it("serves beta to the legacy stable request without a client id", async () => {
-    let requestedKey = "";
-    const response = await onRequestGet({
-      request: new Request("https://upd.example.com/api/v1/apps/diplay/android/stable/latest"),
-      env: {
-        ASSET_BASE_URL: "https://dl.example.com",
-        META: {
-          get: async (key: string) => {
-            requestedKey = key;
-            return {
-              json: async () => ({
-                ...manifest,
-                management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
-              }),
-            };
-          },
-        },
+    const response = await onRequestGet(keyedContext(params, {
+      [betaKey]: {
+        ...manifest,
+        management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
       },
-      params,
-    } as never);
+    }));
 
     expect(response.status).toBe(200);
-    expect(requestedKey).toBe("apps/diplay/android/beta/latest.json");
     expect(((await response.json()) as any).channel).toBe("beta");
+  });
+
+  it("serves the newer stable release to the legacy stable request", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: { ...manifest, version: "0.4.0", versionCode: 120 },
+      [betaKey]: { ...manifest, version: "0.3.1", versionCode: 110 },
+    }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.channel).toBe("stable");
+    expect(body.versionCode).toBe(120);
+  });
+
+  it("serves the newer beta release to the legacy stable request", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: { ...manifest, version: "0.3.0", versionCode: 97 },
+      [betaKey]: { ...manifest, version: "0.3.1", versionCode: 110 },
+    }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.channel).toBe("beta");
+    expect(body.versionCode).toBe(110);
+  });
+
+  it("serves stable on a versionCode tie for the legacy stable request", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: manifest,
+      [betaKey]: { ...manifest, version: "0.3.0-beta" },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).channel).toBe("stable");
+  });
+
+  it("keeps the enabled channel when the other legacy channel is disabled", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        versionCode: 120,
+        management: { enabled: false, mode: "all", notes: "" },
+      },
+      [betaKey]: { ...manifest, versionCode: 110 },
+    }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.channel).toBe("beta");
+    expect(body.versionCode).toBe(110);
+  });
+
+  it("returns a no-update response when both legacy channels are disabled", async () => {
+    const disabled = { enabled: false, mode: "all", notes: "" };
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: { ...manifest, management: disabled },
+      [betaKey]: { ...manifest, management: disabled },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      schemaVersion: 1,
+      appId: "diplay",
+      platform: "android",
+      channel: "stable",
+      updateAvailable: false,
+    });
+  });
+
+  it("returns a no-update response when neither legacy channel has a manifest", async () => {
+    const response = await onRequestGet(keyedContext(params, {}));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      schemaVersion: 1,
+      appId: "diplay",
+      platform: "android",
+      channel: "stable",
+      updateAvailable: false,
+    });
+  });
+
+  it("returns a no-update response when one legacy channel is missing and the other is disabled", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        management: { enabled: false, mode: "all", notes: "" },
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).updateAvailable).toBe(false);
   });
 });

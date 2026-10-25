@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/latest-no-update-response-v1.json",
+  "title": "No update response v1",
+  "description": "Returned with HTTP 200 by a legacy latest request when neither channel has an enabled release.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "appId",
+    "platform",
+    "channel",
+    "updateAvailable"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "appId": { "type": "string", "minLength": 1 },
+    "platform": { "type": "string", "minLength": 1 },
+    "channel": { "type": "string", "minLength": 1 },
+    "updateAvailable": { "const": false }
+  }
+}
