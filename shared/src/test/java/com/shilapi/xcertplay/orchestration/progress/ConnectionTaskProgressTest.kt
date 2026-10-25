@@ -38,6 +38,20 @@ class ConnectionTaskProgressTest {
         model.task(ConnectionTask.ROOT,ConnectionTaskState.COMPLETE,at = 400,startedAt = 100)
         assertEquals(300L,model.snapshot().tasks.first { it.task == ConnectionTask.ROOT }.elapsedMillis)
     }
+    @Test fun newAttemptDoesNotInheritReplayedTaskNodes() {
+        val model = ConnectionProgress("vpn", false, clock = { 500L }, channel = ConnectionChannel.VPN)
+        model.task(ConnectionTask.PAIR, ConnectionTaskState.COMPLETE)
+        model.task(ConnectionTask.SESSION, ConnectionTaskState.COMPLETE)
+        assertEquals(setOf(ConnectionStep.PREPARATION), model.snapshot().visited)
+    }
+    @Test fun flowShowsOnlyTimedNodes() {
+        val wired = ConnectionProgress("vpn", false, channel = ConnectionChannel.VPN)
+        assertEquals(listOf(ConnectionStep.PREPARATION, ConnectionStep.DEVICE, ConnectionStep.CONTROL,
+            ConnectionStep.NETWORK, ConnectionStep.SESSION, ConnectionStep.VIDEO), wired.snapshot().steps)
+        val wireless = ConnectionProgress("wireless", true, channel = ConnectionChannel.WIRELESS)
+        assertEquals(listOf(ConnectionStep.PREPARATION, ConnectionStep.NETWORK, ConnectionStep.DEVICE,
+            ConnectionStep.CONTROL, ConnectionStep.SESSION, ConnectionStep.VIDEO), wireless.snapshot().steps)
+    }
     @Test fun reusedPermissionAndConcurrentRootTaskKeepIndependentDurations() {
         var now = 100L
         val model = ConnectionProgress("vpn", false, clock = { now }, channel = ConnectionChannel.VPN)

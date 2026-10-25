@@ -1,4 +1,5 @@
 <resources>
+    <string name="home_title">DiPlay 凱美瑞 A 導航適配版</string>
     <string name="existing_wifi_title">現有 Wi-Fi / 同一區域網路</string>
     <string name="existing_wifi_description">使用已有路由器或隨身 Wi-Fi。讓 iPhone 和車機保持連線同一網路，並透過它上網。</string>
     <string name="existing_wifi_hint">現有 Wi-Fi · 兩部裝置保持連線同一 Wi-Fi，藍牙保持開啟，無需開啟車機熱點。</string>
@@ -190,6 +191,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">放棄變更並離開設定</string>
     <string name="disconnect">中斷連線</string>
+    <string name="disconnect_this_session">中斷此次連線</string>
     <string name="discovering_iphone">正在尋找 iPhone</string>
     <string name="display_and_performance">顯示方式與效能</string>
     <string name="done">完成</string>
@@ -786,6 +788,9 @@
     <string name="update_install">安裝 %1$s</string>
     <string name="update_failed">更新失敗</string>
     <string name="update_available_home">有可用更新</string>
+    <string name="update_available_connection">發現新版本 %1$s</string>
+    <string name="update_available_connection_beta">發現新測試版 %1$s</string>
+    <string name="update_available_connection_action">點擊前往「關於」頁升級</string>
     <string name="update_saved_to">已儲存至 %1$s</string>
     <string name="backup_title">備份設定</string>
     <string name="backup_open">在手機上備份或還原</string>

@@ -20,10 +20,11 @@ class PioneerDebugActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() {
-            status.text = "${PioneerDebugService.addresses().joinToString("\n")}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n" +
+            val nextStatus = "${PioneerDebugService.addresses().joinToString("\n")}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n" +
                 "TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n" +
                 "VPN 预授权：${PioneerVpnPermissionGrant.status(this@PioneerDebugActivity).optBoolean("preconsented")}\n" +
                 "${PioneerDebugRuntime.lastCommand}\nUSB授权验证暂停=${PioneerUsbPermissionProbe.holdsRequests(this@PioneerDebugActivity)}\n${PioneerDebugRuntime.snapshot().toString(2)}"
+            if (status.text.toString() != nextStatus) status.text = nextStatus
             handler.postDelayed(this, 1_000)
         }
     }
@@ -33,7 +34,13 @@ class PioneerDebugActivity : Activity() {
         val paths = savedInstanceState?.getStringArrayList("installerPaths").orEmpty()
         codes.zip(paths).forEach { (code, path) -> pendingInstalls[code] = path }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 20, 24, 20) }
-        status = TextView(this).apply { textSize = 17f; setTextIsSelectable(true) }
+        status = TextView(this).apply {
+            textSize = 17f
+            // A selectable TextView takes focus and its once-per-second setText asks the
+            // ScrollView to reveal it, pulling the user away from the buttons below.
+            isFocusable = false
+            isFocusableInTouchMode = false
+        }
         column.addView(TextView(this).apply { text = "DiPlay 车机调试（有线验证）"; textSize = 22f })
         column.addView(status)
         fun button(label: String, action: () -> Unit) { column.addView(Button(this).apply { text = label; setOnClickListener { runCatching(action).onFailure {
@@ -47,6 +54,9 @@ class PioneerDebugActivity : Activity() {
         }
         button("启动 TCP 调试") { PioneerDebugRuntime.start(this) }
         button("启动有线连接") { PioneerDebugRuntime.request(this, "start-wired") }
+        button("车机麦克风录音测试（录 5 秒 / 历史回放）") {
+            startActivity(Intent().setClassName(packageName, "com.shilapi.xcertplay.CarMicTestActivity"))
+        }
         button("重试 VPN 授权（手动 ADB 授权后使用）") { PioneerDebugRuntime.request(this, "retry-vpn") }
         button("停止 CarPlay，保留 TCP 调试") { PioneerDebugRuntime.request(this, "stop") }
         fun permissionProbe(action: String) {

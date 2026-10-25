@@ -1,4 +1,6 @@
 plugins { id("com.android.library") }
+apply(from = rootProject.file("gradle/native-ncm.gradle"))
+
 android {
     namespace = "com.shilapi.xcertplay.pioneer"
     compileSdk = 37
@@ -9,6 +11,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    lint {
+        // Legacy findings are baselined; only new findings fail the build.
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
     }
 }
 dependencies {

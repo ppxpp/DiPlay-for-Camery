@@ -84,7 +84,7 @@ public final class PioneerRootSessionHelper {
                         Credentials credentials = peer.getPeerCredentials();
                         if (credentials.getUid() != uid || credentials.getPid() != owner.getInt("appPid")) throw new IOException("ROOT_INIT_PEER_OWNER");
                         requireOwner(owner);
-                        File directory = new File(NativeNcmWarmProtocol.readTask(peer.getInputStream())).getCanonicalFile();
+                        File directory = new File(PioneerRootTaskProtocol.readTask(peer.getInputStream())).getCanonicalFile();
                         File parent = directory.getParentFile();
                         if (!parent.getParentFile().equals(files) ||
                             !java.util.Arrays.asList("vpn-permission", "usb-permission-probe", "vpn-firewall").contains(parent.getName()))
@@ -107,7 +107,7 @@ public final class PioneerRootSessionHelper {
                                 else PioneerVpnFirewallHelper.runTask(directory);
                             } finally { active.decrementAndGet(); }
                         });
-                        NativeNcmWarmProtocol.accept(peer.getOutputStream());
+                        PioneerRootTaskProtocol.accept(peer.getOutputStream());
                     } catch (Throwable error) { android.util.Log.e("DiPlayVpnRoot", "Initialization request rejected", error); }
                     finally { peer.close(); }
                 }

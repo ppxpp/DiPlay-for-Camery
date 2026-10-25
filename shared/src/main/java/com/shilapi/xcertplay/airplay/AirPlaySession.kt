@@ -80,7 +80,7 @@ class AirPlaySession(
     private val mfi: MfiAuthenticator?,
     private val listener: AirPlaySessionListener,
     private val media: AirPlayMediaHandler,
-    internal val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    internal val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
 ) : Closeable {
     internal val pairSetup = PairSetup(identity, pairings)
     internal val pairVerify = PairVerify(identity, pairings)

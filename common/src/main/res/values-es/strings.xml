@@ -190,6 +190,7 @@
     <string name="diagnostics">Diagnóstico</string>
     <string name="discard_changes_and_exit_settings">Descartar cambios y salir de los ajustes</string>
     <string name="disconnect">Desconectar</string>
+    <string name="disconnect_this_session">Desconectar esta conexión</string>
     <string name="discovering_iphone">Buscando iPhone</string>
     <string name="display_and_performance">Pantalla y rendimiento</string>
     <string name="done">Listo</string>
@@ -722,6 +723,9 @@
     <string name="update_install">Instalar %1$s</string>
     <string name="update_failed">Error de actualización</string>
     <string name="update_available_home">Actualización disponible</string>
+    <string name="update_available_connection">Nueva versión %1$s disponible</string>
+    <string name="update_available_connection_beta">Nueva versión beta %1$s disponible</string>
+    <string name="update_available_connection_action">Toca para actualizar en Acerca de</string>
     <string name="update_saved_to">Guardado en %1$s</string>
     <string name="backup_title">Copia de seguridad de ajustes</string>
     <string name="backup_open">Copiar o restaurar en un teléfono</string>

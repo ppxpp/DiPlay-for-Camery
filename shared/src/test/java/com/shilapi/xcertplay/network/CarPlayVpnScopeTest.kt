@@ -115,6 +115,7 @@ class CarPlayVpnScopeTest {
             try {
                 com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(service,
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP)
+                completeVpnAuthorization(service)
                 assertEquals(CarPlayVpnService.AttachResult.Failed("VpnService.establish returned null"),
                     attachWired(service, com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN))
                 assertEquals(com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.VPN, VpnScopeBoundary.backendAtEstablish)
@@ -123,8 +124,33 @@ class CarPlayVpnScopeTest {
                 assertEquals(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP,
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(service))
                 assertReleased(service)
-            } finally { prefs.edit().clear().commit() }
+            } finally {
+                resetVpnAuthorization()
+                prefs.edit().clear().commit()
+            }
         }
+    }
+
+    /**
+     * Production starts root authorization before attach; seed the completed attempt so this test
+     * still exercises backend selection and TUN establishment itself.
+     */
+    private fun completeVpnAuthorization(owner: Any) {
+        val runtime = com.shilapi.xcertplay.pioneer.PioneerVpnInitialization::class.java
+        val attemptType = Class.forName("com.shilapi.xcertplay.pioneer.PioneerVpnInitialization\$Attempt")
+        @Suppress("UNCHECKED_CAST")
+        val constructor = attemptType.declaredConstructors.first { it.parameterCount == 3 }
+            as java.lang.reflect.Constructor<Any>
+        constructor.isAccessible = true
+        val attempt = constructor.newInstance(owner, java.util.concurrent.CountDownLatch(0), null)
+        runtime.getDeclaredField("attempt").apply { isAccessible = true }
+            .set(runtime.getField("INSTANCE").get(null), attempt)
+    }
+
+    private fun resetVpnAuthorization() {
+        val runtime = com.shilapi.xcertplay.pioneer.PioneerVpnInitialization::class.java
+        runtime.getDeclaredField("attempt").apply { isAccessible = true }
+            .set(runtime.getField("INSTANCE").get(null), null)
     }
 
     @Test fun revokeWithoutTunDoesNotStopWirelessAttachment() {

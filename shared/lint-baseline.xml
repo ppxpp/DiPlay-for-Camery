@@ -1,0 +1,1346 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.3.0" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.0)" variant="all" version="9.3.0">
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="                &quot;wireless selected Bluetooth target name=${device.name ?: &quot;unknown&quot;} &quot; +"
+        errorLine2="                                                           ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="1571"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="        val bonded = adapter.bondedDevices.orEmpty()"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="3005"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="            device.name?.contains(&quot;iPhone&quot;, ignoreCase = true) == true"
+        errorLine2="            ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="3011"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="                    connectedIPhones.joinToString { &quot;${it.name ?: &quot;iPhone&quot;} (${it.address})&quot; },"
+        errorLine2="                                                       ~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="3031"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by BluetoothAdapter.getAddress: android.permission.LOCAL_MAC_ADDRESS"
+        errorLine1="            adapter.address"
+        errorLine2="            ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="3278"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="        wifiManager.startLocalOnlyHotspot(callback, main)"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotManager.kt"
+            line="225"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="                val next = AudioRecord.Builder().setAudioSource(source).setAudioFormat(AudioFormat.Builder()"
+        errorLine2="                           ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/MicrophoneProbe.kt"
+            line="81"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="            AudioRecord.Builder()"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/MicrophoneUplink.kt"
+            line="194"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="            p2pManager.requestGroupInfo(current) { result.set(it); latch.countDown() }"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="88"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="                            p2pManager.createGroup(p2pChannel, createActionListener(attempt, request))"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="243"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="                            p2pManager.createGroup(p2pChannel, config, createActionListener(attempt, request))"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="245"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="            p2pManager.requestGroupInfo(channel) { result.set(it); reply.countDown() }"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="449"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="        p2pManager.requestGroupInfo(channel) {"
+        errorLine2="        ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="660"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="            p2pManager.requestGroupInfo(channel) { current ->"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="870"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ApplySharedPref"
+        message="Consider using `apply()` instead; `commit` writes its data to persistent storage immediately, whereas `apply` will handle it in the background"
+        errorLine1="        prefs(context).edit().putBoolean(KEY_BATTERY_TO_IPHONE, enabled).commit()"
+        errorLine2="                                                                         ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydOutputSettings.kt"
+            line="46"
+            column="74"/>
+    </issue>
+
+    <issue
+        id="ApplySharedPref"
+        message="Consider using `apply()` instead; `commit` writes its data to persistent storage immediately, whereas `apply` will handle it in the background"
+        errorLine1="        prefs(context).edit().putString(KEY_CHARGING_CONNECTORS, connectors.name).commit()"
+        errorLine2="                                                                                  ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydOutputSettings.kt"
+            line="60"
+            column="83"/>
+    </issue>
+
+    <issue
+        id="ApplySharedPref"
+        message="Consider using `apply()` instead; `commit` writes its data to persistent storage immediately, whereas `apply` will handle it in the background"
+        errorLine1="        prefs(context).edit().putBoolean(KEY_WHEEL_SPEED_TO_IPHONE, enabled).commit()"
+        errorLine2="                                                                             ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydOutputSettings.kt"
+            line="67"
+            column="78"/>
+    </issue>
+
+    <issue
+        id="ApplySharedPref"
+        message="Consider using `apply()` instead; `commit` writes its data to persistent storage immediately, whereas `apply` will handle it in the background"
+        errorLine1="        prefs(context).edit().putBoolean(KEY_VIDEO_WHILE_PARKED, enabled).commit()"
+        errorLine2="                                                                          ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydOutputSettings.kt"
+            line="76"
+            column="75"/>
+    </issue>
+
+    <issue
+        id="ApplySharedPref"
+        message="Consider using `apply()` instead; `commit` writes its data to persistent storage immediately, whereas `apply` will handle it in the background"
+        errorLine1="        else prefs.edit().remove(&quot;confirmed&quot;).commit()"
+        errorLine2="                                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/P2pConfigurationMemory.kt"
+            line="35"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="BlockedPrivateApi"
+        message="Reflective access to TRANSACTION_onCapabilityChanged is forbidden when targeting API 37 and above"
+        errorLine1="            val code = stubType.getDeclaredField(&quot;TRANSACTION_onCapabilityChanged&quot;)"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinCapability.kt"
+            line="45"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_COLOR_RANGE`"
+        errorLine1="            &quot;color=${format.intOrNull(MediaFormat.KEY_COLOR_STANDARD)}/${format.intOrNull(MediaFormat.KEY_COLOR_RANGE)}/${format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER)}&quot;)"
+        errorLine2="                                                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="1831"
+            column="91"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_COLOR_STANDARD`"
+        errorLine1="            &quot;color=${format.intOrNull(MediaFormat.KEY_COLOR_STANDARD)}/${format.intOrNull(MediaFormat.KEY_COLOR_RANGE)}/${format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER)}&quot;)"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="1831"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_COLOR_TRANSFER`"
+        errorLine1="            &quot;color=${format.intOrNull(MediaFormat.KEY_COLOR_STANDARD)}/${format.intOrNull(MediaFormat.KEY_COLOR_RANGE)}/${format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER)}&quot;)"
+        errorLine2="                                                                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="1831"
+            column="140"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_COLOR_STANDARD`"
+        errorLine1="                &quot;standard=${format.intOrNull(MediaFormat.KEY_COLOR_STANDARD)} &quot; +"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="1839"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_COLOR_RANGE`"
+        errorLine1="                &quot;range=${format.intOrNull(MediaFormat.KEY_COLOR_RANGE)} &quot; +"
+        errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="1840"
+            column="43"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_COLOR_TRANSFER`"
+        errorLine1="                &quot;transfer=${format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER)}&quot;,"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="1841"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.media.MediaFormat#KEY_PCM_ENCODING`"
+        errorLine1="                            &quot;pcmEncoding=${outputFormat.intOrNull(MediaFormat.KEY_PCM_ENCODING)}&quot;"
+        errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="2575"
+            column="67"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 26 (current min is 23): `android.media.AudioManager#STREAM_ACCESSIBILITY`"
+        errorLine1="        stream in AudioManager.STREAM_SYSTEM..AudioManager.STREAM_ACCESSIBILITY"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/vehicle/api/AudioRouteController.kt"
+            line="26"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 34 (current min is 23): `android.net.wifi.WifiConfiguration.KeyMgmt#WPA2_PSK`"
+        errorLine1="            config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA2_PSK)"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/CarHotspotConfigWrite.kt"
+            line="146"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 34 (current min is 23): `android.net.wifi.WifiConfiguration.KeyMgmt#WPA2_PSK`"
+        errorLine1="            ManualHotspotSecurity.WPA2 -> saved.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA2_PSK) &amp;&amp;"
+        errorLine2="                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/CarHotspotConfigWrite.kt"
+            line="159"
+            column="74"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 30 (current min is 23): `android.net.wifi.WifiManager#UNKNOWN_SSID`"
+        errorLine1="        ?.takeUnless { it == WifiManager.UNKNOWN_SSID || it.isEmpty() }"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/ExistingWifiManager.kt"
+            line="156"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 36 (current min is 33): `android.net.wifi.SoftApConfiguration#BAND_5GHZ`"
+        errorLine1="                        .invoke(builder, preferredChannel, SoftApConfiguration.BAND_5GHZ)"
+        errorLine2="                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotManager.kt"
+            line="204"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 36 (current min is 33): `android.net.wifi.SoftApConfiguration#BAND_5GHZ`"
+        errorLine1="                        .invoke(builder, SoftApConfiguration.BAND_5GHZ)"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotManager.kt"
+            line="209"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 34 (current min is 26): `android.net.wifi.WifiConfiguration.KeyMgmt#WPA2_PSK`"
+        errorLine1="        val wpa2 = keyManagement.get(WifiConfiguration.KeyMgmt.WPA2_PSK)"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotManager.kt"
+            line="713"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 26): `android.net.wifi.WifiConfiguration.KeyMgmt#SAE`"
+        errorLine1="        val sae = keyManagement.get(WifiConfiguration.KeyMgmt.SAE)"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotManager.kt"
+            line="714"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 26): `android.net.wifi.WifiConfiguration.KeyMgmt#OWE`"
+        errorLine1="        val owe = keyManagement.get(WifiConfiguration.KeyMgmt.OWE)"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotManager.kt"
+            line="715"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 34 (current min is 23): `android.net.wifi.WifiConfiguration.KeyMgmt#WPA2_PSK`"
+        errorLine1="        val wpa2 = keyManagement.get(WifiConfiguration.KeyMgmt.WPA2_PSK)"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/ManualHotspotManager.kt"
+            line="342"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 23): `android.net.wifi.WifiConfiguration.KeyMgmt#SAE`"
+        errorLine1="        val sae = keyManagement.get(WifiConfiguration.KeyMgmt.SAE)"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/ManualHotspotManager.kt"
+            line="343"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.content.pm.PackageManager#MATCH_DISABLED_COMPONENTS`"
+        errorLine1="        val info = manager.getActivityInfo(component, PackageManager.MATCH_DISABLED_COMPONENTS)"
+        errorLine2="                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/transport/UsbPermissionActivityProbe.kt"
+            line="30"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24 (current min is 23): `android.media.AudioRouting#getRoutedDevice`"
+        errorLine1="            val listener = AudioRouting.OnRoutingChangedListener { routing -> checkCallRoute(routing.routedDevice) }"
+        errorLine2="                                                                                                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="2259"
+            column="102"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24 (current min is 23): `android.media.AudioTrack#addOnRoutingChangedListener`"
+        errorLine1="            if (runCatching { built.addOnRoutingChangedListener(listener, Handler(Looper.getMainLooper())) }.isSuccess) {"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="2260"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24 (current min is 23): `android.media.AudioTrack#removeOnRoutingChangedListener`"
+        errorLine1="            routingListener?.let { listener -> runCatching { track.removeOnRoutingChangedListener(listener) } }"
+        errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AndroidMediaSink.kt"
+            line="2925"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24 (current min is 23): `java.util.concurrent.CompletableFuture()`"
+        errorLine1="        val result = CompletableFuture&lt;Boolean>()"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="77"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24 (current min is 23): `java.util.concurrent.CompletableFuture#complete`"
+        errorLine1="            result.complete(supported)"
+        errorLine2="                   ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="82"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 31 (current min is 23): `android.media.AudioManager#getAvailableCommunicationDevices`"
+        errorLine1="                val speaker = manager.availableCommunicationDevices"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/CallSpeaker.kt"
+            line="21"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 31 (current min is 23): `android.media.AudioManager#setCommunicationDevice`"
+        errorLine1="                if (!manager.setCommunicationDevice(speaker)) return null"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/CallSpeaker.kt"
+            line="23"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 31 (current min is 23): `android.media.AudioManager#clearCommunicationDevice`"
+        errorLine1="                CallSpeaker { manager.clearCommunicationDevice() }"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/CallSpeaker.kt"
+            line="24"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        Class&lt;?> activityThread = Class.forName(&quot;android.app.ActivityThread&quot;);"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCallPopupTool.java"
+            line="70"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val binder = Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;getService&quot;, String::class.java)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="252"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val service = checkNotNull(Class.forName(&quot;android.media.IAudioService\$Stub&quot;)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="254"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val thread = Class.forName(&quot;android.app.ActivityThread&quot;)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="330"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val managerClass = Class.forName(&quot;android.hardware.bydauto.BYDAutoDeviceManager&quot;)"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="334"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val audio = Class.forName(&quot;android.hardware.bydauto.audio.BYDAutoAudioDevice&quot;)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarMusicRhythm.kt"
+            line="340"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val sdk = device ?: Class.forName(&quot;android.hardware.bydauto.instrument.BYDAutoInstrumentDevice&quot;)"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydFactoryNavigationOutput.kt"
+            line="19"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val idsClass = Class.forName(&quot;android.hardware.bydauto.BYDAutoFeatureIds\$Instrument&quot;)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydFactoryNavigationOutput.kt"
+            line="25"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val valueClass = Class.forName(&quot;android.hardware.bydauto.BYDAutoEventValue&quot;)"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydFactoryNavigationOutput.kt"
+            line="28"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="    private fun service(name: String): IBinder? = Class.forName(&quot;android.os.ServiceManager&quot;)"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/CarHotspotStartMain.kt"
+            line="66"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val wifi = Class.forName(&quot;android.net.wifi.IWifiManager\$Stub&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/CarHotspotStartMain.kt"
+            line="78"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val wifi = Class.forName(&quot;android.net.wifi.IWifiManager\$Stub&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/CarHotspotStartMain.kt"
+            line="153"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val service = Class.forName(&quot;android.net.IConnectivityManager\$Stub&quot;)"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/CarHotspotStartMain.kt"
+            line="181"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            Class.forName(&quot;android.os.ServiceManager&quot;)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/FceCarPropertyWriter.kt"
+            line="64"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val callbackType = Class.forName(&quot;android.net.wifi.ISoftApCallback&quot;)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinCapability.kt"
+            line="26"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val callbackType = Class.forName(&quot;android.net.wifi.ISoftApCallback&quot;)"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinCapability.kt"
+            line="42"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val stubType = Class.forName(&quot;android.net.wifi.ISoftApCallback\$Stub&quot;)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinCapability.kt"
+            line="43"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val capabilityType = Class.forName(&quot;android.net.wifi.SoftApCapability&quot;)"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinCapability.kt"
+            line="44"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val get = Class.forName(&quot;android.os.SystemProperties&quot;).getMethod(&quot;get&quot;, String::class.java)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinFirmware.kt"
+            line="18"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val service = Class.forName(&quot;android.os.ServiceManager&quot;)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinPlatform.kt"
+            line="84"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val wifi = Class.forName(&quot;android.net.wifi.IWifiManager\$Stub&quot;)"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/HotspotJoinPlatform.kt"
+            line="86"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val type = Class.forName(&quot;android.net.wifi.WifiManager\$SoftApCallback&quot;)"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/LocalOnlyHotspotRadioInfo.kt"
+            line="37"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;checkService&quot;, String::class.java)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/NativeNcmLease.kt"
+            line="491"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="                runCatching { Class.forName(&quot;android.net.IConnectivityManager&quot;) }"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/PlatformTetheringStart.kt"
+            line="51"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val binder = Class.forName(&quot;android.os.ServiceManager&quot;)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/PlatformTetheringStart.kt"
+            line="125"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            Class.forName(&quot;android.net.IConnectivityManager\$Stub&quot;)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/PlatformTetheringStart.kt"
+            line="127"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val service = Class.forName(&quot;android.os.ServiceManager&quot;)"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiScanPauseMain.kt"
+            line="46"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        return Class.forName(&quot;android.net.wifi.IWifiManager\$Stub&quot;)"
+        errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiScanPauseMain.kt"
+            line="48"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="    listenerType: Class&lt;*>? = runCatching { Class.forName(LISTENER) }.getOrNull(),"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiScanPauseMain.kt"
+            line="63"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="SoonBlockedPrivateApi"
+        message="Reflective access to asInterface will throw an exception when targeting API 37 and above"
+        errorLine1="            val service = Class.forName(&quot;android.hardware.usb.IUsbManager\$Stub&quot;)"
+        errorLine2="                          ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/transport/IphoneUsbSilentGrant.kt"
+            line="24"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SoonBlockedPrivateApi"
+        message="Reflective access to grantDevicePermission will throw an exception when targeting API 37 and above"
+        errorLine1="            Class.forName(&quot;android.hardware.usb.IUsbManager&quot;)"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/transport/IphoneUsbSilentGrant.kt"
+            line="27"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="SoonBlockedPrivateApi"
+        message="Reflective access to mService will throw an exception when targeting API 37 and above"
+        errorLine1="            val service = ConnectivityManager::class.java.getDeclaredField(&quot;mService&quot;)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/PlatformTetheringStart.kt"
+            line="115"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UnusedAttribute"
+        message="Attribute `usesPermissionFlags` is only used in API level 31 and higher (current min is 23)"
+        errorLine1="        android:usesPermissionFlags=&quot;neverForLocation&quot; />"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="15"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one or more of: Intent.FLAG_GRANT_READ_URI_PERMISSION, Intent.FLAG_GRANT_WRITE_URI_PERMISSION, Intent.FLAG_FROM_BACKGROUND, Intent.FLAG_DEBUG_LOG_RESOLUTION, Intent.FLAG_EXCLUDE_STOPPED_PACKAGES, Intent.FLAG_INCLUDE_STOPPED_PACKAGES, Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION, Intent.FLAG_GRANT_PREFIX_URI_PERMISSION, Intent.FLAG_ACTIVITY_MATCH_EXTERNAL, Intent.FLAG_ACTIVITY_NO_HISTORY, Intent.FLAG_ACTIVITY_SINGLE_TOP, Intent.FLAG_ACTIVITY_NEW_TASK, Intent.FLAG_ACTIVITY_MULTIPLE_TASK, Intent.FLAG_ACTIVITY_CLEAR_TOP, Intent.FLAG_ACTIVITY_FORWARD_RESULT, Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP, Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS, Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT, Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED, Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY, Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET, Intent.FLAG_ACTIVITY_NEW_DOCUMENT, Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET, Intent.FLAG_ACTIVITY_NO_USER_ACTION, Intent.FLAG_ACTIVITY_REORDER_TO_FRONT, Intent.FLAG_ACTIVITY_NO_ANIMATION, Intent.FLAG_ACTIVITY_CLEAR_TASK, Intent.FLAG_ACTIVITY_TASK_ON_HOME, Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS, Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT, Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER, Intent.FLAG_ACTIVITY_REQUIRE_DEFAULT, Intent.FLAG_RECEIVER_REGISTERED_ONLY, Intent.FLAG_RECEIVER_REPLACE_PENDING, Intent.FLAG_RECEIVER_FOREGROUND, Intent.FLAG_RECEIVER_NO_ABORT, Intent.FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS"
+        errorLine1="        addFlags(FLAG_RECEIVER_INCLUDE_BACKGROUND)"
+        errorLine2="                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterBridge.kt"
+            line="198"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: BluetoothAdapter.STATE_DISCONNECTED, BluetoothAdapter.STATE_CONNECTING, BluetoothAdapter.STATE_CONNECTED, BluetoothAdapter.STATE_DISCONNECTING"
+        errorLine1="                    adapter.getProfileConnectionState(profile) == BluetoothProfile.STATE_CONNECTED"
+        errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="3234"
+            column="67"/>
+    </issue>
+
+    <issue
+        id="UnspecifiedRegisterReceiverFlag"
+        message="`receiver` is missing `RECEIVER_EXPORTED` or `RECEIVER_NOT_EXPORTED` flag for unprotected broadcasts registered for an IntentFilter that cannot be inspected by lint"
+        errorLine1="            appContext.registerReceiver(receiver, filter)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/transport/IphoneUsbHost.kt"
+            line="457"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.google.code.gson:gson than 2.10.1 is available: 2.15.0"
+        errorLine1="    implementation &apos;com.google.code.gson:gson:2.10.1&apos;"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="51"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of `scheduleAtFixedRate` is strongly discouraged because it can lead to unexpected behavior when Android processes become cached (tasks may unexpectedly execute hundreds or thousands of times in quick succession when a process changes from cached to uncached); prefer using `scheduleWithFixedDelay`"
+        errorLine1="        watchdog.scheduleAtFixedRate({"
+        errorLine2="        ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydAmbientLightWorker.kt"
+            line="86"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of `scheduleAtFixedRate` is strongly discouraged because it can lead to unexpected behavior when Android processes become cached (tasks may unexpectedly execute hundreds or thousands of times in quick succession when a process changes from cached to uncached); prefer using `scheduleWithFixedDelay`"
+        errorLine1="            Executors.newSingleThreadScheduledExecutor { runnable ->"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterBridge.kt"
+            line="57"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of `scheduleAtFixedRate` is strongly discouraged because it can lead to unexpected behavior when Android processes become cached (tasks may unexpectedly execute hundreds or thousands of times in quick succession when a process changes from cached to uncached); prefer using `scheduleWithFixedDelay`"
+        errorLine1="            Executors.newSingleThreadScheduledExecutor { runnable ->"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterMapPause.kt"
+            line="47"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of `scheduleAtFixedRate` is strongly discouraged because it can lead to unexpected behavior when Android processes become cached (tasks may unexpectedly execute hundreds or thousands of times in quick succession when a process changes from cached to uncached); prefer using `scheduleWithFixedDelay`"
+        errorLine1="            Executors.newSingleThreadScheduledExecutor { runnable ->"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/FceClusterBridge.kt"
+            line="34"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of `scheduleAtFixedRate` is strongly discouraged because it can lead to unexpected behavior when Android processes become cached (tasks may unexpectedly execute hundreds or thousands of times in quick succession when a process changes from cached to uncached); prefer using `scheduleWithFixedDelay`"
+        errorLine1="            progressTask = worker.scheduleAtFixedRate({"
+        errorLine2="                           ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/vehicle/runtime/VehicleMediaRuntime.kt"
+            line="80"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="HardwareIds"
+        message="Using `getAddress` to get device identifiers is not recommended"
+        errorLine1="            adapter.address"
+        errorLine2="            ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/orchestration/CarPlayController.kt"
+            line="3278"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="HardwareIds"
+        message="Using `getString` to get device identifiers is not recommended"
+        errorLine1="        val id = runCatching { Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID) }"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/network/WifiP2pGroupManager.kt"
+            line="65"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="ExportedService"
+        message="Exported service does not require permission"
+        errorLine1="        &lt;service"
+        errorLine2="         ~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="53"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `AmbientMusicController` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/** The sole scheduler owns lamp I/O; audio writes only append small envelope metadata. */"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AmbientMusicController.kt"
+            line="13"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/media/AmbientMusicController.kt"
+            line="25"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydBatteryStatus` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydBattery.kt"
+            line="115"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    @Volatile private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydBattery.kt"
+            line="126"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydCallPopupGuard` which has field `app` pointing to `Context`); this is a memory leak"
+        errorLine1="/** Owns only the current connected foreground host; all ADB work stays off the UI thread. */"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCallPopupGuard.kt"
+            line="12"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var app: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCallPopupGuard.kt"
+            line="20"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydCarPlayCall` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarPlayCall.kt"
+            line="104"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    @Volatile private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydCarPlayCall.kt"
+            line="122"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydClusterBridge` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterBridge.kt"
+            line="11"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterBridge.kt"
+            line="26"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydFactoryNavigationOutput` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private var factory: BydFactoryNavigationOutput? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterBridge.kt"
+            line="29"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydClusterMapPause` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterMapPause.kt"
+            line="9"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    @Volatile private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterMapPause.kt"
+            line="23"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydClusterSong` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterSong.kt"
+            line="90"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    @Volatile private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydClusterSong.kt"
+            line="112"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydDiLink3ClusterOutput` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/** DiLink 3 cluster modes have their own recovery journal; OEM package holds are independent. */"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydDiLink3ClusterOutput.kt"
+            line="9"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    @Volatile private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydDiLink3ClusterOutput.kt"
+            line="19"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydHudBridge` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/** Publishes CarPlay route arrows, distance and street to BYD&apos;s native windshield HUD. */"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydHudBridge.kt"
+            line="17"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydHudBridge.kt"
+            line="37"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydStandaloneNavigationBridge` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="internal object BydStandaloneNavigationBridge {"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydStandaloneNavigationBridge.kt"
+            line="9"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydStandaloneNavigationBridge.kt"
+            line="12"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydStandaloneHudOutput` which has field `app` pointing to `Context`); this is a memory leak"
+        errorLine1="    private var output: BydStandaloneHudOutput? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydStandaloneNavigationBridge.kt"
+            line="13"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BydWheelSpeedSource` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydWheelSpeed.kt"
+            line="45"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/BydWheelSpeed.kt"
+            line="56"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `FceClusterBridge` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="/**"
+        errorLine2="^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/FceClusterBridge.kt"
+            line="9"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private var context: Context? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/hud/FceClusterBridge.kt"
+            line="21"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `QQMusicPlaybackGuardClient` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="        private var startupCompanion: QQMusicPlaybackGuardClient? = null"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/vehicle/runtime/VehicleMediaRuntime.kt"
+            line="238"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `VehicleMediaRuntime` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    @Volatile private var owner: VehicleMediaRuntime? = null"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/vehicle/runtime/VehicleMediaRuntime.kt"
+            line="260"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation &apos;com.google.code.gson:gson:2.10.1&apos;"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="51"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    testImplementation &apos;org.robolectric:robolectric:4.17&apos;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="58"
+            column="24"/>
+    </issue>
+
+</issues>

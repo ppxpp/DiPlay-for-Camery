@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">NCM nativo (experimental)</string>
+    <string name="settings_native_ncm_description">Activado: usa la red USB del sistema. Desactivado: usa el método actual. Se aplica en la próxima conexión. Si falla, cambia manualmente; ningún método cambia automáticamente al otro.</string>
+</resources>

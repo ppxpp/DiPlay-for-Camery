@@ -195,6 +195,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">Скасувати зміни й вийти з налаштувань</string>
     <string name="disconnect">Відключити</string>
+    <string name="disconnect_this_session">Відключити це підключення</string>
     <string name="discovering_iphone">Пошук iPhone</string>
     <string name="display_and_performance">Екран і продуктивність</string>
     <string name="done">Готово</string>
@@ -734,6 +735,9 @@
     <string name="update_install">Установити %1$s</string>
     <string name="update_failed">Не вдалося оновити</string>
     <string name="update_available_home">Доступне оновлення</string>
+    <string name="update_available_connection">Доступна нова версія %1$s</string>
+    <string name="update_available_connection_beta">Доступна нова бета-версія %1$s</string>
+    <string name="update_available_connection_action">Натисніть, щоб оновитися в розділі «Про програму»</string>
     <string name="update_saved_to">Збережено в %1$s</string>
     <string name="backup_title">Резервна копія налаштувань</string>
     <string name="backup_open">Резервна копія на телефоні</string>

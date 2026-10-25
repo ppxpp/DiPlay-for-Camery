@@ -22,7 +22,7 @@ class IapTunnel(
     private val readKey: ByteArray,
     bindAddress: InetAddress = InetAddress.getByName("0.0.0.0"),
     private val preferredPorts: IntArray? = null,
-    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
     private val expectedPeer: InetAddress? = null,
 ) : Closeable {
     interface Listener {

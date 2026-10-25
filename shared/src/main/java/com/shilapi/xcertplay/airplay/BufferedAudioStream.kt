@@ -30,7 +30,7 @@ internal class BufferedAudioStream(
     private val pause: (Long) -> Unit = { Thread.sleep(it) },
     private val expectedPeer: InetAddress = InetAddress.getLoopbackAddress(),
     private val bindAddress: InetAddress? = null,
-    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
     private val onNativeFailure: (Throwable) -> Unit = {},
 ) : Closeable {
     internal class Frame(val sequence: Int, val timestamp: Long, val rtp: ByteArray)

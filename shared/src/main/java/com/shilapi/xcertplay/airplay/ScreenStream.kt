@@ -22,7 +22,7 @@ enum class VideoCodec { H264, H265 }
  */
 class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {},
     private val bindAddress: InetAddress? = null,
-    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
     private val expectedPeer: InetAddress? = null) : Closeable {
     interface Listener {
         fun onCodec(codec: VideoCodec) {}

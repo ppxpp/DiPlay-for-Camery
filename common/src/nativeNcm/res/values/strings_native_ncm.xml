@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">Native NCM (experimental)</string>
+    <string name="settings_native_ncm_description">On: use the system USB network. Off: use the existing connection method. Applies at the next connection. If connection fails, switch manually; neither method falls back automatically.</string>
+</resources>

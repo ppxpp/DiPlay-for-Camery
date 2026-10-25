@@ -26,6 +26,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.RippleDrawable
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.net.Uri
@@ -68,6 +69,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -119,6 +121,10 @@ import com.shilapi.xcertplay.transport.BluetoothRadioCheck
 import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
+import com.shilapi.xcertplay.update.UpdateAvailability
+import com.shilapi.xcertplay.update.UpdateChannel
+import com.shilapi.xcertplay.update.UpdateChannelStore
+import com.shilapi.xcertplay.update.UpdateRelease
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
@@ -151,6 +157,69 @@ class CarPlayHostActivity : ComponentActivity() {
         val intervalMillis: Int,
         val triggerDelayMillis: Int,
     )
+
+    private class WaitingUpdateNotice(
+        context: Context,
+        title: String,
+        action: String,
+        onClick: () -> Unit,
+    ) : LinearLayout(context) {
+        private val icon = ImageView(context)
+        private val titleView = TextView(context)
+        private val actionView = TextView(context)
+
+        init {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(36)
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            isClickable = true
+            isFocusable = true
+            contentDescription = "$title. $action"
+            icon.apply {
+                setImageResource(R.drawable.ic_dp_update)
+                importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            titleView.apply {
+                text = title
+                textSize = 11f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                gravity = Gravity.START
+            }
+            actionView.apply {
+                text = action
+                textSize = 9.5f
+                gravity = Gravity.START
+            }
+            addView(icon, LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(6) })
+            addView(LinearLayout(context).apply {
+                orientation = VERTICAL
+                addView(titleView, LayoutParams(-1, -2))
+                addView(actionView, LayoutParams(-1, -2).apply { topMargin = dp(1) })
+            }, LayoutParams(0, -2, 1f))
+            setOnClickListener { onClick() }
+        }
+
+        fun setNight(night: Boolean) {
+            val palette = DiPlayPalette.of(night)
+            val tint = { alpha: Int -> (palette.warning and 0x00FFFFFF) or (alpha shl 24) }
+            val shell = GradientDrawable().apply {
+                setColor(tint(0x26))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), tint(0xB3))
+            }
+            background = RippleDrawable(
+                ColorStateList.valueOf(palette.ripple),
+                shell,
+                GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(12).toFloat() },
+            )
+            icon.imageTintList = ColorStateList.valueOf(palette.warning)
+            titleView.setTextColor(palette.warning)
+            actionView.setTextColor(palette.primaryText)
+        }
+
+        private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
+    }
 
     private var connectionPanel: View? = null
     private val connectionProgressPanel by lazy { com.shilapi.xcertplay.connection.ConnectionProgressPanel(this) }
@@ -423,6 +492,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var settingsMenuRenderedState: List<Any?>? = null
     private var settingsMenuNeedsRebuild = false
     private var settingsMenuContentScroll: ScrollView? = null
+    private var disconnectSessionButton: DiPlayButton? = null
     private var mfiTargetGroup: RadioGroup? = null
     private var mfiI2cFields: View? = null
     private var mfiRemoteFields: View? = null
@@ -893,12 +963,27 @@ class CarPlayHostActivity : ComponentActivity() {
                 .put("connectionOverlayVisible", connectionPanel?.visibility == View.VISIBLE)
                 .put("firstOutput", controller?.connectionProgress?.hasRendered)
                 .put("progressOutcome", controller?.connectionProgress?.snapshot()?.outcome?.name)
+                .put("connectionProgress", controller?.connectionProgress?.snapshot()?.let { progress ->
+                    org.json.JSONObject().put("attempt", progress.attempt)
+                        .put("elapsedMs", progress.elapsedMillis).put("overallMs", progress.overallMillis)
+                        .put("current", progress.current.key).put("outcome", progress.outcome.name)
+                        .put("steps", org.json.JSONArray(progress.steps.map { step ->
+                            org.json.JSONObject().put("id", step.key)
+                                .put("durationMs", progress.durations[step] ?: 0L)
+                                .put("visited", step in progress.visited)
+                        }))
+                })
                 .put("videoRendered", sink?.liveVideoCounters()?.rendered)
                 .put("videoReceived", sink?.liveVideoCounters()?.received)
                 .put("settingsMenuOpen", menuOpen).put("hostWindowFocused", hasWindowFocus())
                 .put("carPlayNightMode", carPlayNightMode.key).put("carPlayNight", darkMode)
                 .put("vehicleNight", com.shilapi.xcertplay.pioneer.CamryDayNight.latestNight)
                 .put("microphoneProbe", com.shilapi.xcertplay.media.MicrophoneProbe.snapshot())
+                .put("audioExperiments", com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.snapshot())
+                .put("phoneMediaPlaying", controller?.nowPlayingSnapshot()?.playing)
+                .put("mediaCommandRevision", controller?.mediaCommandRevision())
+                .put("microphoneUplink", org.json.JSONObject(com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.microphoneUplinkState))
+                .put("siriTest", org.json.JSONObject(com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.siriTestState))
                 .put("diagnosticLogDropped", AsyncDiagnosticLog.droppedCount)
         }, retryVpn = { if (!vpnRootPending) vpnRootAttempted = false; requestStartupPrerequisites() }, videoGesture = ::startDebugVideoGesture, videoTap = ::debugVideoTap,
             hostUi = ::debugHostUi,
@@ -2065,6 +2150,11 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private fun cachedUpdateRelease(): UpdateRelease? = runCatching {
+        val installedVersionCode = PackageInfoCompat.getLongVersionCode(packageManager.getPackageInfo(packageName, 0))
+        UpdateAvailability.available(this, installedVersionCode, UpdateChannelStore.load(this))
+    }.getOrNull()
+
     private fun buildContentView(): View {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         val video = TextureView(this).apply {
@@ -2113,7 +2203,29 @@ class CarPlayHostActivity : ComponentActivity() {
                 else getString(R.string.use_a_usb_data_cable_and_unlock_your_iphone_allow_trust_an)
             gravity = Gravity.CENTER
         }
-        panel.addView(instructions)
+        val updateNotice = cachedUpdateRelease()?.let { release ->
+            val title = getString(
+                if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_connection_beta
+                else R.string.update_available_connection,
+                release.tagName,
+            )
+            WaitingUpdateNotice(this, title, getString(R.string.update_available_connection_action)) {
+                showDiPlayHome("update")
+            }
+        }
+        // A wide screen floats the smaller notice at the left of the guidance, directly
+        // under the progress card; it takes no space, so no text is pushed or squeezed.
+        if (updateNotice != null && resources.configuration.screenWidthDp >= 800) {
+            panel.addView(FrameLayout(this).apply {
+                addView(instructions, FrameLayout.LayoutParams(-1, -2))
+                addView(updateNotice, FrameLayout.LayoutParams(dp(146), -2, Gravity.TOP or Gravity.START))
+            }, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            if (updateNotice != null) {
+                panel.addView(updateNotice, LinearLayout.LayoutParams(dp(146), -2).apply { bottomMargin = dp(4) })
+            }
+            panel.addView(instructions)
+        }
         val help = TextView(this).apply {
             gravity = Gravity.CENTER
             visibility = View.GONE
@@ -2161,6 +2273,7 @@ class CarPlayHostActivity : ComponentActivity() {
             val colors = WaitingScreenColors.of(appNight)
             viewport.setBackgroundColor(colors.background)
             connectionProgressPanel.setNight(appNight)
+            updateNotice?.setNight(appNight)
             title.setTextColor(colors.text)
             stage.setTextColor(colors.text)
             instructions.setTextColor(colors.secondary)
@@ -2199,6 +2312,12 @@ class CarPlayHostActivity : ComponentActivity() {
             for (button in listOf(back, recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
                     button.layoutParams = button.layoutParams.apply { width = buttonWidth }
+                }
+            }
+            updateNotice?.let { notice ->
+                val noticeWidth = minOf(dp(146), availableWidth.coerceAtLeast(dp(48)))
+                if (notice.layoutParams.width != noticeWidth) {
+                    notice.layoutParams = notice.layoutParams.apply { width = noticeWidth }
                 }
             }
             if (preparationHeight == height) return
@@ -3332,6 +3451,15 @@ class CarPlayHostActivity : ComponentActivity() {
             style(DiPlayButtonKind.PRIMARY, overlayPalette, overlay = true)
             setOnClickListener { saveSettingsAndReconnect() }
         }
+        val disconnectButton = DiPlayButton(this).apply {
+            text = getString(R.string.disconnect_this_session)
+            textSize = 17f
+            minHeight = dp(SWIPE_ACTION_HEIGHT_DP)
+            visibility = if (CarPlayBackgroundSession.hasSession()) View.VISIBLE else View.GONE
+            style(DiPlayButtonKind.TONAL_DANGER, overlayPalette, overlay = true)
+            setOnClickListener { disconnectSession() }
+        }
+        disconnectSessionButton = disconnectButton
         val exitApplicationButton = DiPlayButton(this).apply {
             text = getString(R.string.exit_application)
             textSize = 17f
@@ -3537,6 +3665,8 @@ class CarPlayHostActivity : ComponentActivity() {
                 dp(SWIPE_CHROME_PADDING_DP), dp(SWIPE_CHROME_PADDING_DP))
             addView(save, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(disconnectButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
         }
         panel.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -3635,7 +3765,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     /** Mirrors [persistMenuSettings]: a field staged there belongs here too. */
     private fun menuSettingsSignature(): Int = listOf(
-        hideBydCallPopup, gestureFingerCount, wirelessEnabled, mfiTarget, mfiI2cPath, remoteMfiServer, remoteMfiToken,
+        gestureFingerCount, wirelessEnabled, mfiTarget, mfiI2cPath, remoteMfiServer, remoteMfiToken,
         wirelessHotspotMode, existingWifiSsid, existingWifiPassphrase, manualHotspotSsid,
         manualHotspotPassphrase, manualHotspotBand, manualHotspotChannel, manualHotspotSecurity,
         locationReportingEnabled, autoStartOnBoot, advancedAudioChannelMapping, displayScaleTenths,
@@ -6336,6 +6466,8 @@ class CarPlayHostActivity : ComponentActivity() {
         val builtAt = System.nanoTime()
         menuOpen = true
         updateCallPopupGuard()
+        disconnectSessionButton?.visibility =
+            if (CarPlayBackgroundSession.hasSession()) View.VISIBLE else View.GONE
         gestureOverlay?.visibility = View.GONE
         settingsMenu?.visibility = View.VISIBLE
         focusSettingsMenuRoot()
@@ -6497,6 +6629,15 @@ class CarPlayHostActivity : ComponentActivity() {
         } else {
             maybeStartCarPlay()
         }
+    }
+
+    private fun disconnectSession() {
+        if (shuttingDown.get()) return
+        if (!CarPlayBackgroundSession.hasSession()) return
+        appendLog("Disconnect requested from settings")
+        // Return to DiPlay before the projection task tears down, like the home screen's Disconnect.
+        showDiPlayHome()
+        CarPlayBackgroundSession.stop()
     }
 
     private fun exitApplication() {
@@ -6702,6 +6843,23 @@ class CarPlayHostActivity : ComponentActivity() {
         check(!debugGestureRunning) { "Wait for timed gesture to finish" }
         val started = System.nanoTime()
         val result = when (action) {
+            "SIRI" -> controller?.requestSiri() == true
+            "SIRI_TEST" -> {
+                val runtime = com.shilapi.xcertplay.pioneer.PioneerDebugRuntime
+                runtime.siriTestState = org.json.JSONObject().put("state", "waiting-confirmation").toString()
+                appDialogBuilder().setTitle("Siri 收音测试")
+                    .setMessage("点击开始后，听到 Siri 提示音，请正常说：现在几点。无需打字反馈，我会自动检查采样和发送指标。")
+                    .setPositiveButton("开始") { _, _ ->
+                        val at = System.currentTimeMillis()
+                        val sent = controller?.requestSiri() == true
+                        runtime.siriTestState = org.json.JSONObject().put("state", if (sent) "requested" else "failed")
+                            .put("startedAtMs", at).put("sent", sent).toString()
+                        appendLog("SIRI_MIC_TEST requested=$sent atMs=$at")
+                    }.setNegativeButton("稍后") { _, _ ->
+                        runtime.siriTestState = org.json.JSONObject().put("state", "cancelled").toString()
+                    }.show()
+                true
+            }
             "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE) == true
             "AUDIO_TAKE", "AUDIO_RELEASE" -> {
                 check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice())

@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
-import android.net.VpnService
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -150,6 +149,14 @@ class PioneerDebugService : Service() {
                 send(socket, reply.put("format", "png"), bytes)
             }
             "status" -> send(socket, status(request.optBoolean("compact", false)).put("ok", true))
+            "audio-experiments" -> {
+                if (request.optString("action", "STATUS") in setOf("SET", "RESET")) {
+                    val host = PioneerDebugRuntime.snapshot()
+                    check(!host.optBoolean("hostStateTimeout") && !host.has("hostStateError")) { "Host state unavailable" }
+                    check(!host.optBoolean("controllerRunning") && !host.optBoolean("backgroundSession")) { "Stop CarPlay before changing audio experiments" }
+                }
+                send(socket, reply.put("audioExperiments", PioneerAudioExperiments.command(this, request)))
+            }
             "vpn-permission" -> send(socket, reply.put("vpnPermission", PioneerVpnPermissionGrant.run(
                 this, request.optString("action", "STATUS"))))
             "vpn-native" -> send(socket, reply.put(
@@ -178,6 +185,43 @@ class PioneerDebugService : Service() {
                         android.os.SystemClock.elapsedRealtime() + 3_000L, pending)
                     android.os.Process.killProcess(android.os.Process.myPid())
                 }, "self-restart-probe").start()
+            }
+            "car-mic-test" -> {
+                val action = request.optString("action", "STATUS")
+                require(action in listOf("STATUS", "OPEN"))
+                if (action == "OPEN") {
+                    val rate = request.optInt("captureRate", 16_000)
+                    val mode = request.optString("captureMode", "NORMAL")
+                    val source = request.optString("captureSource", "MIC")
+                    val gain = request.optInt("gainDb", 0)
+                    val playbackStream = request.optInt("playbackStream", if (PioneerUsbPolicy.matchesDevice() && !request.optBoolean("standardPlayback", false)) 403 else 0)
+                    require(playbackStream in listOf(0, 401, 403))
+                    require(!request.optBoolean("standardPlayback", false) || playbackStream == 0)
+                    val palMicType = request.optInt("palMicType", 0)
+                    require(palMicType in listOf(0, 200, 230))
+                    val replayFile = request.optString("replayFile", "")
+                    require(replayFile.isEmpty() || replayFile.matches(Regex("mic-[0-9]{8}-[0-9]{6}-[0-9]{3}\\.wav")))
+                    require(source in listOf("MIC", "VOICE_RECOGNITION", "VOICE_COMMUNICATION") && gain in 0..18)
+                    require(rate in listOf(16_000, 32_000, 48_000) && mode in listOf("NORMAL", "COMMUNICATION"))
+                    startActivity(Intent().setClassName(packageName, "com.shilapi.xcertplay.CarMicTestActivity")
+                        .putExtra("captureRate", rate).putExtra("captureMode", mode)
+                        .putExtra("captureSource", source).putExtra("gainDb", gain).putExtra("palMicType", palMicType)
+                        .putExtra("voiceEffects", request.optBoolean("voiceEffects", false))
+                        .putExtra("replayFile", replayFile).putExtra("playbackStream", playbackStream)
+                        .putExtra("standardPlayback", request.optBoolean("standardPlayback", false))
+                        .putExtra("stereoPlayback", request.optBoolean("stereoPlayback", true))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                }
+                val saved = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
+                    .getString("car_mic_guided_result", "{}") ?: "{}"
+                val crashFile = File(filesDir, "logs/last-crash.txt")
+                val crash = runCatching {
+                    if (crashFile.length() in 1..16_384) PioneerDebugRuntime.redact(crashFile.readText()) else null
+                }.getOrNull()
+                send(socket, reply.put("test", JSONObject(PioneerDebugRuntime.carMicTestState))
+                    .put("lastCrash", crash ?: JSONObject.NULL)
+                    .put("lastSaved", JSONObject(saved))
+                    .put("message", if (action == "OPEN") "已请求打开车机引导页；录音需点击车机确认" else "仅查询，不启动录音"))
             }
             "host-ui" -> {
                 require(PioneerUsbPolicy.matchesDevice())
@@ -266,6 +310,8 @@ class PioneerDebugService : Service() {
                 send(socket, reply.put("mode", mode).put("message", "聚合计时开关立即生效；连接与错误日志继续保留"))
             }
             "native-ncm-startup" -> {
+                require(PioneerWiredBackend.selectorVisible) { "Wired backend controls are debug-only" }
+                require(PioneerWiredBackend.nativeNcmIncluded) { "Native NCM is not included in this build" }
                 require(PioneerUsbPolicy.matchesDevice())
                 fun choice(key: String): Boolean? = if (!request.has(key)) null else
                     request.getString(key).also { require(it == "ON" || it == "OFF") } == "ON"
@@ -279,6 +325,7 @@ class PioneerDebugService : Service() {
                     .put("message", "仅调整NCM启动策略；预热开关须重启应用进程后对比，不重启车机、不切换后端"))
             }
             "network-backend" -> {
+                require(PioneerWiredBackend.selectorVisible) { "Wired backend controls are debug-only" }
                 val mode = request.getString("mode")
                 val backend = PioneerWiredBackend.Mode.entries.firstOrNull { it.name == mode }
                 require(backend != null) { "mode must be LWIP, NATIVE_NCM, LWIP_OPTIMIZED or VPN" }
@@ -370,6 +417,7 @@ class PioneerDebugService : Service() {
             })
 
     private fun nativeNcmLeaseDiagnostics(): JSONArray {
+        if (!PioneerWiredBackend.nativeNcmIncluded) return JSONArray()
         val root = File(filesDir, "native-ncm")
         val records = root.listFiles().orEmpty().filter {
             it.isDirectory && it.name.matches(Regex("[0-9a-f]{32}"))
@@ -401,22 +449,21 @@ class PioneerDebugService : Service() {
                 put("sessionId", session?.id ?: 0L)
             })
         val conflict = runCatching { PioneerVpnPermissionGrant.conflict(this) }.getOrDefault("VPN_CONFLICT_QUERY_FAILED")
-        // prepare() can replace a previously authorized VPN; status queries must not do that.
-        val consent = runCatching { if (conflict == null) VpnService.prepare(this) else null }
-        val vpn = JSONObject().put("authorized", if (conflict == null) consent.isSuccess && consent.getOrNull() == null else JSONObject.NULL)
-            .put("prepareChecked", conflict == null).put("conflict", conflict ?: JSONObject.NULL)
-            .put("consentComponent", consent.getOrNull()?.component?.flattenToShortString() ?: "")
+        // prepare() changes the prepared owner, even without a consent window. Diagnostics
+        // must not complete missing initialization and hide a first-connection failure.
+        val permission = PioneerVpnPermissionGrant.status(this)
+        val vpn = JSONObject().put("authorized", permission.opt("preconsented"))
+            .put("prepareChecked", false).put("conflict", conflict ?: JSONObject.NULL)
+            .put("consentComponent", "")
             .put("tunNodeExists", File("/dev/tun").exists() || File("/dev/net/tun").exists())
-        consent.exceptionOrNull()?.let { vpn.put("error", it.toString()) }
-        vpn.put("consentActivityAvailable", consent.getOrNull()?.component?.let {
-            runCatching { packageManager.getActivityInfo(it, 0).enabled }.getOrDefault(false)
-        } ?: false)
+            .put("consentActivityAvailable", JSONObject.NULL)
         val devices = getSystemService(UsbManager::class.java).deviceList.values.map { device ->
             JSONObject().put("vid", device.vendorId).put("pid", device.productId).put("path", device.deviceName)
                 .put("permission", getSystemService(UsbManager::class.java).hasPermission(device))
         }
-        return JSONObject().put("package", packageName).put("version", packageManager.getPackageInfo(packageName, 0).versionName)
-            .put("versionCode", packageManager.getPackageInfo(packageName, 0).versionCode)
+        val installed = packageManager.getPackageInfo(packageName, 0)
+        return JSONObject().put("package", packageName).put("version", installed.versionName)
+            .put("versionCode", installed.versionCode).put("packageLastUpdateTimeMs", installed.lastUpdateTime)
             .put("port", PioneerDebugRuntime.port).put("listener", PioneerDebugRuntime.listenerState)
             .put("addresses", JSONArray(addresses())).put("vpn", vpn).put("host", PioneerDebugRuntime.snapshot())
             .put("usbConfigurationMode", PioneerUsbPolicy.configurationMode(this))
@@ -430,6 +477,10 @@ class PioneerDebugService : Service() {
             .put("networkBackend", if (PioneerWiredBackend.nativeEnabled(this)) "NATIVE_NCM"
                 else if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
+            .put("usbLaunchPolicy", PioneerUsbLaunchPolicy.snapshot(this))
+            .put("sampledAtMs", System.currentTimeMillis())
+            .put("nativeNcmIncluded", PioneerWiredBackend.nativeNcmIncluded)
+            .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
             .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
             .put("vpnPermission", PioneerVpnPermissionGrant.status(this))

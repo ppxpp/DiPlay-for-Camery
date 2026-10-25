@@ -36,6 +36,9 @@ internal class QQMusicPlaybackGuardClient(
                 val signature = data.readString().orEmpty()
                 !com.shilapi.xcertplay.vehicle.adapters.pioneer.PalSteeringWheelInputAdapter.acceptBridgeEvent(signature)
             } else false
+            if (!closed && command != null) {
+                report("Audio playback: companion command=$command bridgeCode=$code duplicate=$duplicate")
+            }
             val accepted = !closed && command != null && (duplicate || onCommand(command))
             reply?.writeNoException()
             reply?.writeInt(if (accepted) 1 else 0)

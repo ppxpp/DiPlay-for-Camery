@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_native_ncm">NCM nativo (experimental)</string>
-    <string name="settings_native_ncm_description">Activado: usa la red USB del sistema. Desactivado: usa el método actual. Se aplica en la próxima conexión. Si falla, cambia manualmente; ningún método cambia automáticamente al otro.</string>
     <string name="settings_wired_backend">Método de conexión por cable</string>
     <string name="settings_wired_backend_lwip">lwIP original</string>
     <string name="settings_wired_backend_optimized">lwIP optimizado (experimental)</string>
-    <string name="settings_wired_backend_description">Elige uno de cuatro métodos. VPN intenta primero la autorización automática. Se aplica en la próxima conexión. Si falla, cambia manualmente; no hay cambio automático.</string>
+    <string name="settings_wired_backend_description">Elige un método de conexión por cable. VPN intenta primero la autorización automática. Se aplica en la próxima conexión. Si falla, cambia manualmente; no hay cambio automático.</string>
     <string name="settings_wired_backend_vpn">VPN (experimental)</string>
     <string name="vpn_root_authorizing">Autorizando VPN…</string>
     <string name="vpn_root_failed">La autorización automática de VPN falló. Reintenta o autoriza mediante el sistema. El método seguirá siendo VPN.</string>

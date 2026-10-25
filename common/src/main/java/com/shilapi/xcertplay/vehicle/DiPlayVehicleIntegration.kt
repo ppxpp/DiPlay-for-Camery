@@ -33,7 +33,13 @@ internal object DiPlayVehicleIntegration {
         val recovery = com.shilapi.xcertplay.PioneerMediaSourceRecovery.create(context, next)
         val extension = try {
             VehicleMediaRuntime.create(context, { command ->
-                next.sendMediaButton(when (command) {
+                val callActive = com.shilapi.xcertplay.CarPlayBackgroundSession.snapshot()
+                    ?.takeIf { it.controller === next }?.sink?.hasTelephonyAudio() == true
+                if (command == MediaCommand.PLAY && callActive && com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().blockCompanionPlay) {
+                    com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context,
+                        "Audio playback: companion PLAY ignored during telephony")
+                    true
+                } else next.sendMediaButton(when (command) {
                     MediaCommand.PLAY -> CarPlayMediaButton.PLAY
                     MediaCommand.PAUSE -> CarPlayMediaButton.PAUSE
                     MediaCommand.NEXT -> CarPlayMediaButton.NEXT

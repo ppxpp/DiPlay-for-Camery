@@ -191,6 +191,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">放弃更改并退出设置</string>
     <string name="disconnect">断开连接</string>
+    <string name="disconnect_this_session">断开此次连接</string>
     <string name="discovering_iphone">正在查找 iPhone</string>
     <string name="display_and_performance">显示与性能</string>
     <string name="done">完成</string>
@@ -845,6 +846,9 @@
     <string name="update_install">安装 %1$s</string>
     <string name="update_failed">更新失败</string>
     <string name="update_available_home">有可用更新</string>
+    <string name="update_available_connection">发现新版本 %1$s</string>
+    <string name="update_available_connection_beta">发现新测试版 %1$s</string>
+    <string name="update_available_connection_action">点击前往“关于”页升级</string>
     <string name="update_saved_to">已保存到 %1$s</string>
     <string name="backup_title">备份设置</string>
     <string name="backup_open">在手机上备份或恢复</string>

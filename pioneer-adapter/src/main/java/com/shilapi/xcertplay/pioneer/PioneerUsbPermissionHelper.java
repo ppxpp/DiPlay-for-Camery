@@ -70,7 +70,7 @@ public final class PioneerUsbPermissionHelper {
                     !request.getString("appStart").equals(processStart(pid))) throw new IOException("APP_PROCESS_CHANGED");
             };
             guard.check();
-            PioneerNativeNcmPrewarm.requireSupportedFirmware(); // Read-only firmware check, no NCM load.
+            PioneerFirmwareCatalog.requireSupportedFirmware(); // Read-only firmware check, no NCM load.
             UsbManager usb = (UsbManager) context.getSystemService(Context.USB_SERVICE);
             if (usb == null) throw new IOException("USB_SERVICE_MISSING");
             UsbDevice device = current(usb, request);
@@ -79,12 +79,51 @@ public final class PioneerUsbPermissionHelper {
                 .put("identityHash", identity(device));
             try { result.put("defaultBefore", defaultFor(device)); }
             catch (Exception denied) { result.put("defaultBefore", "UNKNOWN").put("defaultReadError", denied.getClass().getSimpleName()); }
+            if (action.equals("INSPECT")) {
+                guard.check();
+                result.put("snapshotAtMs", SystemClock.elapsedRealtime());
+                result.put("snapshotWallAtMs", System.currentTimeMillis());
+                inspectUsbActivityHistory(result, guard);
+                android.app.ActivityManager activity = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+                try {
+                    java.util.List<android.app.ActivityManager.RunningTaskInfo> tasks = activity.getRunningTasks(1);
+                    String top = tasks.isEmpty() || tasks.get(0).topActivity == null ? "" : tasks.get(0).topActivity.flattenToShortString();
+                    result.put("topActivity", top).put("usbDialogObserved", top.matches(".*Usb(?:Confirm|Permission|Resolver|Accessory).*"));
+                } catch (Exception error) { result.put("topActivityError", error.getClass().getSimpleName()); }
+                for (String name : new String[]{"media.audio_flinger", "media.audio_policy"}) {
+                    try {
+                        guard.check();
+                        PioneerInterfaceFirewall.Result dump = PioneerRootCommand.run(new String[]{"/system/bin/dumpsys", name}, 1200);
+                        result.put(name, new JSONObject().put("exit", dump.exit).put("text", dump.output.substring(0, Math.min(dump.output.length(), 6000))));
+                    } catch (Exception error) { result.put(name, error.getClass().getSimpleName()); }
+                }
+                // Fixed, numeric recorder configuration only; never expose voice history or account preferences.
+                try {
+                    File config = new File("/data/user/0/com.tencent.wecarspeech/shared_prefs/wecarspeech_ecnr_prefs.xml");
+                    JSONObject voice = new JSONObject();
+                    if (config.isFile()) {
+                        XmlPullParser parser = Xml.newPullParser(); parser.setInput(new StringReader(read(config, 32768)));
+                        for (int event = parser.getEventType(); event != XmlPullParser.END_DOCUMENT; event = parser.next()) {
+                            if (event == XmlPullParser.START_TAG && parser.getName().equals("string")) {
+                                String key = parser.getAttributeValue(null, "name");
+                                if ("record_config".equals(key) || "ecnr_config".equals(key)) {
+                                    JSONObject stored = new JSONObject(parser.nextText()), selected = new JSONObject();
+                                    for (String field : new String[]{"apiType", "audioFormat", "channelNumber", "micNumber", "recordChannel", "voiceSource", "type", "region", "noiseReduceMode", "refNum", "aecLevel"})
+                                        if (stored.has(field) && stored.opt(field) instanceof Number) selected.put(field, stored.opt(field));
+                                    voice.put(key, selected);
+                                }
+                            }
+                        }
+                    }
+                    result.put("voiceAssistantRecorderConfig", voice);
+                } catch (Exception error) { result.put("voiceAssistantConfigError", error.getClass().getSimpleName()); }
+            }
             if (action.equals("GRANT") || action.equals("AUTO_GRANT")) {
                 guard.check(); device = current(usb, request);
                 invoke("grantDevicePermission", service, new Class<?>[]{UsbDevice.class, int.class}, device, app.uid);
                 result.put("grantCallSucceeded", true);
                 guard.check(); device = current(usb, request);
-                NativeNcmFirewall.Result permissionDump = NativeNcmCommand.run(new String[]{"/system/bin/dumpsys", "usb"}, 1500);
+                PioneerInterfaceFirewall.Result permissionDump = PioneerRootCommand.run(new String[]{"/system/bin/dumpsys", "usb"}, 1500);
                 boolean granted = permissionDump.exit == 0 && PioneerUsbPermissionReadback.granted(permissionDump.output,device.getDeviceName(),app.uid);
                 result.put("targetPermissionVerified",granted);
                 if (!granted) throw new IOException("USB_TARGET_PERMISSION_UNCONFIRMED");
@@ -132,7 +171,7 @@ public final class PioneerUsbPermissionHelper {
     }
 
     /** Reuse the already running module-prewarm process; never start a second ART process at boot. */
-    static JSONObject grantDuringPrewarm(String apk, int ownerUid, NativeNcmModule.Guard guard) throws Exception {
+    static JSONObject grantDuringPrewarm(String apk, int ownerUid, PioneerRootGuard guard) throws Exception {
         java.util.concurrent.atomic.AtomicBoolean pending = new java.util.concurrent.atomic.AtomicBoolean(true);
         Thread watchdog = new Thread(() -> {
             try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
@@ -223,6 +262,32 @@ public final class PioneerUsbPermissionHelper {
             throw e;
         }
     }
+    /** Read-only history catches short-lived system USB dialogs between TCP samples. */
+    private static void inspectUsbActivityHistory(JSONObject result, Guard guard) throws Exception {
+        long since = System.currentTimeMillis() - 120_000L;
+        result.put("usbActivityHistorySinceMs", since);
+        try {
+            guard.check();
+            String time = new java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", java.util.Locale.US)
+                .format(new java.util.Date(since));
+            PioneerInterfaceFirewall.Result logs = PioneerRootCommand.run(new String[]{
+                "/system/bin/logcat", "-d", "-b", "main", "-b", "system", "-b", "events",
+                "-T", time, "-v", "epoch", "ActivityManager:I", "am_create_activity:I",
+                "am_resume_activity:I", "am_focused_activity:I", "*:S"}, 1500);
+            org.json.JSONArray dialogs = new org.json.JSONArray();
+            for (String line : logs.output.split("\n")) {
+                if (line.matches(".*Usb(?:Confirm|Permission|Resolver|Accessory).*Activity.*")) {
+                    if (dialogs.length() >= 100) throw new IOException("USB_ACTIVITY_HISTORY_OVERFLOW");
+                    dialogs.put(line.substring(0, Math.min(line.length(), 1000)));
+                }
+            }
+            result.put("usbActivityHistory", dialogs).put("usbActivityHistoryExit", logs.exit)
+                .put("usbActivityHistoryReadAtMs", System.currentTimeMillis());
+        } catch (Exception error) {
+            result.put("usbActivityHistoryError", error.getClass().getSimpleName() + ": " + error.getMessage());
+        }
+    }
+
     private static String defaultFor(UsbDevice device) throws Exception {
         File defaults = new File("/data/system/users/0/usb_device_manager.xml");
         if (!defaults.exists()) return "NONE";

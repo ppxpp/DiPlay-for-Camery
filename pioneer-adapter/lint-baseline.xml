@@ -1,0 +1,697 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.3.0" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.0)" variant="all" version="9.3.0">
+
+    <issue
+        id="MissingPermission"
+        message="Setting Exact alarms with `setExact` requires the `SCHEDULE_EXACT_ALARM` permission or power exemption from user; it is intended for applications where the user knowingly schedules actions to happen at a precise time such as alarms, clocks, calendars, etc. Check out the javadoc on this permission to make sure your use case is valid."
+        errorLine1="                    alarms.setExact(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,"
+        errorLine2="                    ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugService.kt"
+            line="176"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by ConnectivityManager.getAllNetworks: android.permission.ACCESS_NETWORK_STATE"
+        errorLine1="        val vpnNetworks = manager.allNetworks.orEmpty().filter {"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionGrant.kt"
+            line="42"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by ConnectivityManager.getNetworkCapabilities: android.permission.ACCESS_NETWORK_STATE"
+        errorLine1="            manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionGrant.kt"
+            line="43"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by ConnectivityManager.getAllNetworks: android.permission.ACCESS_NETWORK_STATE"
+        errorLine1="            val before = manager.allNetworks.orEmpty().filter {"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionGrant.kt"
+            line="63"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by ConnectivityManager.getNetworkCapabilities: android.permission.ACCESS_NETWORK_STATE"
+        errorLine1="                manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionGrant.kt"
+            line="64"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by ConnectivityManager.getAllNetworks: android.permission.ACCESS_NETWORK_STATE"
+        errorLine1="            val after = manager.allNetworks.orEmpty().filter {"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionGrant.kt"
+            line="70"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="MissingPermission"
+        message="Missing permissions required by ConnectivityManager.getNetworkCapabilities: android.permission.ACCESS_NETWORK_STATE"
+        errorLine1="                manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionGrant.kt"
+            line="71"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ApplySharedPref"
+        message="Consider using `apply()` instead; `commit` writes its data to persistent storage immediately, whereas `apply` will handle it in the background"
+        errorLine1="        }.commit()"
+        errorLine2="          ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerNativeNcmStartupPolicy.kt"
+            line="14"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.provider.Settings#ACTION_VPN_SETTINGS`"
+        errorLine1="        button(&quot;打开系统 VPN 设置&quot;) { startActivity(Intent(android.provider.Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="70"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 24 (current min is 23): `android.provider.Settings.Global#BOOT_COUNT`"
+        errorLine1="        android.provider.Settings.Global.getInt(context.contentResolver, android.provider.Settings.Global.BOOT_COUNT)"
+        errorLine2="                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPolicy.kt"
+            line="34"
+            column="74"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.function.LongSupplier#getAsLong`"
+        errorLine1="            long deadline = now.getAsLong() + timeout;"
+        errorLine2="                                ~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/NativeNcmCommand.java"
+            line="34"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.function.LongSupplier#getAsLong`"
+        errorLine1="            while (now.getAsLong() &lt; deadline) {"
+        errorLine2="                       ~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/NativeNcmCommand.java"
+            line="36"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.function.LongSupplier#getAsLong`"
+        errorLine1="        long deadline = now.getAsLong() + 500;"
+        errorLine2="                            ~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/NativeNcmCommand.java"
+            line="63"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.function.LongSupplier#getAsLong`"
+        errorLine1="        while (now.getAsLong() &lt; deadline) {"
+        errorLine2="                   ~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/NativeNcmCommand.java"
+            line="64"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.concurrent.ConcurrentHashMap#newKeySet`"
+        errorLine1="    private val clients = ConcurrentHashMap.newKeySet&lt;Socket>()"
+        errorLine2="                                            ~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugConnections.kt"
+            line="16"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.concurrent.ConcurrentHashMap.KeySetView#add`"
+        errorLine1="        clients.add(socket)"
+        errorLine2="                ~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugConnections.kt"
+            line="28"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.concurrent.ConcurrentHashMap.KeySetView#remove`"
+        errorLine1="        if (clients.remove(socket)) slots.release()"
+        errorLine2="                    ~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugConnections.kt"
+            line="89"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Field requires API level 27 (current min is 23): `android.system.OsConstants#O_CLOEXEC`"
+        errorLine1="        FileDescriptor raw = Os.open(path, flags | OsConstants.O_CLOEXEC, mode);"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerRootFiles.java"
+            line="11"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Field requires API level 27 (current min is 23): `android.system.OsConstants#O_CLOEXEC`"
+        errorLine1="        FileDescriptor raw = Os.open(path, flags | OsConstants.O_CLOEXEC, mode);"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerRootFiles.java"
+            line="17"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.concurrent.ConcurrentHashMap#newKeySet`"
+        errorLine1="            final java.util.Set&lt;String> submitted = java.util.concurrent.ConcurrentHashMap.newKeySet();"
+        errorLine2="                                                                                           ~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerRootSessionHelper.java"
+            line="47"
+            column="92"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.Collection#stream`"
+        errorLine1="                if (iface == null || iface.getIndex() != index || !Collections.list(iface.getInetAddresses()).stream().anyMatch(a -> Arrays.equals(a.getAddress(),address.getAddress())))"
+        errorLine2="                                                                                                              ~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnFirewallHelper.java"
+            line="67"
+            column="111"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 24, or core library desugaring (current min is 23): `java.util.stream.Stream#anyMatch`"
+        errorLine1="                if (iface == null || iface.getIndex() != index || !Collections.list(iface.getInetAddresses()).stream().anyMatch(a -> Arrays.equals(a.getAddress(),address.getAddress())))"
+        errorLine2="                                                                                                                       ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnFirewallHelper.java"
+            line="67"
+            column="120"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Field requires API level 27 (current min is 23): `android.system.OsConstants#O_CLOEXEC`"
+        errorLine1="            java.io.FileDescriptor fd=Os.open(&quot;/dev/kmsg&quot;,OsConstants.O_RDONLY|OsConstants.O_NONBLOCK|OsConstants.O_CLOEXEC,0);"
+        errorLine2="                                                                                                      ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="178"
+            column="103"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        String version = (String) Class.forName(&quot;android.os.SystemProperties&quot;).getMethod(&quot;get&quot;, String.class).invoke(null, &quot;ro.product.version&quot;);"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/NativeNcmModule.java"
+            line="47"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        String version = String.valueOf(Class.forName(&quot;android.os.SystemProperties&quot;)"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerNativeNcmPrewarm.java"
+            line="19"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            firmware = String.valueOf(Class.forName(&quot;android.os.SystemProperties&quot;)"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerNativeNcmPrewarm.java"
+            line="66"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        val binder = Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;checkService&quot;, String::class.java)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerRootDispatcher.kt"
+            line="14"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        IBinder binder = (IBinder) Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;checkService&quot;, String.class).invoke(null, &quot;usb&quot;);"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPermissionHelper.java"
+            line="214"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        return Class.forName(&quot;android.hardware.usb.IUsbManager$Stub&quot;).getMethod(&quot;asInterface&quot;, IBinder.class).invoke(null, binder);"
+        errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPermissionHelper.java"
+            line="216"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        try { Class.forName(&quot;android.hardware.usb.IUsbManager&quot;).getMethod(name, types).invoke(service, values); }"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPermissionHelper.java"
+            line="219"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        IBinder binder = (IBinder) Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;checkService&quot;, String.class)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="242"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        Class&lt;?> api = Class.forName(&quot;android.net.IConnectivityManager&quot;);"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="245"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        Object service = Class.forName(&quot;android.net.IConnectivityManager$Stub&quot;).getMethod(&quot;asInterface&quot;, IBinder.class).invoke(null, binder);"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="246"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        IBinder binder = (IBinder) Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;checkService&quot;, String.class)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="254"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        Class&lt;?> api = Class.forName(&quot;android.net.IConnectivityManager&quot;);"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="257"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        Object service = Class.forName(&quot;android.net.IConnectivityManager$Stub&quot;).getMethod(&quot;asInterface&quot;, IBinder.class).invoke(null, binder);"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="258"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="        Class&lt;?> type = Class.forName(&quot;android.app.ActivityThread&quot;);"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="274"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="QueryPermissionsNeeded"
+        message="Consider adding a `&lt;queries>` declaration to your manifest when calling this method; see https://g.co/dev/packagevisibility for details"
+        errorLine1="                packageManager.queryIntentActivities(installer, 0).forEach { target ->"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="94"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private static Context cachedContext;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerVpnPermissionHelper.java"
+            line="270"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                getSharedPreferences(&quot;pioneer-debug&quot;, MODE_PRIVATE).edit().putBoolean(&quot;lwip_diagnostics&quot;, PioneerDiagnostics.enabled).apply()"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugService.kt"
+            line="264"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(context).edit().apply {"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerNativeNcmStartupPolicy.kt"
+            line="11"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            check(app.getSharedPreferences(&quot;pioneer-debug&quot;, 0).edit().putBoolean(PREF, action == &quot;HOLD&quot;).commit())"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPermissionProbe.kt"
+            line="59"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(context).edit().putString(&quot;usb_mode&quot;, mode).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPolicy.kt"
+            line="23"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        check(prefs(context).edit().putString(&quot;configuration_mode&quot;, mode).commit()) { &quot;Could not save configuration mode&quot; }"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPolicy.kt"
+            line="28"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(context).edit().putInt(&quot;last_session_boot&quot;, boot).putString(&quot;last_session_node&quot;, node).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerUsbPolicy.kt"
+            line="47"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        check(prefs(context).edit().putString(&quot;wired_backend&quot;, mode.name)"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerWiredBackend.kt"
+            line="18"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(HIDE_KEY, hide).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/ShortcutBarPolicy.kt"
+            line="34"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use the existing version catalog reference (`libs.junit`) instead"
+        errorLine1="    testImplementation(&quot;junit:junit:4.13.2&quot;)"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="23"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    testImplementation(&quot;org.robolectric:robolectric:4.17&quot;)"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="24"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="            status.text = &quot;${PioneerDebugService.addresses().joinToString(&quot;\n&quot;)}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n&quot; +"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="23"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="            status.text = &quot;${PioneerDebugService.addresses().joinToString(&quot;\n&quot;)}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n&quot; +"
+        errorLine2="                          ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="23"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="            status.text = &quot;${PioneerDebugService.addresses().joinToString(&quot;\n&quot;)}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n&quot; +"
+        errorLine2="                          ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="23"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="            status.text = &quot;${PioneerDebugService.addresses().joinToString(&quot;\n&quot;)}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n&quot; +"
+        errorLine2="                          ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="23"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="                &quot;TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n&quot; +"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="24"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                &quot;TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n&quot; +"
+        errorLine2="                 ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="24"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                &quot;TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n&quot; +"
+        errorLine2="                             ~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="24"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="                &quot;VPN 预授权：${PioneerVpnPermissionGrant.status(this@PioneerDebugActivity).optBoolean(&quot;preconsented&quot;)}\n&quot; +"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="25"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                &quot;VPN 预授权：${PioneerVpnPermissionGrant.status(this@PioneerDebugActivity).optBoolean(&quot;preconsented&quot;)}\n&quot; +"
+        errorLine2="                 ~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="25"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="                &quot;${PioneerDebugRuntime.lastCommand}\nUSB授权验证暂停=${PioneerUsbPermissionProbe.holdsRequests(this@PioneerDebugActivity)}\n${PioneerDebugRuntime.snapshot().toString(2)}&quot;"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="26"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                &quot;${PioneerDebugRuntime.lastCommand}\nUSB授权验证暂停=${PioneerUsbPermissionProbe.holdsRequests(this@PioneerDebugActivity)}\n${PioneerDebugRuntime.snapshot().toString(2)}&quot;"
+        errorLine2="                                                     ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="26"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="        column.addView(TextView(this).apply { text = &quot;DiPlay 车机调试（有线验证）&quot;; textSize = 22f })"
+        errorLine2="                                                      ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="37"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="        column.addView(TextView(this).apply { text = &quot;授权验证只支持已验证先锋固件及唯一iPhone。测试暂停会跨重启保留；已有权限不撤销，系统自行显示的USB应用选择窗口不受此开关控制。测试完请关闭。&quot; })"
+        errorLine2="                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="69"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="        column.addView(TextView(this).apply { text = &quot;不要同时运行 usbcheck 与 DiPlay。有线验证前先关闭 usbcheck。更新前停止 CarPlay。使用实际显示端口；调试占用的端口可能与无线会话冲突，可先关闭调试。&quot; })"
+        errorLine2="                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/pioneer/PioneerDebugActivity.kt"
+            line="75"
+            column="55"/>
+    </issue>
+
+</issues>

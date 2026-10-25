@@ -45,7 +45,7 @@ public final class PioneerVpnFirewallHelper {
             status.put("token", token).put("pid", Process.myPid())
                 .put("helperStartupMs",SystemClock.elapsedRealtime()-request.getLong("requestedAtMs"));
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("VPN_FIREWALL_UNSUPPORTED_DEVICE");
-            PioneerNativeNcmPrewarm.requireSupportedFirmware();
+            PioneerFirmwareCatalog.requireSupportedFirmware();
             String name = request.getString("interface");
             if (!name.matches("tun[0-9]{1,5}")) throw new IOException("VPN_FIREWALL_INVALID_TUN");
             int index = request.getInt("index");
@@ -53,7 +53,7 @@ public final class PioneerVpnFirewallHelper {
             if (!literal.matches("[0-9a-fA-F:]{2,39}")) throw new IOException("VPN_FIREWALL_INVALID_ADDRESS");
             InetAddress address = InetAddress.getByName(literal);
             if (!(address instanceof Inet6Address) || !address.isLinkLocalAddress()) throw new IOException("VPN_FIREWALL_INVALID_ADDRESS");
-            NativeNcmFirewall.Guard guard = () -> {
+            PioneerInterfaceFirewall.Guard guard = () -> {
                 long now = SystemClock.elapsedRealtime();
                 if (now >= request.getLong("deadline")) throw new IOException("VPN_FIREWALL_START_EXPIRED");
                 if (new File(dir, "stop").exists()) throw new IOException("VPN_FIREWALL_STOPPED");
@@ -92,16 +92,16 @@ public final class PioneerVpnFirewallHelper {
                                 throw new IOException("VPN_FIREWALL_PREVIOUS_COMMAND_UNCONFIRMED");
                             String oldStable = old.optString("stableToken");
                             if (stable.equals(oldStable) && !name.equals(old.optString("interface"))) {
-                                List<String> errors = NativeNcmFirewall.recover(old.getString("interface"),stable,
-                                    argv -> NativeNcmCommand.run(argv,1200), (pending,unresolved) -> writeJournal(dir,request,"CONFIGURING",pending,unresolved));
+                                List<String> errors = PioneerInterfaceFirewall.recover(old.getString("interface"),stable,
+                                    argv -> PioneerRootCommand.run(argv,1200), (pending,unresolved) -> writeJournal(dir,request,"CONFIGURING",pending,unresolved));
                                 if (!errors.isEmpty()) throw new IOException("VPN_FIREWALL_OLD_INTERFACE " + errors);
                             }
                         } else if (new File(previous,"firewall-journal.json").exists()) {
                             recoverPrevious(previous,request,status);
                         }
                     }
-                    NativeNcmFirewall persistent = new NativeNcmFirewall(name,stable,
-                        argv -> NativeNcmCommand.run(argv,1200), guard,
+                    PioneerInterfaceFirewall persistent = new PioneerInterfaceFirewall(name,stable,
+                        argv -> PioneerRootCommand.run(argv,1200), guard,
                         (pending,unresolved) -> {
                             writeJournal(dir,request,"CONFIGURING",pending,unresolved);
                             if (!pending.equals("none")) publish(dir,status,"CONFIGURING_RULES",null);
@@ -172,7 +172,7 @@ public final class PioneerVpnFirewallHelper {
         try (FileOutputStream stop = PioneerRootFiles.output(new File(previous,"stop").getPath(),OsConstants.O_CREAT | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW,0600)) {
             stop.write(previous.getName().getBytes("US-ASCII")); stop.getFD().sync();
         }
-        List<String> errors = NativeNcmFirewall.recover(name,previous.getName(),argv -> NativeNcmCommand.run(argv,1200),
+        List<String> errors = PioneerInterfaceFirewall.recover(name,previous.getName(),argv -> PioneerRootCommand.run(argv,1200),
             (pending,unresolved) -> writeJournal(previous,old,"ACTIVE",pending,unresolved));
         if (!errors.isEmpty()) throw new IOException("VPN_FIREWALL_PREVIOUS_RECOVERY_FAILED token=" + previous.getName() + " " + errors);
         writeJournal(previous,old,"RELEASED","none",false);

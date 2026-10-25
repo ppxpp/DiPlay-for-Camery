@@ -101,12 +101,13 @@ internal class AudioFocusCoordinator(
     @Synchronized
     fun acquire(track: AudioTrack, channel: AudioChannel, attributes: AudioAttributes) {
         val focusStream = audioRouting.focusStream(attributes)
+        runCatching { report("Audio: focus acquire channel=${if (channel == AudioChannel.PHONE) "CALL" else channel.name} streamType=$focusStream enabled=$enabled closed=$closed manager=${manager != null}") }
         if (closed || (!enabled && focusStream == null) || manager == null ||
             (channel == AudioChannel.NAVIGATION && focusStream == null)) return
         // Pioneer speech uses an independent MIX focus request, but still needs TAI_AUDIO
         // selected when Siri/navigation is the first sound after connection.
         if (focusStream != null) ensureVehicleSource()
-        if (audioRouting.independentSpeechFocus(attributes)) {
+        if (channel != AudioChannel.PHONE && audioRouting.independentSpeechFocus(attributes)) {
             independentSpeechTracks.add(track)
             if (independentSpeechRequest == null) {
                 val speechListener = AudioManager.OnAudioFocusChangeListener { change ->
@@ -124,7 +125,7 @@ internal class AudioFocusCoordinator(
         recoveryOnly = false
         recoveryEpoch++
         refreshRequest()
-        applyMediaVolume(track, active.getValue(track))
+        active.forEach { (current, entry) -> applyMediaVolume(current, entry) }
         // The isolated playback guard pauses only already registered player peers. Never send
         // ACTION_MEDIA_BUTTON here: Android cold-starts the original music Application for it.
     }
@@ -181,8 +182,12 @@ internal class AudioFocusCoordinator(
         if (independentSpeechTracks.remove(track) && independentSpeechTracks.isEmpty()) {
             manager?.let { independentSpeechRequest?.abandon(it) }
             independentSpeechRequest = null
+            runCatching { report("Audio: independent speech focus released mediaTracks=${active.values.count { it.channel == AudioChannel.MEDIA }} primary=$requestedChannel") }
         }
-        if (active.remove(track) != null) refreshRequest()
+        if (active.remove(track) != null) {
+            refreshRequest()
+            active.forEach { (remaining, entry) -> applyMediaVolume(remaining, entry) }
+        }
     }
 
     fun onExternalFocusChange(change: Int) {
@@ -202,7 +207,11 @@ internal class AudioFocusCoordinator(
     }
 
     private fun refreshRequest() {
-        val primary = active.values.maxByOrNull { it.channel.focusPriority() }
+        val primary = active.values.filterNot {
+            it.isVehicleCall() && com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().callFocus == "NONE"
+        }.maxByOrNull {
+            if (it.isVehicleCall()) 4 else it.channel.focusPriority()
+        }
         if (primary == null) {
             focusGeneration += 1
             val abandoned = request
@@ -217,7 +226,9 @@ internal class AudioFocusCoordinator(
         manager?.let { request?.abandon(it) }
         val gain = when (primary.channel) {
             AudioChannel.MEDIA -> AudioManager.AUDIOFOCUS_GAIN
-            AudioChannel.PHONE -> AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            AudioChannel.PHONE -> if (primary.isVehicleCall() &&
+                com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().callFocus == "MIX")
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK else AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
             AudioChannel.ASSISTANT -> AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
             AudioChannel.NAVIGATION -> return
         }
@@ -228,7 +239,7 @@ internal class AudioFocusCoordinator(
         requestedChannel = primary.channel
         val result = manager?.let(next::request)
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
-        val line = "Audio: focus requested channel=${primary.channel} gain=$gain granted=$result activeTracks=${active.size} streamType=${focusStream ?: "usage"}"
+        val line = "Audio: focus requested channel=${if (primary.channel == AudioChannel.PHONE) "CALL" else primary.channel.name} gain=$gain granted=$result activeTracks=${active.size} streamType=${focusStream ?: "usage"}"
         Log.i(TAG, line)
         runCatching { report(line) }
     }
@@ -241,10 +252,13 @@ internal class AudioFocusCoordinator(
     private fun applyMediaVolume(track: AudioTrack, entry: Entry) {
         // Telephony and assistant speech remain audible, and navigation never enters this map.
         // This changes only the renderer's relative gain, never Android's user stream volume.
-        if (entry.channel != AudioChannel.MEDIA || entry.appliedVolume == mediaVolume) return
-        val applied = runCatching { track.setStereoVolume(mediaVolume, mediaVolume) == AudioTrack.SUCCESS }.getOrDefault(false)
-        if (applied) entry.appliedVolume = mediaVolume
+        val volume = if (com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().muteLocalMedia && active.values.any { it.isVehicleCall() }) 0f else mediaVolume
+        if (entry.channel != AudioChannel.MEDIA || entry.appliedVolume == volume) return
+        val applied = runCatching { track.setStereoVolume(volume, volume) == AudioTrack.SUCCESS }.getOrDefault(false)
+        if (applied) entry.appliedVolume = volume
     }
+
+    private fun Entry.isVehicleCall() = channel == AudioChannel.PHONE && audioRouting.focusStream(attributes) != null
 
     private fun AudioChannel.focusPriority(): Int = when (this) {
         AudioChannel.MEDIA -> 3
@@ -327,6 +341,9 @@ class AndroidMediaSink(
     fun recoverVehicleMediaFocus(): Boolean = canRecoverVehicleMedia() && audioFocusCoordinator.recoverVehicleMedia()
 
     fun cancelVehicleMediaRecovery() = audioFocusCoordinator.cancelVehicleRecovery()
+
+    fun hasTelephonyAudio(): Boolean = audioRenderers.keys.any { it.audioType.equals("telephony", true) } ||
+        microphoneUplinks.keys.any { it.audioType.equals("telephony", true) }
 
     /** The media-key session may own Android's current focus request for this same sink. */
     fun onMediaAudioFocusChanged(change: Int) {
@@ -661,10 +678,22 @@ class AndroidMediaSink(
             MicrophoneProbe.stop()
             val speakerphoneCall = config.audioType == "telephony" &&
                 appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)
-            if (config.audioType == "telephony" && !speakerphoneCall) enterCommunicationMode(id)
+            if (config.audioType == "telephony" && !speakerphoneCall) {
+                val experiment = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current()
+                if (!VehicleAudioRouting.available || experiment.callMode != "KEEP")
+                    enterCommunicationMode(id, if (VehicleAudioRouting.available && experiment.callMode == "NORMAL") AudioManager.MODE_NORMAL else AudioManager.MODE_IN_COMMUNICATION)
+            }
+            val budget = if (VehicleAudioRouting.available) MicrophonePacketBudget.resolve(config, appContext) else null
+            val effectiveConfig = if (budget != null) config.withPcmPacketBudget(
+                com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().oversizePcmPacketMs,
+                budget.mtu, budget.ipv6) else config
+            val wireBytes = if (effectiveConfig.codec == AudioCodecKind.LPCM)
+                (effectiveConfig.frameBytes + 36 + 8 + if (config.host is java.net.Inet4Address) 20 else 40).toString() else "VARIABLE_ENCODED"
+            onAudioDiagnostic("Microphone: packet layout rate=${effectiveConfig.sampleRate} channels=${effectiveConfig.channels} codec=${effectiveConfig.codec} requestedFrameMs=${config.frameMillis} frameMs=${effectiveConfig.frameMillis} pcmBytes=${effectiveConfig.frameBytes} ipBytes=$wireBytes mtu=${budget?.mtu} interfaceMtu=${budget?.interfaceMtu} mtuSource=${budget?.source ?: "UNCHANGED_OTHER_VEHICLE"} interface=${budget?.interfaceName}")
             val uplink = microphoneUplinks.computeIfAbsent(id) {
-                MicrophoneUplink(config, onAudioDiagnostic,
+                MicrophoneUplink(effectiveConfig, onAudioDiagnostic,
                     applicationPackage = appContext?.packageName,
+                    inputAudioManager = audioManager,
                     speakerphoneCall = speakerphoneCall,
                     echoReference = if (config.audioType == TELEPHONY_AUDIO_TYPE) callEchoReferences[id] else null)
             }
@@ -695,13 +724,13 @@ class AndroidMediaSink(
         MicrophoneProbe.start(context.applicationContext, choice, onAudioDiagnostic)
     }
 
-    private fun enterCommunicationMode(id: AudioStreamId) {
+    private fun enterCommunicationMode(id: AudioStreamId, requestedMode: Int = AudioManager.MODE_IN_COMMUNICATION) {
         val manager = audioManager ?: return
         synchronized(audioModeLock) {
             if (communicationModeStream != null) return
             // Select the HAL communication path before AudioRecord is created.
             savedAudioMode = manager.mode
-            manager.mode = AudioManager.MODE_IN_COMMUNICATION
+            manager.mode = requestedMode
             communicationModeStream = id
             earpieceFallbackTried = false
             val speakerRequested = runCatching(callSpeakerphone).getOrDefault(false)
@@ -836,8 +865,11 @@ class AndroidMediaSink(
         existing?.close()
         // A replacement owns a fresh ring: the old worker can still finish a blocking write.
         // The car's phone audio state cancels the echo itself; a second canceller would work against it.
-        val echoReference = if (callEchoCancellation && format.audioType == TELEPHONY_AUDIO_TYPE && format.sampleRate > 0 &&
-            !PhoneAudioRoute.carPlayCallsUseCarAudio()) {
+        val experiment = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current()
+        val forceSoftware = VehicleAudioRouting.available && experiment.softwareAec == "ON"
+        val softwareAllowed = !VehicleAudioRouting.available || (experiment.softwareAec != "OFF" && experiment.platformEffects != "ON")
+        val echoReference = if (softwareAllowed && (callEchoCancellation || forceSoftware) && format.audioType == TELEPHONY_AUDIO_TYPE && format.sampleRate > 0 &&
+            (!PhoneAudioRoute.carPlayCallsUseCarAudio() || forceSoftware)) {
             EchoReference(format.sampleRate).also { callEchoReferences[id] = it }
         } else {
             callEchoReferences.remove(id)
@@ -857,6 +889,7 @@ class AndroidMediaSink(
             speakerphoneCall = format.audioType == "telephony" &&
                 appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext),
             echoReference = echoReference,
+            applicationPackage = appContext?.packageName,
             voiceFilter = callVoiceFilter && format.audioType == TELEPHONY_AUDIO_TYPE,
         ).also {
             it.setNavigationAttenuationDb(navigationAttenuationDb)
@@ -1255,9 +1288,9 @@ private class VideoDecoder(
         // MTK vendor failures may surface as CodecException or the broader IllegalStateException.
         // Retire the active experimental mode before recreating the decoder.
         if (error is IllegalStateException) {
-            if (com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder &&
+            if (com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled &&
                 com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder = false
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled = false
                 report("Freescale no-reorder comparison disabled after codec failure")
             }
             dropMtkTuning("codec failed during $stage")
@@ -1499,9 +1532,9 @@ private class VideoDecoder(
             if (streamType == MAIN_SCREEN_TYPE && statsLabel == null &&
                 mime == MediaFormat.MIMETYPE_VIDEO_AVC && createdName.startsWith("OMX.Freescale.") &&
                 com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() &&
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder) {
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled) {
                 // NXP ACodec vendor extension, not the unrelated Qualcomm low-latency keys.
-                // Explicit comparison only until validated on this firmware and this stream.
+                // Default for the verified VPN path; runtime override still supports comparisons.
                 format.setString("disreorder", "1")
                 report("Freescale disable AVC reorder requested via disreorder=1")
             }
@@ -1522,8 +1555,8 @@ private class VideoDecoder(
                 Log.w(TAG, "video decoder candidate release failed name=$codecName", it)
             }
             if (codecName.startsWith("OMX.Freescale.") &&
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder) {
-                com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.freescaleNoReorder = false
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled) {
+                com.shilapi.xcertplay.pioneer.PioneerPlaybackPolicy.freescaleNoReorderEnabled = false
                 report("Freescale no-reorder comparison refused; next attempt uses default")
             }
             reportFailure("stage=configure phase=$phase phaseMs=$phaseMs elapsedMs=$elapsedMs " +
@@ -1960,6 +1993,7 @@ private class AudioRenderer(
     /** Receives the played call audio so the call microphone can cancel its echo. */
     private val echoReference: EchoReference? = null,
     voiceFilter: Boolean = false,
+    private val applicationPackage: String? = null,
 ) : Closeable {
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
     private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
@@ -2043,10 +2077,17 @@ private class AudioRenderer(
     private var decoderOutputReports = 0
     private val thread = Thread(::run, "carplay-audio").apply { isDaemon = true }
 
-    fun start() {
-        if (started) return
+    private var experimentLease: Closeable? = null
+    @Synchronized fun start() {
+        if (started || !running) return
         started = true
-        thread.start()
+        experimentLease = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.hold()
+        try { thread.start() } catch (error: Throwable) {
+            experimentLease?.close()
+            experimentLease = null
+            running = false
+            throw error
+        }
     }
 
     fun submit(rtp: ByteArray, sample: Int) {
@@ -2089,7 +2130,7 @@ private class AudioRenderer(
         }
     }
 
-    override fun close() {
+    @Synchronized override fun close() {
         AmbientMusicController.closeRenderer(ambientRendererToken)
         running = false
         NavigationPlayback.close(navigationPlaybackToken)
@@ -2099,6 +2140,7 @@ private class AudioRenderer(
     private fun run() {
         runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO) }
         try {
+            if (!running) return
             runCatching { report("Audio: starting api=${Build.VERSION.SDK_INT} " +
                 "audioType=${format.audioType} codec=${format.codec} rate=${format.sampleRate} channels=${format.channels} " +
                 "mapping=${if (advancedAudioChannelMapping) "automotive" else "mobile"} " +
@@ -2108,6 +2150,7 @@ private class AudioRenderer(
                 AudioCodecKind.OPUS -> configureCodec(MediaFormat.MIMETYPE_AUDIO_OPUS)
                 AudioCodecKind.LPCM -> Unit
             }
+            runCatching { report("Audio experiment playback: ${com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().json()} audioType=${format.audioType} negotiatedRate=${format.sampleRate}") }
             createTrack()
             diagnosticStage = "focus"
             requestAudioFocus()
@@ -2147,7 +2190,7 @@ private class AudioRenderer(
             throw error
         } finally {
             runCatching { logStatsIfDue(force = true) }
-            release()
+            try { release() } finally { experimentLease?.close() }
         }
     }
 
@@ -2255,6 +2298,13 @@ private class AudioRenderer(
             )
         }
         track = built
+        val experiment = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current()
+        if (mappedChannel == AudioChannel.PHONE && VehicleAudioRouting.available && experiment.playbackIdentity != "DEFAULT") {
+            val token = if (experiment.playbackIdentity == "WECHAT") "com.tencent.mm" else checkNotNull(applicationPackage)
+            val result = built.javaClass.getMethod("setTokenName", String::class.java).invoke(built, token)
+            check(result != false && (result !is Number || result.toInt() >= 0)) { "AudioTrack rejected call token identity" }
+            report("Audio experiment playback identity=$token result=$result testId=${experiment.testId}")
+        }
         if (mappedChannel == AudioChannel.PHONE) {
             val listener = AudioRouting.OnRoutingChangedListener { routing -> checkCallRoute(routing.routedDevice) }
             if (runCatching { built.addOnRoutingChangedListener(listener, Handler(Looper.getMainLooper())) }.isSuccess) {
@@ -2380,6 +2430,7 @@ private class AudioRenderer(
      * Navigation guidance intentionally takes no focus: it overlays media without ducking it.
      */
     private fun requestAudioFocus() {
+        runCatching { report("Audio: renderer focus audioType=${format.audioType} channel=${if (mappedChannel == AudioChannel.PHONE) "CALL" else mappedChannel?.name} track=${track != null} attributes=${trackAttributes != null}") }
         val channel = mappedChannel ?: return
         val attributes = trackAttributes ?: return
         if (channel == AudioChannel.NAVIGATION && VehicleAudioRouting.selected.focusStream(attributes) == null) {

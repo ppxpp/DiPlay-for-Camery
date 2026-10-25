@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_native_ncm">NCM الأصلي (تجريبي)</string>
-    <string name="settings_native_ncm_description">عند التفعيل تُستخدم شبكة USB للنظام، وعند الإيقاف تُستخدم طريقة الاتصال الحالية. يسري عند الاتصال التالي. عند الفشل بدّل يدويًا؛ لا يوجد تبديل تلقائي بين الطريقتين.</string>
     <string name="settings_wired_backend">طريقة الاتصال السلكي</string>
     <string name="settings_wired_backend_lwip">lwIP الأصلي</string>
     <string name="settings_wired_backend_optimized">lwIP المحسّن (تجريبي)</string>
-    <string name="settings_wired_backend_description">اختر إحدى الطرق الأربع. تحاول VPN التفويض التلقائي أولاً. يسري عند الاتصال التالي. عند الفشل، بدّل يدوياً؛ لا يوجد تبديل تلقائي.</string>
+    <string name="settings_wired_backend_description">اختر طريقة الاتصال السلكي. تحاول VPN التفويض التلقائي أولاً. يسري عند الاتصال التالي. عند الفشل، بدّل يدوياً؛ لا يوجد تبديل تلقائي.</string>
     <string name="settings_wired_backend_vpn">VPN (تجريبي)</string>
     <string name="vpn_root_authorizing">جارٍ تفويض VPN…</string>
     <string name="vpn_root_failed">فشل تفويض VPN التلقائي. أعد المحاولة أو امنح الإذن عبر النظام. ستبقى طريقة الاتصال VPN.</string>

@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_native_ncm">Native NCM (experimental)</string>
-    <string name="settings_native_ncm_description">On: use the system USB network. Off: use the existing connection method. Applies at the next connection. If connection fails, switch manually; neither method falls back automatically.</string>
     <string name="settings_wired_backend">Wired connection method</string>
     <string name="settings_wired_backend_lwip">Original lwIP</string>
     <string name="settings_wired_backend_optimized">Optimized lwIP (experimental)</string>
-    <string name="settings_wired_backend_description">Choose one of four methods. VPN tries automatic authorization first. Applies at the next connection. If it fails, switch manually; no method falls back automatically.</string>
+    <string name="settings_wired_backend_description">Choose a wired connection method. VPN tries automatic authorization first. Applies at the next connection. If it fails, switch manually; no method falls back automatically.</string>
     <string name="settings_wired_backend_vpn">VPN (experimental)</string>
     <string name="vpn_root_authorizing">Authorizing VPN…</string>
     <string name="vpn_root_failed">Automatic VPN authorization failed. Retry, or authorize through the system. The connection method will stay VPN.</string>

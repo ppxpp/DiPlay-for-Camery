@@ -558,6 +558,12 @@ class CarPlayController(
         com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.beginAttempt()
         com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("config", "COMPLETE")
         synchronized(this) { if (closed) return }
+        if (config.transport == CarPlayTransport.WIRED &&
+            (config.nativeNcmEnabled || config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM) &&
+            !com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeNcmIncluded) {
+            fail(java.io.IOException("Native NCM is not included in this build; select another wired connection method in Settings"))
+            return
+        }
         if (!hasRequiredUsbService()) return
         if (config.transport == CarPlayTransport.WIRED &&
             config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
@@ -790,7 +796,8 @@ class CarPlayController(
 
     fun sendMediaButton(index: Int): Boolean {
         if (closed) return false
-        mediaIntentRevision.incrementAndGet()
+        val revision = mediaIntentRevision.incrementAndGet()
+        debugLog("Audio playback: media command=$index revision=$revision phonePlaying=${nowPlayingSnapshot().playing}")
         val session = activeSession ?: return false
         return try {
             if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled)) pioneerTouchQueue.barrier()
@@ -974,7 +981,10 @@ class CarPlayController(
             playbackStatus.acceptUpdate(frame)?.let { it to (it.playing != previousPlaying) }
         }?.let { (update, playingChanged) ->
             nowPlayingListener?.invoke(update)
-            if (playingChanged) playbackListener?.invoke(update.playing)
+            if (playingChanged) {
+                debugLog("Audio playback: phonePlaying=${update.playing} mediaCommandRevision=${mediaIntentRevision.get()}")
+                playbackListener?.invoke(update.playing)
+            }
         }
     }
 

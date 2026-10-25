@@ -62,7 +62,6 @@ class ConnectionProgress(
         timing.detail = detail
         if (state != ConnectionTaskState.PENDING && timing.start == null) timing.start = startedAt
         timing.end = if (state in setOf(ConnectionTaskState.RUNNING, ConnectionTaskState.RETRYING)) null else at
-        if (state != ConnectionTaskState.PENDING) visited += task.step
     }
 
     @Synchronized fun step(next: ConnectionStep, waitingForUser: Boolean = false) {
@@ -129,23 +128,22 @@ class ConnectionProgress(
     @Synchronized fun snapshot(): ConnectionProgressSnapshot {
         val now = clock()
         val end = ended ?: now
+        val steps = if (wireless) listOf(ConnectionStep.PREPARATION, ConnectionStep.NETWORK,
+            ConnectionStep.DEVICE, ConnectionStep.CONTROL, ConnectionStep.SESSION, ConnectionStep.VIDEO)
+        else DEFAULT_STEPS
         val measured = ConnectionStep.entries.associateWith { step ->
             (durations[step] ?: 0) + if (step == current && ended == null) (now - entered).coerceAtLeast(0) else 0
         }
-        val expected = baseline?.totalMillis
+        val expected = baseline?.let { sample -> steps.sumOf { sample.durations[it] ?: 0 } }
         val remaining = if (outcome == ConnectionOutcome.CONNECTING) baseline?.let { sample ->
             // Completed steps do not contribute; unvisited and the current step still do.
-            ConnectionStep.entries.sumOf { step ->
+            steps.sumOf { step ->
                 if (step in visited && step != current) 0L
                 else ((sample.durations[step] ?: 0) - measured.getValue(step)).coerceAtLeast(0)
             }
         } else null
         return ConnectionProgressSnapshot(
-            (if (wireless) listOf(ConnectionStep.PREPARATION, ConnectionStep.PERMISSIONS, ConnectionStep.NETWORK,
-                ConnectionStep.DEVICE, ConnectionStep.CONTROL, ConnectionStep.CHANNEL, ConnectionStep.SESSION, ConnectionStep.VIDEO)
-            else if (channel == ConnectionChannel.NATIVE_NCM) listOf(ConnectionStep.PREPARATION, ConnectionStep.PERMISSIONS,
-                ConnectionStep.DEVICE, ConnectionStep.NETWORK, ConnectionStep.CONTROL, ConnectionStep.CHANNEL, ConnectionStep.SESSION, ConnectionStep.VIDEO)
-            else ConnectionStep.entries).filter { phase -> taskTimings.keys.any { it.step == phase } },
+            steps,
             current, measured, visited.toSet(), (end - started).coerceAtLeast(0), outcome, waiting,
             attempt, ((if (outcome == ConnectionOutcome.RETRYING && !hasRendered) now else end) - overallStartedMillis).coerceAtLeast(0),
             historySamples, expected, remaining,
@@ -160,6 +158,9 @@ class ConnectionProgress(
     }
 
     companion object {
+        private val DEFAULT_STEPS = listOf(ConnectionStep.PREPARATION, ConnectionStep.DEVICE,
+            ConnectionStep.CONTROL, ConnectionStep.NETWORK, ConnectionStep.SESSION, ConnectionStep.VIDEO)
+
         fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
     }
 }

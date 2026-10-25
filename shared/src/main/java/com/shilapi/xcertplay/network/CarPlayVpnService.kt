@@ -54,7 +54,7 @@ class CarPlayVpnService : VpnService() {
         val media: AirPlayMediaHandler,
         val additionalAddresses: List<InetAddress> = emptyList(),
         val listenerIdentity: AirPlayListenerIdentity? = null,
-        val nativeBinding: NativeNcmBinding? = null,
+        val nativeBinding: InterfaceSocketBinding? = null,
     )
 
     private val binder = LocalBinder()
@@ -404,7 +404,7 @@ class CarPlayVpnService : VpnService() {
         }
     }
 
-    private fun bindNativeListener(binding: NativeNcmBinding, preferredPort: Int): ServerSocket {
+    private fun bindNativeListener(binding: InterfaceSocketBinding, preferredPort: Int): ServerSocket {
         for (port in (listOf(preferredPort) + AirPlayPortSelector.FALLBACK_PORTS + 0).distinct()) {
             val server = ServerSocket()
             try { binding.bind(server, port); return server }

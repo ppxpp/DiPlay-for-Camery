@@ -46,7 +46,7 @@ object PioneerVpnPermissionGrant {
         return null
     }
 
-    /** prepare() is the final authority; the helper's command result is only diagnostic evidence. */
+    /** Legacy authorization adapter; production grants include root-side system preparation. */
     internal fun authorize(prepare: () -> Boolean, current: () -> Boolean, grant: () -> Unit): Boolean = synchronized(taskLock) {
         check(current()) { "VPN authorization cancelled" }
         if (prepare()) return@synchronized true
@@ -81,7 +81,7 @@ object PioneerVpnPermissionGrant {
         } else {
             val result = execute(context.applicationContext, "GRANT", true, stillCurrent)
             check(stillCurrent()) { "VPN authorization cancelled" }
-            result.getJSONObject("helper").optBoolean("appOpAllowed")
+            result.getJSONObject("helper").let { it.optBoolean("appOpAllowed") && it.optBoolean("targetPrepared") }
         }
     }
 

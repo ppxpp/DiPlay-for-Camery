@@ -42,6 +42,9 @@ class PioneerMicrophoneLeaseTest {
         leases.forEach { it.close() }
         PioneerLwipRuntime.active = false
         PioneerWiredSession.current?.close()
+        val app = RuntimeEnvironment.getApplication()
+        app.applicationInfo.flags = app.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+        com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.command(app, org.json.JSONObject().put("action", "RESET"))
     }
 
     private fun acquire(): PioneerMicrophoneLease? =
@@ -103,6 +106,20 @@ class PioneerMicrophoneLeaseTest {
         }
     }
 
+    @Test fun sourceTransitionMustFinishBeforeMicGrantAndLaterPlaybackMustNotResetIt() {
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
+        controller.source = 0
+        val lease = checkNotNull(acquire())
+        assertEquals(300, controller.source)
+        assertEquals("test.diplay", controller.token)
+        assertEquals(1, controller.sourceChanges)
+        com.shilapi.xcertplay.vehicle.adapters.pioneer.PioneerMediaSourceGate.withSelectedSource(controller, {}) { }
+        assertEquals("test.diplay", controller.token)
+        assertEquals(1, controller.sourceChanges)
+        lease.close()
+        assertEquals(1, controller.releases)
+    }
+
     @Test fun failedAppRecordingStartupReleasesItsMicrophoneLease() {
         PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
         val config = MicrophoneConfig(audioType = "default", sampleRate = 16_000,
@@ -143,6 +160,52 @@ class PioneerMicrophoneLeaseTest {
         lease.close()
         assertEquals(0, controller.releases)
         assertEquals("another.app", controller.token)
+    }
+
+    @Test fun restoringMicrophoneMustPreserveActivePhoneSource() {
+        val app = RuntimeEnvironment.getApplication()
+        app.applicationInfo.flags = app.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+        com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.command(app, org.json.JSONObject().put("action", "SET")
+            .put("configuration", org.json.JSONObject().put("testId", "preserve-phone-source").put("callSourcePolicy", "PRESERVE_PHONE")))
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
+        val lease = checkNotNull(acquire())
+        controller.source = 302
+        controller.token = "com.tencent.mm"
+        assertTrue(lease.restoreOwnership())
+        assertEquals(302, controller.source)
+        assertEquals(0, controller.sourceChanges)
+        assertEquals("test.diplay", controller.token)
+    }
+
+    @Test fun activeCallCanRestoreOwnershipAfterVendorPlaybackChangesIt() {
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
+        val lease = checkNotNull(acquire())
+        controller.token = "com.tencent.mm"
+        controller.source = 0
+        assertTrue(lease.restoreOwnership())
+        assertEquals(300, controller.source)
+        assertEquals(1, controller.sourceChanges)
+        assertEquals("test.diplay", controller.token)
+        lease.close()
+        assertFalse(lease.restoreOwnership())
+        assertEquals(1, controller.releases)
+    }
+
+    @Test fun interruptedSecondAcquisitionKeepsExistingUsersMicrophone() {
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
+        val first = checkNotNull(acquire())
+        try {
+            Thread.currentThread().interrupt()
+            acquire()
+            fail("Interrupted acquisition must fail")
+        } catch (_: InterruptedException) {
+            assertEquals(0, controller.releases)
+            assertEquals("test.diplay", controller.token)
+        } finally {
+            Thread.interrupted()
+        }
+        first.close()
+        assertEquals(1, controller.releases)
     }
 
     @Test fun refusedVehicleRequestFailsInsteadOfSilentlyUsingAnUnopenedMic() {

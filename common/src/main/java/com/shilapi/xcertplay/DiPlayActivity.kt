@@ -439,10 +439,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         // Consent was checked above. A recreated gate must continue into the app rather than
         // restoring the disclaimer page saved just before the user pressed Agree.
-        page = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
+        val requestedPage = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
             ?: intent.getStringExtra("page")
+        page = requestedPage
             ?: if (RemoteGatewaySettings.loadSelected(this) == null && setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
+        if (requestedPage == "update") {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            availableUpdate?.let {
+                updateRelease = it
+                updateStage = UpdateStage.AVAILABLE
+            }
+        }
         render()
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -478,7 +487,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE home redirect-to-host without-render action=${intent.action}")
             openProjection(); return
         }
-        page = intent.getStringExtra("page") ?: "home"; render()
+        val requestedPage = intent.getStringExtra("page")
+        page = requestedPage ?: "home"
+        if (requestedPage == "update") {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            refreshAvailableUpdate()
+            availableUpdate?.let {
+                updateRelease = it
+                updateStage = UpdateStage.AVAILABLE
+            }
+        }
+        render()
         automaticVehicleValidationStarted = false
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -1914,11 +1934,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.USB_CONNECTION,
             getString(R.string.settings_usb_connection), R.drawable.ic_dp_connection) { card ->
-            if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
-                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.entries
-                choice(card, getString(R.string.settings_wired_backend), listOf(
-                    getString(R.string.settings_wired_backend_lwip), getString(R.string.settings_native_ncm),
-                    getString(R.string.settings_wired_backend_optimized), getString(R.string.settings_wired_backend_vpn)),
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.selectorVisible &&
+                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
+                val labels = modes.map { mode -> when (mode) {
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM -> NativeNcmSettingsLabel.label(this)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
+                } }
+                choice(card, getString(R.string.settings_wired_backend), labels,
                     modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
                     markReconnectNeeded()
@@ -2866,6 +2891,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             userAgent(),
             channel,
             clientId = StableClientId.get(this),
+        )
+    }
+
+    private fun refreshAvailableUpdate() {
+        availableUpdate = UpdateAvailability.available(
+            this,
+            installedVersionCode(),
+            UpdateChannelStore.load(this),
         )
     }
 

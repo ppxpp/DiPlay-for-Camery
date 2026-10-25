@@ -195,6 +195,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">変更を破棄して設定を終了</string>
     <string name="disconnect">切断</string>
+    <string name="disconnect_this_session">この接続を切断</string>
     <string name="discovering_iphone">iPhoneを検索しています</string>
     <string name="display_and_performance">表示とパフォーマンス</string>
     <string name="done">完了</string>
@@ -887,6 +888,9 @@
     <string name="update_install">%1$sをインストール</string>
     <string name="update_failed">更新に失敗しました</string>
     <string name="update_available_home">更新が利用できます</string>
+    <string name="update_available_connection">新しいバージョン %1$s が利用できます</string>
+    <string name="update_available_connection_beta">新しいベータ版 %1$s が利用できます</string>
+    <string name="update_available_connection_action">タップして「アプリ情報」から更新</string>
     <string name="update_saved_to">%1$sに保存しました</string>
     <string name="backup_title">設定をバックアップ</string>
     <string name="backup_open">スマートフォンからバックアップ／復元</string>
