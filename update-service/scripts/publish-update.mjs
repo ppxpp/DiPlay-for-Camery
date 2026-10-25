@@ -41,8 +41,8 @@ Required:
   --artifact <file>       Local release file, usually an APK
 
 Optional:
-  --version-name <text>   Display version shown by clients, for example
-                          0.3.0_凯美瑞A导航适配版_0.1.0
+  --version-name <text>   Display version used for release keys, for example
+                          0.3.0_凯美瑞A导航适配版_0.1.0 (defaults to --version)
   --platform <name>       Default: android
   --channel <name>        Default: stable
   --arch <name>           Default: universal
@@ -57,9 +57,9 @@ Credentials:
   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 
 Layout:
-  assets: apps/{app}/{platform}/{channel}/{version}/{file}
+  assets: apps/{app}/{platform}/{channel}/{versionName}/{file}
   meta:   apps/{app}/{platform}/{channel}/latest.json
-          apps/{app}/{platform}/{channel}/releases/{version}.json
+          apps/{app}/{platform}/{channel}/releases/{versionName}.json
 `);
   process.exit(0);
 }
@@ -146,10 +146,13 @@ if (!/^[\p{L}\p{N}._-]+$/u.test(artifactName)) {
   fail("artifact name may contain only letters, digits, dot, underscore and dash");
 }
 
-const versionBase = `apps/${app}/${platform}/${channel}/${version}`;
+const releaseKey = versionName || version;
+if (releaseKey === "." || releaseKey === "..") fail("--version-name cannot be used as an object key");
+
+const versionBase = `apps/${app}/${platform}/${channel}/${releaseKey}`;
 const artifactKey = `${versionBase}/${artifactName}`;
 const checksumsKey = `${versionBase}/SHA256SUMS.txt`;
-const snapshotKey = `apps/${app}/${platform}/${channel}/releases/${version}.json`;
+const snapshotKey = `apps/${app}/${platform}/${channel}/releases/${releaseKey}.json`;
 const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
 
 const hash = await sha256(artifactPath);
@@ -178,6 +181,7 @@ const manifestBody = manifestJson(manifest);
 
 console.log(`App:        ${app}/${platform}/${channel}`);
 console.log(`Version:    ${version} (${versionCode})${versionName ? ` / ${versionName}` : ""}`);
+console.log(`Release key: ${releaseKey}`);
 console.log(`Artifact:   ${artifactPath}`);
 console.log(`SHA-256:    ${hash}`);
 console.log(`Size:       ${stats.size}`);
