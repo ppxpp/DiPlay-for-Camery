@@ -12,6 +12,7 @@ dist/                                                          generated Pages o
 schema/                                                        v1 manifest and response contracts
 scripts/build-site.mjs                                         build site and assemble dist
 scripts/publish-update.mjs                                     generic publisher
+scripts/restore-release-snapshot.mjs                           restore a history snapshot from an existing artifact
 test/                                                          Function tests
 wrangler.toml                                                  Pages project + R2 binding
 ```
@@ -42,14 +43,16 @@ and expands stored object keys into public asset URLs. Responses use `Cache-Cont
 Download files live in the public assets bucket:
 
 ```
-apps/{appId}/{platform}/{channel}/{version}/{file}
+apps/{appId}/{platform}/{channel}/{versionName}/{file}
 ```
 
 Release snapshots are kept for rollback and audit:
 
 ```
-apps/{appId}/{platform}/{channel}/releases/{version}.json
+apps/{appId}/{platform}/{channel}/releases/{versionName}.json
 ```
+
+Both use the manifest `versionName` (falling back to `version` when no display name is supplied), so builds that share an app version but differ in display name keep separate assets and history entries.
 
 ## Initial setup
 
@@ -108,7 +111,7 @@ node scripts/publish-update.mjs \
   --verify-url https://upd.example.com/api/v1/apps/diplay/android/stable/latest
 ```
 
-`version` is the short tag used in object keys and release snapshots. The optional `versionName` is the full display version returned by the API and shown by download pages; when omitted, clients fall back to `version`. Non-ASCII artifact names are supported and are percent-encoded in public URLs.
+`versionName` is the full display version returned by the API and shown by download pages; it is also the object-key segment for assets and release snapshots. When omitted, `version` is used for keys and display. Non-ASCII artifact names and version names are supported and are percent-encoded in public URLs.
 
 The publisher computes SHA-256 and size, uploads the artifact and `SHA256SUMS.txt`, writes a version snapshot, then updates `latest.json` last. It does not read the previous manifest.
 
@@ -118,6 +121,23 @@ release builds without that property default to `stable`. A user's explicit in-a
 still overrides the build default.
 
 Use `--dry-run` to print the plan without writing R2.
+
+### Restore a release snapshot
+
+If a snapshot was overwritten, restore it from an artifact that still exists in R2. The script copies the artifact into the versionName directory, writes `SHA256SUMS.txt`, and writes `releases/{versionName}.json`; it does not change `latest.json`:
+
+```sh
+set -a; . ./.env.deploy; set +a
+
+node scripts/restore-release-snapshot.mjs \
+  --channel beta \
+  --version 0.2.21 \
+  --version-name 0.2.21_凯美瑞A导航适配版_0.1.0 \
+  --version-code 1000 \
+  --dry-run
+```
+
+Remove `--dry-run` to write. `publishedAt` defaults to the source object's Last-Modified time; release notes can be edited later in `/admin/`.
 
 ## GitHub Actions
 
@@ -188,7 +208,7 @@ The workflow uses the `release` GitHub Environment, so secrets can be scoped the
 
 `versionCode` is the authoritative update value. Every release for an app/channel must have a higher `versionCode` than the currently published manifest; the workflow refuses to publish otherwise.
 
-`versionName` is the full display version, for example `0.3.1_凯美瑞A导航适配版_0.1.0`, and the release APK is published under that name. The short `version` (for example `0.3.1`) is used for tags and object keys. Changing only the descriptive suffix does not create a new update; `versionCode` must still increase.
+`versionName` is the full display version, for example `0.3.1_凯美瑞A导航适配版_0.1.0`, and is used for the APK name, asset directory and release snapshot. Builds that reuse a `versionName` overwrite the same release snapshot, so publish each build under a distinct display version. The short `version` (for example `0.3.1`) is used for git tags. Changing only the descriptive suffix creates a separate history entry, but clients still compare `versionCode`, which must increase.
 
 ## Adding another app
 

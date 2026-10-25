@@ -14,27 +14,45 @@ const channel = ref<'stable' | 'beta'>('stable');
 const releases = ref<Release[]>([]);
 const error = ref('');
 const loading = ref(true);
+let requestId = 0;
 
-async function load() {
+async function fetchReleases(target: 'stable' | 'beta'): Promise<Release[]> {
+  const response = await fetch(`/api/v1/apps/diplay/android/${target}/releases`, {
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`请求失败（${response.status}）`);
+  return (await response.json()).releases ?? [];
+}
+
+async function load(next: 'stable' | 'beta' = channel.value, fallbackWhenEmpty = false) {
+  const id = ++requestId;
+  channel.value = next;
   loading.value = true;
   error.value = '';
   try {
-    const response = await fetch(`/api/v1/apps/diplay/android/${channel.value}/releases`, {
-      cache: 'no-store',
-    });
-    if (!response.ok) throw new Error(`请求失败（${response.status}）`);
-    releases.value = (await response.json()).releases ?? [];
+    let target = next;
+    let list = await fetchReleases(target);
+    if (id !== requestId) return;
+    if (fallbackWhenEmpty && list.length === 0) {
+      target = 'beta';
+      channel.value = target;
+      list = await fetchReleases(target);
+    }
+    if (id !== requestId) return;
+    releases.value = list;
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '加载失败';
+    if (id === requestId) {
+      releases.value = [];
+      error.value = cause instanceof Error ? cause.message : '加载失败';
+    }
   } finally {
-    loading.value = false;
+    if (id === requestId) loading.value = false;
   }
 }
 
 function setChannel(next: 'stable' | 'beta') {
   if (channel.value === next) return;
-  channel.value = next;
-  load();
+  void load(next);
 }
 
 function formatPublishedAt(value: string | null) {
@@ -43,7 +61,7 @@ function formatPublishedAt(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-onMounted(load);
+onMounted(() => load('stable', true));
 </script>
 
 <template>
@@ -103,7 +121,11 @@ onMounted(load);
     </div>
 
     <div v-else class="release-list">
-      <article v-for="release in releases" :key="release.version" class="release-card">
+      <article
+        v-for="release in releases"
+        :key="`${release.versionName || release.version}-${release.versionCode}`"
+        class="release-card"
+      >
         <div class="release-card-head">
           <div class="release-identity">
             <span class="release-icon" aria-hidden="true">
