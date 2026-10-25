@@ -82,13 +82,28 @@ class CarPlayHostSettingsTest {
         controllers.close()
     }
 
-    @Test fun openingUnchangedSettingsReusesThePreparedMenu() {
-        val prepared = menu()
+    @Test fun openingUnchangedSettingsBuildsLazilyAndReusesThePreparedMenu() {
+        assertNull(field("settingsMenu"))
         invoke("openSettingsMenu")
-        assertSame(prepared, menu())
+        val prepared = menu()
         invoke("cancelSettingsEdits")
         invoke("openSettingsMenu")
         assertSame(prepared, menu())
+    }
+
+    @Test fun disconnectButtonIsPinnedInTheFooterWhileASessionRuns() {
+        CarPlayBackgroundSession.store(
+            mock(CarPlayController::class.java),
+            mock(com.shilapi.xcertplay.media.AndroidMediaSink::class.java),
+            1, 1, activity,
+            CarPlaySessionDisplay(1, 1, 0, false, false, 1, 1),
+        ) { it() }
+        invoke("openSettingsMenu")
+        val button = views(menu()).filterIsInstance<Button>()
+            .single { it.text == activity.getString(R.string.disconnect_this_session) }
+
+        assertEquals(View.VISIBLE, button.visibility)
+        assertTrue(button.isClickable)
     }
 
     @Test fun cancellingEditedSettingsInvalidatesCachedControls() {
@@ -103,7 +118,9 @@ class CarPlayHostSettingsTest {
     }
 
     @Test fun externallySavedSettingsRebuildCachedControls() {
+        invoke("openSettingsMenu")
         val before = menu()
+        invoke("cancelSettingsEdits")
         val nextFps = if (field("fps") == 60) 30 else 60
         AirPlayPersistence.saveFps(activity, nextFps)
         invoke("openSettingsMenu")

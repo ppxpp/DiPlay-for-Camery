@@ -17,9 +17,13 @@ The full CI command from `.github/workflows/android.yml` remains available when 
 
 ```sh
 ./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest \
+  :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug \
   :mobile:lintDebug :home:lintDebug :maphost:lintDebug \
   :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug
 ```
+
+Lint baselines (`common/`, `shared/`, `pioneer-adapter/`) freeze legacy findings. New findings, including
+`NewApi` calls above `minSdk`, fail the build; fix them instead of updating the baseline.
 
 Set `ANDROID_HOME` or `local.properties` if Gradle cannot find the SDK.
 

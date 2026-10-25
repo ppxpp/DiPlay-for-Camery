@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_native_ncm">原生 NCM（实验性）</string>
+    <string name="settings_native_ncm_description">开启使用系统 USB 网络，关闭使用现有连接方案。下次连接时生效。连接失败请手动切换，两种方案均不会自动回退。</string>
+</resources>

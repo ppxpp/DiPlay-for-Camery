@@ -427,6 +427,7 @@ internal object CarPlayMediaKeys {
     }
 
     private fun send(index: Int, source: String) {
+        appContext?.let { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(it, "Audio playback: media-session source=$source command=$index") }
         // While the car's video player is on screen the wheel drives it: a CarPlay play/pause would
         // make the iPhone end the video session.
         if (CarPlayVideo.onMediaKey(index)) {

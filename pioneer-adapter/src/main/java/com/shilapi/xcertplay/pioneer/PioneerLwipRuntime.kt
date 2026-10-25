@@ -20,8 +20,10 @@ object PioneerLwipRuntime {
     @Volatile var mfiNs = 0L
     private val timeline = java.util.ArrayDeque<String>()
     @Synchronized fun timeline(): List<String> = timeline.toList()
-    @Volatile var sessionId = 0L
-        private set
+    @Volatile private var lwipSessionId = 0L
+    /** Shared diagnostics use the lwIP ID while active and the wired session ID otherwise. */
+    val sessionId: Long
+        get() = if (active) lwipSessionId else PioneerWiredSession.sessionId
     @Volatile var attemptId = 0
     @Volatile var startRequestedNs = 0L
         private set
@@ -42,10 +44,10 @@ object PioneerLwipRuntime {
         @Volatile var success = false
     }
     fun enabled(context: Context) = PioneerUsbPolicy.enabled(context) &&
-        context.getSharedPreferences("pioneer-debug", Context.MODE_PRIVATE).getString("network_backend", "LWIP") != "VPN"
+        PioneerWiredBackend.mode(context) in setOf(PioneerWiredBackend.Mode.LWIP, PioneerWiredBackend.Mode.LWIP_OPTIMIZED)
     @Synchronized fun begin(): Long {
         check(!active) { "Previous lwIP owner is still active" }
-        sessionId = ids.incrementAndGet(); attemptId = 1
+        lwipSessionId = ids.incrementAndGet(); attemptId = 1
         firstTxReady = false; tcpAccepted = false; controlPort = 0
         startRequestedNs = 0; setupNs = 0; firstFrameNs = 0; controlAcceptedNs = 0
         timeline.clear(); startedNs = System.nanoTime(); mfiNs = 0

@@ -20,8 +20,8 @@ internal class PioneerDebugUpdater(private val context: Context) {
         var installerStarted = false
         try {
             val directory = File(context.cacheDir, "pioneer-update").apply { mkdirs() }
-            directory.listFiles()?.filter { it.name.endsWith(".apk") && PioneerDebugUpdateGuard.canDelete(it) && System.currentTimeMillis() - it.lastModified() > 86_400_000L }
-                ?.forEach { if (it.delete()) File(it.path + ".installing").delete() }
+            cleanup(context)
+            PioneerUpdateCache.requireCapacity(directory, size, android.os.StatFs(context.cacheDir.path).availableBytes)
             val upload = File.createTempFile("diplay-", ".apk", directory).also { file = it }
             val sha = MessageDigest.getInstance("SHA-256")
             upload.outputStream().use { output ->
@@ -62,4 +62,40 @@ internal class PioneerDebugUpdater(private val context: Context) {
             }
         }
     }
+    companion object {
+        /** Called under the update lease, off main. A matching installed APK proves consumption. */
+        internal fun cleanup(context: Context): PioneerUpdateCache.Cleanup {
+            val installedHashes = mutableMapOf<String, ByteArray>()
+            return PioneerUpdateCache.prune(File(context.cacheDir, "pioneer-update")) { candidate ->
+                val archive = context.packageManager.getPackageArchiveInfo(candidate.path, 0)
+                    ?: return@prune false
+                if (archive.packageName !in setOf(context.packageName, "com.tencent.wecarflow")) return@prune false
+                val current = context.packageManager.getPackageInfo(archive.packageName, 0)
+                // Identical content may have been installed BEFORE this upload: that is not proof
+                // that the pending installer has consumed this particular cache file.
+                if (current.lastUpdateTime < File(candidate.path + ".installing").lastModified()) return@prune false
+                val source = File(requireNotNull(current.applicationInfo).sourceDir)
+                val installed = installedHashes.getOrPut(source.path) { digest(source) }
+                installedCopy(candidate, current.lastUpdateTime, installed)
+            }
+        }
+
+        internal fun installedCopy(candidate: File, installedAt: Long, installedDigest: ByteArray): Boolean =
+            installedAt >= File(candidate.path + ".installing").lastModified() &&
+                MessageDigest.isEqual(installedDigest, digest(candidate))
+
+        private fun digest(file: File): ByteArray {
+            val sha = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(65536)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    sha.update(buffer, 0, count)
+                }
+            }
+            return sha.digest()
+        }
+    }
+
 }

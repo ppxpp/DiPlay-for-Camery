@@ -130,6 +130,59 @@ class CarPlayVpnConsentTest {
         assertFalse(field("awaitingVpnConsent"))
     }
 
+    @Test
+    @Config(sdk = [25])
+    fun pioneerVpnStartsUsbWorkWhileRootAuthorizationRunsInBackground() {
+        org.robolectric.shadows.ShadowBuild.setModel("SABRESD_MX6DQ")
+        org.robolectric.shadows.ShadowBuild.setDevice("tamago")
+        val mode = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
+        com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(activity, mode)
+        try {
+            ReflectionHelpers.setField(activity, "startupWiredBackend", mode)
+            invoke("requestVpnConsent")
+            // VPN authorization now runs in initialization phase 2 instead of blocking USB setup.
+            assertTrue(field("vpnReady"))
+            assertFalse(field("awaitingVpnConsent"))
+            assertEquals(0, launches)
+        } finally { activity.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }
+    }
+
+    @Test
+    @Config(sdk = [25])
+    fun pioneerUsbOffWithDefaultLwipUsesSystemVpnConsent() {
+        org.robolectric.shadows.ShadowBuild.setModel("SABRESD_MX6DQ")
+        org.robolectric.shadows.ShadowBuild.setDevice("tamago")
+        com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.setMode(activity, "OFF")
+        try {
+            invoke("requestVpnConsent")
+            assertTrue(field("awaitingVpnConsent"))
+            assertFalse(field("vpnRootPending"))
+            assertFalse(field("vpnReady"))
+            assertNull(ReflectionHelpers.getField<Any?>(activity, "startupWiredBackend"))
+            assertEquals(1, launches)
+        } finally { activity.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }
+    }
+
+    @Test fun pioneerManualConsentResultStillRequiresPrepareVerification() {
+        ReflectionHelpers.setField(activity, "startupWiredBackend", com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
+        invoke("requestSystemVpnConsent")
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "onVpnConsentResult",
+            ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, Activity.RESULT_OK))
+        assertFalse(field("vpnReady"))
+        assertFalse(field("awaitingVpnConsent"))
+    }
+
+    @Test fun revokedVpnStopsAutomaticRecoveryUntilManualRetry() {
+        ReflectionHelpers.setField(activity, "vpnReady", true)
+        val listener = activity.javaClass.getDeclaredMethod("createSessionListener", Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }.invoke(activity, 0) as com.shilapi.xcertplay.airplay.AirPlaySessionListener
+        listener.onTransportError("VPN_PERMISSION_REVOKED")
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(field("startupRetryStopped"))
+        assertFalse(field("vpnReady"))
+        assertFalse(field("reconnectScheduled"))
+    }
+
     private fun replaceLauncher(launch: (Intent) -> Unit) {
         ReflectionHelpers.setField(activity, "vpnConsent", object : ActivityResultLauncher<Intent>() {
             override fun launch(input: Intent, options: ActivityOptionsCompat?) = launch(input)

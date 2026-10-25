@@ -106,6 +106,35 @@ class AudioFocusAutoYieldTest {
         assertEquals(listOf(0f, 1f), volumes(second))
     }
 
+    @Config(sdk = [25])
+    @Test fun vehicleCallTakesTransientFocusAndKeepsMediaMutedUntilItEnds() {
+        val routing = object : AudioRouteController by DefaultAudioRouteController {
+            override fun focusStream(attributes: AudioAttributes): Int? = attributes.contentType.takeIf { it in 400..401 }
+            override fun independentSpeechFocus(attributes: AudioAttributes) = focusStream(attributes) == 400
+        }
+        val coordinator = AudioFocusCoordinator(context, false, audioRouting = routing).also(coordinators::add)
+        val mediaAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+        val callAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).build()
+        ReflectionHelpers.setField(mediaAttributes, "mContentType", 401)
+        ReflectionHelpers.setField(callAttributes, "mContentType", 400)
+        val media = track(); val phone = track(); val secondMedia = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, mediaAttributes)
+        coordinator.acquire(phone, AudioChannel.PHONE, callAttributes)
+        val callRequest = shadowOf(manager).lastAudioFocusRequest
+        assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT, callRequest.durationHint)
+        assertEquals(400, callRequest.streamType)
+        assertEquals(listOf(0f), volumes(media))
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        coordinator.acquire(secondMedia, AudioChannel.MEDIA, mediaAttributes)
+        assertSame(callRequest, shadowOf(manager).lastAudioFocusRequest)
+        assertEquals(listOf(0f), volumes(secondMedia))
+        assertTrue(volumes(phone).isEmpty())
+        coordinator.release(phone)
+        assertEquals(401, shadowOf(manager).lastAudioFocusRequest.streamType)
+        assertEquals(listOf(0f, 1f), volumes(media))
+        assertEquals(listOf(0f, 1f), volumes(secondMedia))
+    }
+
     @Test fun duckingAlsoAppliesOnlyToMediaAndNewTracksInheritIt() {
         val coordinator = coordinator()
         val first = track(); val second = track(); val phone = track()
@@ -192,6 +221,29 @@ class AudioFocusAutoYieldTest {
         assertSame(abandoned, shadowOf(manager).lastAbandonedAudioFocusRequest)
         assertEquals(listOf(0f), volumes(first))
         assertTrue(volumes(late).isEmpty())
+    }
+
+
+    @Config(sdk = [25])
+    @Test fun experimentalMixAndNoFocusKeepTheirRequestedMeaning() {
+        context.applicationInfo.flags = context.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+        val policy = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments
+        val routing = object : AudioRouteController by DefaultAudioRouteController {
+            override fun focusStream(attributes: AudioAttributes): Int? = 402
+        }
+        try {
+            for (mode in listOf("MIX", "NONE")) {
+                policy.command(context, org.json.JSONObject().put("action", "SET").put("configuration",
+                    org.json.JSONObject().put("testId", "focus-test").put("callFocus", mode)))
+                val coordinator = AudioFocusCoordinator(context, false, audioRouting = routing).also(coordinators::add)
+                val previous = shadowOf(manager).lastAudioFocusRequest
+                coordinator.acquire(track(), AudioChannel.PHONE, attributes)
+                if (mode == "MIX") assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
+                    shadowOf(manager).lastAudioFocusRequest.durationHint)
+                else assertSame(previous, shadowOf(manager).lastAudioFocusRequest)
+                coordinator.close()
+            }
+        } finally { policy.command(context, org.json.JSONObject().put("action", "RESET")) }
     }
 
     private fun coordinator(enabled: Boolean = true, autoYield: Boolean = true) =

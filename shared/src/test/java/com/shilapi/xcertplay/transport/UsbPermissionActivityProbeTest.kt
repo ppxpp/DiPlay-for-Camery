@@ -17,6 +17,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowUsbManager
 import org.robolectric.util.ReflectionHelpers
 
@@ -33,6 +34,7 @@ class UsbPermissionActivityProbeTest {
     @Before fun reset() {
         shadowOf(context.packageManager).removeActivity(component)
         PermissionRequestUsbManagerShadow.requests = 0
+        context.getSharedPreferences("pioneer-debug", 0).edit().clear().commit()
     }
 
     private fun installPermissionActivity() {
@@ -115,6 +117,27 @@ class UsbPermissionActivityProbeTest {
         assertTrue(host.requestPermission(device) is IphoneUsbHost.PermissionRequest.AlreadyGranted)
         assertEquals(0, PermissionRequestUsbManagerShadow.requests)
         assertTrue(diagnostics.isEmpty())
+    }
+
+    @Test @Config(sdk = [25]) fun probeHoldSkipsSilentGrantAdbAndDialog() {
+        ShadowBuild.setModel("SABRESD_MX6DQ")
+        ShadowBuild.setDevice("tamago")
+        context.getSharedPreferences("pioneer-debug", 0).edit()
+            .putBoolean("usb_permission_probe_hold", true).commit()
+        val usb = context.getSystemService(UsbManager::class.java)
+        val diagnostics = mutableListOf<String>()
+        val silentDiagnostics = mutableListOf<String>()
+        val host = IphoneUsbHost(context, usb, IphoneUsbMatcher.appleVendor(), onDiagnostic = diagnostics::add)
+        assertTrue(host.requestPermission(device("held"), silentGrantDiagnostic = silentDiagnostics::add)
+            is IphoneUsbHost.PermissionRequest.Requested)
+        assertEquals(0, PermissionRequestUsbManagerShadow.requests)
+        assertTrue(silentDiagnostics.isEmpty())
+        assertTrue(diagnostics.single().contains("holdRequests=true"))
+
+        val granted = device("already-granted")
+        shadowOf(usb).addOrUpdateUsbDevice(granted, true)
+        assertTrue(host.requestPermission(granted) is IphoneUsbHost.PermissionRequest.AlreadyGranted)
+        assertEquals(0, PermissionRequestUsbManagerShadow.requests)
     }
 
     private fun device(name: String): UsbDevice = ReflectionHelpers.newInstance(UsbDevice::class.java).apply {

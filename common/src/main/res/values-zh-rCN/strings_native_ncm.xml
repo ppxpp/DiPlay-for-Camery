@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_wired_backend">有线连接方案</string>
+    <string name="settings_wired_backend_lwip">原始 lwIP</string>
+    <string name="settings_wired_backend_optimized">优化 lwIP（实验性）</string>
+    <string name="settings_wired_backend_description">选择有线连接方案。VPN 优先尝试自动授权。下次连接时生效；失败请手动切换，任何方案均不会自动回退。</string>
+    <string name="settings_wired_backend_vpn">VPN（实验性）</string>
+    <string name="vpn_root_authorizing">正在授权 VPN…</string>
+    <string name="vpn_root_failed">VPN 自动授权失败。可重试或手动进行系统授权，连接方案仍保持 VPN。</string>
+    <string name="vpn_manual_authorize">手动系统授权</string>
+</resources>

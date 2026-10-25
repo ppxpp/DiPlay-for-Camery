@@ -20,11 +20,12 @@ internal object PioneerAudioRouteAdapter : AudioRouteController {
 
     override fun streamType(channel: AudioChannel): Int? = if (!available) null else when (channel) {
         AudioChannel.MEDIA -> 401 // FRONT bus, com.tencent.wecarflow.media token
+        AudioChannel.PHONE -> com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().callStream // Native WeChat VoIP route on GUANGFENG_819.
         else -> 400 // MIX bus, same navigation token/path as Amap
     }
 
     override fun focusStream(attributes: AudioAttributes): Int? =
-        attributes.contentType.takeIf { available && it in 400..401 }
+        attributes.contentType.takeIf { available && it in 400..402 }
 
     override val nonBlockingWrites: Boolean get() = available
 
@@ -32,7 +33,7 @@ internal object PioneerAudioRouteAdapter : AudioRouteController {
         focusStream(attributes) == 400
 
     override fun acceptsLegacyStream(stream: Int): Boolean =
-        DefaultAudioRouteController.acceptsLegacyStream(stream) || (available && stream in 400..401)
+        DefaultAudioRouteController.acceptsLegacyStream(stream) || (available && stream in 400..402)
 
     /** Audio focus alone cannot switch from FM/BT to TAI_AUDIO on this firmware. */
     override fun selectMediaSource(report: (String) -> Unit) {
@@ -40,13 +41,7 @@ internal object PioneerAudioRouteAdapter : AudioRouteController {
         runCatching {
             val controllerClass = Class.forName("jp.pioneer.ceam.MediaManager.MediaController")
             val controller = controllerClass.getMethod("getInstance").invoke(null)
-            val current = controllerClass.getMethod("getCurSource", Int::class.javaPrimitiveType)
-                .invoke(controller, 1) as Int
-            if (current != 300) {
-                val result = controllerClass.getMethod("change2Source", Int::class.javaPrimitiveType,
-                    Int::class.javaPrimitiveType).invoke(controller, 1, 300)
-                report("Audio: Pioneer media source previous=$current requested=300 result=$result")
-            }
+            PioneerMediaSourceGate.withSelectedSource(controller, report) { }
         }.onFailure {
             report("Audio: Pioneer media source selection failed: ${it.javaClass.simpleName}")
         }

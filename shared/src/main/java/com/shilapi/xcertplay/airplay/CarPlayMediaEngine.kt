@@ -129,7 +129,8 @@ class CarPlayMediaEngine(
         val key = outputKey(session, stream) ?: return null
         val streamKey = StreamKey(session, type)
         Log.i(TAG, "airplay screen key connectionID=${unsignedPlistDecimal(stream["streamConnectionID"])}")
-        val screen = ScreenStream(key, session::logDebug)
+        val screen = ScreenStream(key, session::logDebug, nativeBinding = session.nativeBinding,
+            expectedPeer = session.remoteAddress)
         sink.setVideoDiagnosticHandler(type) {
             if (it == "first frame rendered") session.videoFrameRendered(type)
             session.logDebug("Video: $it")
@@ -155,6 +156,7 @@ class CarPlayMediaEngine(
                 if (streams.remove(streamKey, screen)) {
                     sink.onScreenStreamActive(type, false)
                 }
+                if (cause != null) session.nativeTransportFailed("screen", cause)
                 session.close()
             }
         }
@@ -222,6 +224,8 @@ class CarPlayMediaEngine(
             session::logDebug,
             session.firewallAudioUdpPorts(),
             session.firewallBindAddress(),
+            exactBindAddress = session.nativeBinding != null,
+            nativeBinding = session.nativeBinding, expectedPeer = session.remoteAddress,
         )
         val (dataPort, controlPort) = audio.listen(
             object : AudioStream.Listener {
@@ -243,6 +247,8 @@ class CarPlayMediaEngine(
                     }
                     sink.onAudioRtp(streamId, format, rtp, sample)
                 }
+
+                override fun onClosed(error: Throwable) { session.nativeTransportFailed("audio", error) }
 
                 override fun onPacket(
                     wire: ByteArray,
@@ -301,7 +307,9 @@ class CarPlayMediaEngine(
         }
         val peer = session.remoteAddress ?: return null
         val buffered = try {
-            BufferedAudioStream(key, format, sink, session::logDebug, expectedPeer = peer)
+            BufferedAudioStream(key, format, sink, session::logDebug, expectedPeer = peer,
+                bindAddress = session.nativeBinding?.localAddress, nativeBinding = session.nativeBinding,
+                onNativeFailure = { session.nativeTransportFailed("buffered audio", it) })
         } catch (error: Exception) {
             Log.w(TAG, "buffered audio listener failed", error)
             return null
@@ -405,6 +413,7 @@ class CarPlayMediaEngine(
                     else -> InetAddress.getByName("0.0.0.0")
                 },
             preferredPorts = session.firewallTcpPorts(),
+            nativeBinding = session.nativeBinding, expectedPeer = session.remoteAddress,
         )
         val bridge = AirPlayIapTunnelStream(session, tunnel)
         val handler = iapTunnelHandler
@@ -427,6 +436,7 @@ class CarPlayMediaEngine(
                                 TAG,
                                 "iAP tunnel ended reason=${cause?.message ?: "peer EOF"}",
                             )
+                            if (cause != null) session.nativeTransportFailed("iAP tunnel", cause)
                             session.close()
                         }
                     },
@@ -461,7 +471,9 @@ class CarPlayMediaEngine(
         fun key(label: String) = AirPlayCrypto.hkdfSha512(
             shared, "DataStream-Salt$seed".toByteArray(Charsets.US_ASCII), label.toByteArray(Charsets.US_ASCII), 32,
         )
-        val channel = VideoSettingsChannel(key(DATASTREAM_OUTPUT_KEY), key(DATASTREAM_INPUT_KEY)) { session.logDebug(it) }
+        val channel = VideoSettingsChannel(key(DATASTREAM_OUTPUT_KEY), key(DATASTREAM_INPUT_KEY), session::logDebug,
+            nativeBinding = session.nativeBinding, expectedPeer = session.remoteAddress,
+            onNativeFailure = { session.nativeTransportFailed("video settings", it) })
         val port = channel.listen(session.localAddress ?: InetAddress.getByName("::"))
         videoSettingsChannels.put(session, channel)?.close()
         session.logTrace("video settings stream listening port=$port")
@@ -655,6 +667,7 @@ class CarPlayMediaEngine(
             codec = format.codec,
             bitrate = if (format.codec == AudioCodecKind.OPUS) opusBitrate else null,
             opusClockRate = MicrophoneConfig.opusClockRate(formatBits),
+            bindAddress = session.nativeBinding?.localAddress, nativeBinding = session.nativeBinding,
         )
     }
 

@@ -1,0 +1,2 @@
+-keep class com.shilapi.xcertplay.pioneer.PioneerNativeNcmHelper { public static void main(java.lang.String[]); }
+-keep class com.shilapi.xcertplay.pioneer.PioneerNativeNcmPrewarm { public static void main(java.lang.String[]); }

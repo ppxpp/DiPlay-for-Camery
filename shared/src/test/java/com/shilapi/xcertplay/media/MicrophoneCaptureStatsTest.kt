@@ -62,6 +62,21 @@ class MicrophoneCaptureStatsTest {
         assertEquals("0", MicrophoneCaptureStats.peakDbfs(32768))
     }
 
+    @Test fun rawSignalIsDistinguishedFromSilenceAfterProcessing() {
+        var now = 0L
+        var value: Map<String, Any?> = emptyMap()
+        val stats = MicrophoneCaptureStats(config, {}, snapshot = { value = it }, nowNs = { now })
+        stats.rawLevel(byteArrayOf(0, 0xc0.toByte(), 0, 0x40, 0, 0), 6)
+        stats.level(ByteArray(6))
+        now = 5_000_000_000
+        stats.flush()
+        assertEquals(3L, value["rawSamples"])
+        assertEquals(2L, value["rawNonzeroSamples"])
+        assertEquals("-6", value["rawPeakDbfs"])
+        assertEquals("silent", value["sentPeakDbfs"])
+        assertEquals(1.0 / 3, value["rawZeroRatio"] as Double, 0.0001)
+    }
+
     @Test fun reportingIsBoundedAndRouteQueriesRunOnlyWhenDue() {
         var now = 0L
         var reports = 0

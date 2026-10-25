@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+apply(from = rootProject.file("gradle/native-ncm.gradle"))
+
 android {
     namespace = "com.shilapi.xcertplay.host"
     compileSdk {
@@ -17,6 +19,12 @@ android {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    lint {
+        // Legacy findings are baselined; only new findings fail the build.
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
     }
 
     buildFeatures {

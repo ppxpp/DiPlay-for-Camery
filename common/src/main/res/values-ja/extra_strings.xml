@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="home_title">DiPlay カムリ Aナビ対応版</string>
     <string name="settings_hide_byd_call_popup">BYDの着信ポップアップを隠す（実験的機能）</string>
     <string name="settings_hide_byd_call_popup_description">Android 12LのBYDのみ対応。許可済みローカルADBが必要です。CarPlayが前面に表示されている間は車両純正の着信ポップアップを非表示にし、DiPlayがバックグラウンドになると元に戻します。Bluetooth通話の音声経路や電話アプリ自体は変更しません。</string>
     <string name="carplay_night_mode">CarPlayの昼／夜モード</string>

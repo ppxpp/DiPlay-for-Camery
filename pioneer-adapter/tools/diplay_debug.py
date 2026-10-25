@@ -60,6 +60,35 @@ def main():
     parser.add_argument("--timeout", type=float, default=45)
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
+    audio_experiments = commands.add_parser("audio-experiments", help="调试版音频策略；SET/RESET前先stop并等待音频线程退出")
+    audio_experiments.add_argument("--action", choices=["STATUS", "SET", "RESET", "FEEDBACK"], default="STATUS")
+    audio_experiments.add_argument("--test-id", help="FEEDBACK对应的当前测试编号")
+    audio_experiments.add_argument("--feedback", help="FEEDBACK的JSON对象：peerHears/phoneRoute/musicStopped/echo/pitchWrong/notes")
+    audio_experiments.add_argument("--config-file", help="从JSON文件读取整组配置")
+    audio_experiments.add_argument("--config", help="JSON对象；SET需要testId；未提供字段保留当前值")
+    mic_test = commands.add_parser("car-mic-test", help="打开车机录音引导或查询指标与用户反馈；录音始终需车机确认")
+    mic_test.add_argument("--action", choices=["STATUS", "OPEN"], default="STATUS")
+    mic_test.add_argument("--capture-rate", dest="captureRate", type=int, choices=[16000, 32000, 48000])
+    mic_test.add_argument("--capture-mode", dest="captureMode", choices=["NORMAL", "COMMUNICATION"])
+    mic_test.add_argument("--capture-source", dest="captureSource", choices=["MIC", "VOICE_RECOGNITION", "VOICE_COMMUNICATION"])
+    mic_test.add_argument("--gain-db", dest="gainDb", type=int, choices=range(0, 19))
+    mic_test.add_argument("--voice-effects", dest="voiceEffects", action="store_true", default=None)
+    mic_test.add_argument("--pal-mic-type", dest="palMicType", type=int, choices=[0, 200, 230])
+    mic_test.add_argument("--replay-file", dest="replayFile")
+    mic_test.add_argument("--playback-stream", dest="playbackStream", type=int, choices=[0, 401, 403], default=None)
+    playback_channels = mic_test.add_mutually_exclusive_group()
+    playback_channels.add_argument("--stereo-playback", dest="stereoPlayback", action="store_true", default=None)
+    playback_channels.add_argument("--mono-playback", dest="stereoPlayback", action="store_false", default=None)
+    mic_test.add_argument("--standard-playback", dest="standardPlayback", action="store_true", default=None)
+    ncm_startup = commands.add_parser("native-ncm-startup", help="空闲时设置NCM预热/复用对照；预热开关重启应用后生效")
+    ncm_startup.add_argument("--warm-worker", dest="warmWorker", choices=["ON", "OFF"])
+    ncm_startup.add_argument("--prewarm", choices=["ON", "OFF"])
+    vpn_permission = commands.add_parser("vpn-permission", help="先锋VPN授权状态、只读检查或root授权；写任务须先停止会话")
+    vpn_permission.add_argument("--action", choices=["STATUS", "INSPECT", "GRANT"], default="STATUS")
+    commands.add_parser("vpn-native", help="读取当前 VPN native 数据面和批量分布")
+    permission = commands.add_parser("usb-permission-probe", help="先锋USB授权验证；除STATUS外先stop并等空闲，无需ADB")
+    permission.add_argument("--action", choices=["STATUS", "INSPECT", "HOLD", "OFF", "GRANT", "CLEAR_DEFAULT", "SET_DEFAULT"], default="STATUS")
+    permission.add_argument("--node", help="多台Apple设备时指定status显示的node")
     audio_source = commands.add_parser("audio-source", help="读取先锋音源或执行FM/爱趣听切换实验")
     audio_source.add_argument("--mode", choices=["STATUS", "FM", "WECARFLOW", "OFF", "NEXT", "BT"], default="STATUS")
     commands.add_parser("update-storage", help="读取更新缓存与可用空间")
@@ -67,7 +96,7 @@ def main():
     commands.add_parser("companion-status", help="读取WeCarFlow安装版本、保护服务进程与签名")
     commands.add_parser("restart-app", help="仅已知车机：结束本应用进程并定时重开，验证进程回收恢复")
     ui = commands.add_parser("host-ui", help="仅已知车机：应用内设置/前后台验证，不修改偏好")
-    ui.add_argument("--action", choices=["AUDIO_TAKE", "AUDIO_RELEASE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
+    ui.add_argument("--action", choices=["SIRI_TEST", "SIRI", "AUDIO_TAKE", "AUDIO_RELEASE", "MEDIA_PAUSE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"], required=True)
     video = commands.add_parser("video-settings", help="读取或修改视频设置，下次连接生效")
     video.add_argument("--fps", type=int, choices=[30, 60])
     video.add_argument("--resolution-percent", type=int, help="30..160，下次连接生效")
@@ -95,8 +124,6 @@ def main():
     crypto.add_argument("--mode", choices=["ON", "OFF"], required=True)
     snapshot = commands.add_parser("video-snapshot", help="读取当前CarPlay视频Surface的PNG，非系统截图")
     snapshot.add_argument("--output", default="carplay-surface.png")
-    batch = commands.add_parser("usb-tx-batch", help="实时切换NCM已排队数据聚合上限，1为原模式")
-    batch.add_argument("--frames", type=int, choices=[1, 4, 8], required=True)
     commands.add_parser("usb-reset", help="会话完全停止后，通过已授权FD复位唯一iPhone；随后重新查询状态")
     commands.add_parser("start-wired", help="停止旧会话后启动有线 CarPlay")
     commands.add_parser("stop", help="停止 CarPlay，保留 TCP 服务")
@@ -107,8 +134,8 @@ def main():
     configuration.add_argument("--mode", choices=["REINITIALIZE", "REUSE"], required=True)
     toast = commands.add_parser("toast", help="在车机提示操作，实际显示为异步")
     toast.add_argument("--text", default="DiPlay 调试：请执行一次交互（滑动/点击）")
-    backend = commands.add_parser("network-backend", help="切换用户态 lwIP/原 VPN，下一次连接生效")
-    backend.add_argument("--mode", choices=["LWIP", "VPN"], required=True)
+    backend = commands.add_parser("network-backend", help="完全停止后手动选择有线路径，下一次连接生效")
+    backend.add_argument("--mode", choices=["LWIP", "NATIVE_NCM", "LWIP_OPTIMIZED", "VPN"], required=True)
     diagnostics = commands.add_parser("lwip-diagnostics", help="立即切换 lwIP 聚合计时，用于观测开销对照")
     diagnostics.add_argument("--mode", choices=["ON", "OFF"], required=True)
     phone = commands.add_parser("phone-diagnostics", help="默认关闭；临时采集iPhone日志会占用CPU和USB")
@@ -138,12 +165,28 @@ def main():
                 time.sleep(1)
         else:
             fields = {"mode": args.mode} if args.cmd in ("audio-source", "usb-mode", "usb-configuration", "network-backend", "lwip-diagnostics", "phone-diagnostics", "native-crypto", "video-priority", "touch-coalescing", "async-session-logs", "freescale-reorder", "audio-clock-trim") else {}
+            if args.cmd == "audio-experiments":
+                fields = {"action": args.action}
+                if args.action == "FEEDBACK":
+                    if not args.test_id or not args.feedback: parser.error("FEEDBACK requires --test-id and --feedback")
+                    fields.update({"testId": args.test_id, "feedback": json.loads(args.feedback)})
+                if args.action == "SET":
+                    if bool(args.config) == bool(args.config_file): parser.error("SET requires exactly one of --config or --config-file")
+                    fields["configuration"] = json.loads(Path(args.config_file).read_text() if args.config_file else args.config)
+                    if not isinstance(fields["configuration"], dict): parser.error("--config must be a JSON object")
+                elif args.config or args.config_file: parser.error("--config/--config-file is only valid with SET")
+            if args.cmd == "native-ncm-startup":
+                fields = {key: getattr(args, key) for key in ("warmWorker", "prewarm") if getattr(args, key) is not None}
             if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
             if args.cmd == "video-gesture": fields = {"kind": args.kind}
             if args.cmd == "host-ui": fields = {"action": args.action}
+            if args.cmd in ("usb-permission-probe", "vpn-permission", "car-mic-test"):
+                fields = {"action": args.action}
+                if getattr(args, "node", None) is not None: fields["node"] = args.node
+            if args.cmd == "car-mic-test":
+                fields.update({key: getattr(args, key) for key in ("captureRate", "captureMode", "captureSource", "gainDb", "voiceEffects", "palMicType", "replayFile", "playbackStream", "stereoPlayback", "standardPlayback") if getattr(args, key) is not None})
             if args.cmd == "video-tap": fields = {"x": args.x, "y": args.y}
             if args.cmd == "toast": fields = {"text": args.text}
-            if args.cmd == "usb-tx-batch": fields = {"frames": args.frames}
             if args.cmd == "video-settings":
                 if args.fps is not None: fields["fps"] = args.fps
                 if args.resolution_percent is not None: fields["resolutionPercent"] = args.resolution_percent

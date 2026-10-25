@@ -83,7 +83,7 @@ class NavigationAudioGainTest {
         val streamBefore = manager.getStreamVolume(AudioManager.STREAM_MUSIC)
         val sink = AndroidMediaSink()
         val type = Class.forName("com.shilapi.xcertplay.media.AudioRenderer")
-        val constructor = type.declaredConstructors.single { it.parameterCount == 13 }
+        val constructor = type.declaredConstructors.single { it.parameterCount == 14 }
             .apply { isAccessible = true }
         val tracks = mutableListOf<AudioTrack>()
         try {
@@ -91,7 +91,7 @@ class NavigationAudioGainTest {
                 val renderer = constructor.newInstance(
                     AudioFormat(AudioCodecKind.LPCM, 48_000, 1, 96, "media"),
                     false, false, 0, 0, AudioFocusCoordinator(null, false, false), 0, 300,
-                    { _: String -> }, 0L, false, null, false)
+                    { _: String -> }, 0L, false, null, false, null)
                 val track = track().also(tracks::add)
                 type.getDeclaredField("mappedChannel").apply { isAccessible = true }.set(renderer, channel)
                 type.getDeclaredField("track").apply { isAccessible = true }.set(renderer, track)

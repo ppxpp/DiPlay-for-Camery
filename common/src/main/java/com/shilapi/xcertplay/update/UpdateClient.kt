@@ -7,14 +7,19 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
+import java.net.URLEncoder
+
+internal class HttpStatusException(val statusCode: Int, message: String) : IOException(message)
 
 internal object UpdateClient {
-    internal const val RELEASES_URL =
-        "https://diplay.mgulu.com/api/v1/apps/diplay/android/stable/latest"
     private const val CONNECT_TIMEOUT_MILLIS = 10_000
     private const val READ_TIMEOUT_MILLIS = 30_000
     private const val MAXIMUM_TEXT_BYTES = 4 * 1024 * 1024
     private const val BUFFER_BYTES = 64 * 1024
+
+    internal fun releasesUrl(channel: UpdateChannel, clientId: String? = null): String =
+        "https://diplay.mgulu.com/api/v1/apps/diplay/android/${channel.apiName}/latest" +
+            clientId?.takeIf { it.isNotBlank() }?.let { "?id=${URLEncoder.encode(it, "UTF-8")}" }.orEmpty()
 
     internal fun fetchText(
         url: String,
@@ -34,7 +39,9 @@ internal object UpdateClient {
             val statusCode = connection.responseCode
             val stream = if (statusCode in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.use { readUtf8Limited(url, it) }.orEmpty()
-            if (statusCode !in 200..299) throw IOException("Request to $url failed: $statusCode")
+            if (statusCode !in 200..299) {
+                throw HttpStatusException(statusCode, "Request to $url failed: $statusCode")
+            }
             return body
         } finally {
             connection.disconnect()

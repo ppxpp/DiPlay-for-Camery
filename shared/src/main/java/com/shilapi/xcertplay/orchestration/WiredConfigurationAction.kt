@@ -9,7 +9,7 @@ package com.shilapi.xcertplay.orchestration
  * After one CarPlay mode request the same iPhone re-enumerated with configuration 6 and worked.
  * So a configuration without Apple Ethernet is used only after the mode request was tried.
  */
-internal enum class WiredConfigurationAction(val diagnostic: String) {
+enum class WiredConfigurationAction(val diagnostic: String) {
     USE("reuse-descriptors"),
     USE_WITHOUT_APPLE_ETHERNET("reuse-without-apple-ethernet"),
     REQUEST_TRANSITION("request-transition"),
@@ -17,6 +17,10 @@ internal enum class WiredConfigurationAction(val diagnostic: String) {
     ;
 
     companion object {
+        /** A successful reset invalidates session memory for the previous USB enumeration. */
+        fun sessionNeedsTransition(resetInCurrentAttempt: Boolean, rememberedSession: () -> Boolean): Boolean =
+            !resetInCurrentAttempt && rememberedSession()
+
         /**
          * [found] is a configuration with USBMUX and NCM, and [carPlayMode] says that it also has
          * Apple Ethernet. A rejected request falls back to [found] (see [fallbackAfterRejection]).

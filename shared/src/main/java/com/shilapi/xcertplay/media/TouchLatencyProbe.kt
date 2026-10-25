@@ -30,7 +30,9 @@ internal class VideoInteractionProbe(val session: Long) {
     private var evicted = 0L; private var unmatched = 0L; private var invalidated = 0L
     private var senderNs = 0L; private var arrivalNs = 0L
     private var renderedNs = 0L
-    private fun enabled() = !closed && PioneerDiagnostics.enabled && PioneerLwipRuntime.active && PioneerLwipRuntime.sessionId == session
+    private fun enabled() = !closed && PioneerDiagnostics.enabled &&
+        ((PioneerLwipRuntime.active && PioneerLwipRuntime.sessionId == session) ||
+            com.shilapi.xcertplay.pioneer.PioneerWiredSession.isCurrent(session))
     private fun metric(name: String, ns: Long) { if (ns >= 0) PioneerDiagnostics.record(session, name, ns) }
 
     @Synchronized fun sent(id: Long, gesture: Long, entered: Long, start: Long, end: Long) {

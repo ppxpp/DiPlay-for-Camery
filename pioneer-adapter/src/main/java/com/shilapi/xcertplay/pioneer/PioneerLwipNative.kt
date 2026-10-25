@@ -10,7 +10,11 @@ object PioneerLwipNative {
     external fun input(frame: ByteArray)
     external fun poll()
     external fun output(): ByteArray?
-    external fun messages(): String
+    external fun configureOptimized(packetSize: Int)
+    external fun inputNtb(buffer: java.nio.ByteBuffer, length: Int): Int
+    /** [NTB bytes, Ethernet frame count, Ethernet bytes, oldest queued timestamp]. */
+    external fun outputNtb(buffer: java.nio.ByteBuffer, maxFrames: Int, metadata: LongArray): Boolean
+    external fun messages(): String?
     external fun peerUdp(port: Int)
     external fun port(port: Int, udp: Boolean, add: Boolean): Boolean
     external fun close()

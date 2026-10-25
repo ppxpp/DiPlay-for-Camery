@@ -19,11 +19,11 @@ import org.xmlpull.v1.XmlPullParser
 @Config(sdk = [29])
 class UsbDeviceFilterTest {
     @Test
-    fun iphoneProductsMatchTheActivityAttachFilter() {
+    fun iphoneProductsMatchTheAliasAttachFilter() {
         for (productId in listOf(0x12a8, 0x12a9, 0xffff)) {
             assertTrue(
                 "Apple product 0x${productId.toString(16)} must match the attach filter",
-                matchesAttachFilter(IphoneUsbMatcher.APPLE_VENDOR_ID, productId),
+                matchesAttachFilter(IphoneUsbMatcher.APPLE_VENDOR_ID, productId, IPHONE_ATTACH_ALIAS),
             )
         }
     }
@@ -40,10 +40,14 @@ class UsbDeviceFilterTest {
         assertFalse(matchesAttachFilter(0x1234, 0x5512))
     }
 
-    private fun matchesAttachFilter(vendorId: Int, productId: Int): Boolean {
+    private fun matchesAttachFilter(
+        vendorId: Int,
+        productId: Int,
+        component: String = CarPlayHostActivity::class.java.name,
+    ): Boolean {
         val context = RuntimeEnvironment.getApplication()
         val activity = context.packageManager.getActivityInfo(
-            ComponentName(context, CarPlayHostActivity::class.java),
+            ComponentName(context, component),
             PackageManager.GET_META_DATA,
         )
         val device = Mockito.mock(UsbDevice::class.java)
@@ -64,5 +68,10 @@ class UsbDeviceFilterTest {
                 }
             }
         return false
+    }
+
+    private companion object {
+        // The Apple filter lives on the alias so root Pioneer builds can disable it.
+        const val IPHONE_ATTACH_ALIAS = "com.shilapi.xcertplay.IphoneUsbAttachActivity"
     }
 }

@@ -89,7 +89,7 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
 
     private fun render() {
         val state = model?.snapshot()
-        val steps = state?.steps ?: ConnectionStep.entries
+        val steps = state?.steps ?: DEFAULT_STEPS
         val columns = if (width >= dp(560)) 6 else 3
         val key = columns to steps
         if (layoutKey != key) {
@@ -162,6 +162,8 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
     }
 
     private fun title(step: ConnectionStep) = when (step) {
+        ConnectionStep.PERMISSIONS -> R.string.connect_progress_permissions
+        ConnectionStep.CHANNEL -> R.string.connect_progress_channel
         ConnectionStep.PREPARATION -> R.string.connect_progress_preparation
         ConnectionStep.DEVICE -> R.string.connect_progress_device
         ConnectionStep.CONTROL -> R.string.connect_progress_control
@@ -180,4 +182,11 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
         if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private companion object {
+        val DEFAULT_STEPS = listOf(
+            ConnectionStep.PREPARATION, ConnectionStep.DEVICE, ConnectionStep.CONTROL,
+            ConnectionStep.NETWORK, ConnectionStep.SESSION, ConnectionStep.VIDEO,
+        )
+    }
 }

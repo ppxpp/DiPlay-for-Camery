@@ -197,6 +197,7 @@
     <string name="diplay">DiPlay</string>
     <string name="discard_changes_and_exit_settings">Discard changes and exit settings</string>
     <string name="disconnect">Disconnect</string>
+    <string name="disconnect_this_session">Disconnect this connection</string>
     <string name="discovering_iphone">Discovering iPhone</string>
     <string name="display_and_performance">Display and performance</string>
     <string name="done">Done</string>
@@ -869,6 +870,16 @@
     <string name="settings_interface_size_auto">Automatic</string>
     <string name="settings_interface_size_hint">Size of text and controls on DiPlay\'s own screens. Automatic enlarges them on large screens with a low density. CarPlay is not affected.</string>
     <string name="settings_update_flavor_note">This update is for the DiPlay Camry A navigation adaptation, not an update for the original DiPlay.</string>
+    <string name="settings_update_channel">Update channel</string>
+    <string name="update_channel_stable">Stable</string>
+    <string name="update_channel_beta">Beta</string>
+    <string name="settings_update_beta_warning">Beta updates may be unstable. You can switch back to Stable at any time; an installed beta build is not downgraded.</string>
+    <string name="settings_update_channel_busy">Finish the current download before switching channels.</string>
+    <string name="update_channel_unavailable">No release is available for this channel.</string>
+    <string name="update_channel_switch_title">Switch update channel</string>
+    <string name="update_channel_switch_discard">Switching channels will discard the downloaded update. Continue?</string>
+    <string name="update_channel_switch_confirm">Switch</string>
+    <string name="update_available_home_beta">Beta update available</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking…</string>
     <string name="update_up_to_date">You\'re up to date</string>
@@ -878,6 +889,9 @@
     <string name="update_install">Install %1$s</string>
     <string name="update_failed">Update failed</string>
     <string name="update_available_home">Update available</string>
+    <string name="update_available_connection">New version %1$s is available</string>
+    <string name="update_available_connection_beta">New beta version %1$s is available</string>
+    <string name="update_available_connection_action">Tap to upgrade in About</string>
     <string name="update_saved_to">Saved to %1$s</string>
     <string name="backup_title">Back up settings</string>
     <string name="backup_open">Back up or restore on a phone</string>
@@ -1035,4 +1049,6 @@
     <string name="settings_hotspot_interface_description">Only for head units that run their hotspot on a network interface Android does not report as a Wi-Fi hotspot, for example eth0.3 on some Geely, Lynk &amp; Co and other Qualcomm units. Leave empty to find it automatically.</string>
     <string name="home_title">DiPlay凯美瑞A导航适配版</string>
     <string name="disclaimer_agree_swipe_hint">Agree and continue\nSwipe left or right</string>
+    <string name="settings_update_client_id">Client ID: %1$s</string>
+    <string name="settings_update_client_id_unavailable">Client ID unavailable</string>
 </resources>

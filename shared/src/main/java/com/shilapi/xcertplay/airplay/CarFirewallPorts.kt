@@ -70,8 +70,8 @@ internal object CarFirewallPorts {
      * ephemeral one. A pinned port is never shared: two CarPlay streams on one port would mix
      * their datagrams.
      */
-    fun udpSocket(address: InetAddress?, preferred: IntArray?): DatagramSocket {
-        val wildcard = familyWildcard(address)
+    fun udpSocket(address: InetAddress?, preferred: IntArray?, exactBindAddress: Boolean = false): DatagramSocket {
+        val wildcard = if (exactBindAddress) requireNotNull(address) else familyWildcard(address)
         if (preferred != null) {
             for (port in preferred) {
                 val socket = try {

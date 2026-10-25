@@ -95,10 +95,15 @@ import com.shilapi.xcertplay.update.BackgroundUpdateScheduler
 import com.shilapi.xcertplay.update.UpdateApkExport
 import com.shilapi.xcertplay.update.UpdateAvailability
 import com.shilapi.xcertplay.update.UpdateCatalog
+import com.shilapi.xcertplay.update.UpdateChannel
+import com.shilapi.xcertplay.update.UpdateChannelStore
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.UpdateDownloadCache
+import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
+import com.shilapi.xcertplay.update.StableClientId
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -202,6 +207,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var pendingWireless = false
     private var bluetoothSettingsVisited = false
     private var initialLaunch = true
+    private var forwardingToProjection = false
     private var disclaimerAcknowledged = false
     private var notificationTransport = true
     private var exportInProgress = false
@@ -248,6 +254,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
+    internal var updateCheckWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-check").start() }
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var backupServer: SettingsBackupServer? = null
     @Volatile private var backupEndpoint: SettingsBackupEndpoint? = null
@@ -375,6 +382,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Thread({
+            UpdateDownloadCache.cleanupForProcessStart(this)
+            UpdateApkExport.pruneHistory(this)
+        }, "diplay-update-cache-cleanup").apply { isDaemon = true }.start()
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
+            "UI_ROUTE home create action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         PioneerDebugIntegration.ensure(this)
         com.shilapi.xcertplay.vehicle.runtime.VehicleMediaRuntime.prepareCompanion(this)
         com.shilapi.xcertplay.pioneer.CamryDayNight.start()
@@ -388,11 +401,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
-        if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
+        if (savedInstanceState == null && isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
+            forwardingToProjection = true
             openProjection(); finish(); return
         }
         scheduleBackgroundUpdateChecks()
-        availableUpdate = UpdateAvailability.available(this, installedVersionCode())
+        availableUpdate = UpdateAvailability.available(
+            this,
+            installedVersionCode(),
+            UpdateChannelStore.load(this),
+        )
         enforceInterfaceSize()
         refreshAppearance()
         rememberLaunchAppearance()
@@ -421,10 +439,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         // Consent was checked above. A recreated gate must continue into the app rather than
         // restoring the disclaimer page saved just before the user pressed Agree.
-        page = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
+        val requestedPage = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
             ?: intent.getStringExtra("page")
+        page = requestedPage
             ?: if (RemoteGatewaySettings.loadSelected(this) == null && setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
+        if (requestedPage == "update") {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            availableUpdate?.let {
+                updateRelease = it
+                updateStage = UpdateStage.AVAILABLE
+            }
+        }
         render()
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -445,6 +472,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
+        forwardingToProjection = false
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this,
+            "UI_ROUTE home new-intent action=${intent.action} page=${intent.getStringExtra("page")} session=${CarPlayBackgroundSession.hasSession()} host=${CarPlayBackgroundSession.hasHost()}")
         connectionSettingsReturnCategory = null
         // A re-tap on the launcher icon before consent still has to pass the gate, not resume projection.
         if (isLauncherIntent(intent) && !disclaimerAcknowledged && !Disclaimer.acceptedForCurrentVersion(this)) {
@@ -452,10 +482,23 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
         // CarPlay carry a "page" extra, which isLauncherIntent rejects.
-        if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            page = "home"; render(); openProjection(); return
+        if (isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
+            forwardingToProjection = true
+            com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(this, "UI_ROUTE home redirect-to-host without-render action=${intent.action}")
+            openProjection(); return
         }
-        page = intent.getStringExtra("page") ?: "home"; render()
+        val requestedPage = intent.getStringExtra("page")
+        page = requestedPage ?: "home"
+        if (requestedPage == "update") {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            refreshAvailableUpdate()
+            availableUpdate?.let {
+                updateRelease = it
+                updateStage = UpdateStage.AVAILABLE
+            }
+        }
+        render()
         automaticVehicleValidationStarted = false
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -551,6 +594,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onResume() {
         super.onResume()
+        if (forwardingToProjection) return
+        if (setupError == null) {
+            com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
+                wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
+                hasSession = { CarPlayBackgroundSession.hasSession() },
+                log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
+        }
         WheelKeyService.restoreIfNeeded(this)
         applyFullscreenMode()
         // Returning from another activity can bring the head unit's own density back.
@@ -1037,7 +1087,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else right.addView(space(12))
         right.addView(label(getString(R.string.home_public_preview, version()), 12, MUTED).apply { letterSpacing = .08f })
         availableUpdate?.let { release ->
-            val message = getString(R.string.update_available_home)
+            val message = getString(
+                if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_home_beta
+                else R.string.update_available_home,
+            )
             val tint = { alpha: Int -> (WARNING and 0x00FFFFFF) or (alpha shl 24) }
             val chip = GradientDrawable().apply {
                 setColor(tint(0x26))
@@ -1878,6 +1931,22 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.USB_CONNECTION,
             getString(R.string.settings_usb_connection), R.drawable.ic_dp_connection) { card ->
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.selectorVisible &&
+                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
+                val labels = modes.map { mode -> when (mode) {
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM -> NativeNcmSettingsLabel.label(this)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
+                } }
+                choice(card, getString(R.string.settings_wired_backend), labels,
+                    modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
+                    markReconnectNeeded()
+                }
+                card.addView(label(getString(R.string.settings_wired_backend_description), 14, MUTED))
+            }
             val currents = UsbChargingCurrent.entries
             choice(card, getString(R.string.settings_usb_charging), listOf(
                 getString(R.string.settings_usb_charging_normal),
@@ -2657,6 +2726,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun updateRow(): View {
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
+        updateChannelControl(container)
+        if (UpdateChannelStore.load(this) == UpdateChannel.BETA) {
+            container.addView(label(getString(R.string.settings_update_beta_warning), 14, MUTED).apply {
+                setPadding(0, 0, 0, dp(8))
+            })
+        }
         container.addView(label(getString(R.string.settings_update_flavor_note), 14, MUTED).apply {
             setPadding(0, 0, 0, dp(8))
         })
@@ -2678,30 +2753,121 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 updateSavedPath?.let { container.addView(label(getString(R.string.update_saved_to, it), 13, MUTED).apply { setPadding(0, dp(10), 0, 0) }) }
             }
         }
+        val clientId = StableClientId.get(this)
+        container.addView(
+            label(
+                clientId?.let { getString(R.string.settings_update_client_id, it) }
+                    ?: getString(R.string.settings_update_client_id_unavailable),
+                13,
+                MUTED,
+            ).apply { setPadding(0, dp(12), 0, 0) },
+        )
         return container
+    }
+
+    private fun updateChannelControl(parent: LinearLayout) {
+        val channels = UpdateChannel.entries
+        val current = UpdateChannelStore.load(this)
+        val labels = channels.map { getString(it.labelRes) }
+        val busy = updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING
+        val title = getString(R.string.settings_update_channel)
+        val control = button("$title · ${labels[current.ordinal]}", false) {}
+        control.isEnabled = !busy
+        control.setOnClickListener {
+            if (busy) return@setOnClickListener
+            var pending = channels.indexOf(current)
+            appDialogBuilder()
+                .setTitle(title)
+                .setSingleChoiceItems(labels.toTypedArray(), pending) { _, index -> pending = index }
+                .setPositiveButton(getString(R.string.save)) { _, _ ->
+                    val selected = channels[pending]
+                    if (selected != UpdateChannelStore.load(this)) switchUpdateChannel(selected)
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+        }
+        parent.addView(control, matchButton(0, 60))
+        if (busy) {
+            parent.addView(label(getString(R.string.settings_update_channel_busy), 13, MUTED).apply {
+                setPadding(0, dp(8), 0, 0)
+            })
+        }
+        parent.addView(space(12))
+    }
+
+    private fun switchUpdateChannel(channel: UpdateChannel) {
+        val hasDownloadedUpdate = updateFile != null || updateStage == UpdateStage.READY ||
+            updateSavedUri != null || updateSavedPath != null
+        if (hasDownloadedUpdate) {
+            appDialogBuilder()
+                .setTitle(getString(R.string.update_channel_switch_title))
+                .setMessage(getString(R.string.update_channel_switch_discard))
+                .setPositiveButton(getString(R.string.update_channel_switch_confirm)) { _, _ ->
+                    applyUpdateChannel(channel)
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+            return
+        }
+        applyUpdateChannel(channel)
+    }
+
+    private fun applyUpdateChannel(channel: UpdateChannel) {
+        discardDownloadedUpdate()
+        UpdateChannelStore.save(this, channel)
+        updateGeneration += 1
+        availableUpdate = null
+        updateRelease = null
+        updateMessage = null
+        updateProgress = null
+        updateStage = UpdateStage.IDLE
+        UpdateAvailability.resetForChannelChange(this)
+        checkForUpdates()
+    }
+
+    private fun discardDownloadedUpdate() {
+        updateFile?.parentFile?.let { UpdateDownloadCache.release(it, delete = true) }
+        updateFile = null
+        updateSavedUri?.let { uri -> runCatching { contentResolver.delete(uri, null, null) } }
+        updateSavedPath?.let { path -> runCatching { File(path).takeIf { it.isAbsolute }?.delete() } }
+        updateSavedUri = null
+        updateSavedPath = null
     }
 
     private fun checkForUpdates() {
         updateStage = UpdateStage.CHECKING
         updateMessage = null
         val generation = ++updateGeneration
+        val channel = UpdateChannelStore.load(this)
         render()
-        Thread({
-            val outcome = runCatching { latestRelease() }
+        updateCheckWorker(Runnable {
+            val outcome = runCatching { latestRelease(channel) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
                 outcome.fold(
-                    { release ->
+                    { result ->
                         UpdateAvailability.recordAttempt(this, System.currentTimeMillis())
-                        availableUpdate = release
-                        if (release == null) {
-                            UpdateAvailability.clear(this)
-                            updateMessage = getString(R.string.update_up_to_date)
-                            updateStage = UpdateStage.IDLE
-                        } else {
-                            UpdateAvailability.save(this, release)
-                            updateRelease = release
-                            updateStage = UpdateStage.AVAILABLE
+                        when (result) {
+                            is UpdateLookupResult.Available -> {
+                                availableUpdate = result.release
+                                UpdateAvailability.save(this, result.release, channel)
+                                updateRelease = result.release
+                                updateStage = UpdateStage.AVAILABLE
+                            }
+                            UpdateLookupResult.UpToDate -> {
+                                availableUpdate = null
+                                updateRelease = null
+                                UpdateAvailability.clear(this)
+                                updateMessage = getString(R.string.update_up_to_date)
+                                updateStage = UpdateStage.IDLE
+                            }
+                            UpdateLookupResult.ChannelUnavailable -> {
+                                availableUpdate = null
+                                updateRelease = null
+                                UpdateAvailability.clear(this)
+                                updateMessage = getString(R.string.update_channel_unavailable)
+                                updateStage = UpdateStage.IDLE
+                            }
                         }
                         render()
                     },
@@ -2713,11 +2879,24 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     },
                 )
             }
-        }, "diplay-update-check").start()
+        })
     }
 
-    private fun latestRelease(): UpdateRelease? {
-        return UpdateReleaseLookup.latest(installedVersionCode(), userAgent())
+    private fun latestRelease(channel: UpdateChannel): UpdateLookupResult {
+        return UpdateReleaseLookup.latest(
+            installedVersionCode(),
+            userAgent(),
+            channel,
+            clientId = StableClientId.get(this),
+        )
+    }
+
+    private fun refreshAvailableUpdate() {
+        availableUpdate = UpdateAvailability.available(
+            this,
+            installedVersionCode(),
+            UpdateChannelStore.load(this),
+        )
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
@@ -2743,13 +2922,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateProgress = null
         updateMessage = null
         val generation = ++updateGeneration
+        val channel = UpdateChannelStore.load(this)
         render()
         Thread({
             // Each attempt owns its files, including across activity recreation.
-            val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
+            val directory = UpdateDownloadCache.begin(this)
             val outcome = runCatching {
                 // The cached release can be a day old. Download the newest one.
-                release = latestRelease() ?: throw IOException(getString(R.string.update_up_to_date))
+                release = when (val latest = latestRelease(channel)) {
+                    is UpdateLookupResult.Available -> latest.release
+                    UpdateLookupResult.UpToDate -> throw IOException(getString(R.string.update_up_to_date))
+                    UpdateLookupResult.ChannelUnavailable ->
+                        throw IOException(getString(R.string.update_channel_unavailable))
+                }
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
                 UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
                 val apkFile = File(directory, release.apkName)
@@ -2768,15 +2953,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     throw IOException("Checksum mismatch for ${release.apkName}")
                 }
                 apkFile
-            }.onFailure { directory.deleteRecursively() }
+            }.onFailure { UpdateDownloadCache.release(directory, delete = true) }
             val saved = outcome.getOrNull()?.let { UpdateApkExport.copy(applicationContext, it) }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) {
-                    directory.deleteRecursively()
+                    UpdateDownloadCache.release(directory, delete = true)
                     return@runOnUiThread
                 }
                 outcome.fold(
                     { file ->
+                        UpdateDownloadCache.retain(directory)
                         updateRelease = release
                         updateFile = file
                         updateSavedPath = saved?.path
@@ -5689,7 +5875,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else open()
     }
     private fun openProjection() {
-        OwnScreenStart.start(this, Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        val projection = Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        if (forwardingToProjection) projection.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        OwnScreenStart.start(this, projection)
+        if (forwardingToProjection) overridePendingTransition(0, 0)
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {

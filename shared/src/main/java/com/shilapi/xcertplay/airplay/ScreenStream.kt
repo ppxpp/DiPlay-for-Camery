@@ -20,7 +20,10 @@ enum class VideoCodec { H264, H265 }
  * (avcC/hvcC) or a ChaCha20-Poly1305 sealed VideoFrame. The key is the DataStream output key
  * and the per-frame nonce is an 8-byte little-endian counter.
  */
-class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {}) : Closeable {
+class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {},
+    private val bindAddress: InetAddress? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
+    private val expectedPeer: InetAddress? = null) : Closeable {
     interface Listener {
         fun onCodec(codec: VideoCodec) {}
         fun onConfig(codecData: ByteArray) {}
@@ -34,6 +37,7 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     }
 
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
+    private val diagnosticSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.id ?: lwipSession
     private var portLease: Closeable? = null
     private val closed = AtomicBoolean(false)
     private val frameCounter = AtomicLong(0)
@@ -47,7 +51,8 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
         this.listener = listener
         val bound = ServerSocket()
         bound.reuseAddress = true
-        bound.bind(InetSocketAddress(InetAddress.getByName("::"), 0))
+        if (nativeBinding != null) nativeBinding.bind(bound)
+        else bound.bind(InetSocketAddress(bindAddress ?: InetAddress.getByName("::"), 0))
         server = bound
         try { portLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(bound.localPort, false, lwipSession) }
         catch (error: Throwable) { bound.close(); throw error }
@@ -89,6 +94,7 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     private fun accept(bound: ServerSocket) {
         try {
             val accepted = bound.accept()
+            nativeBinding?.validateAccepted(accepted, expectedPeer)
             socket = accepted
             run(accepted)
         } catch (error: Exception) {
@@ -105,12 +111,12 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
                 stats.reading()
                 val headerStarted = System.nanoTime()
                 val header = readFully(input, HEADER_LEN) ?: break
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-header-read", System.nanoTime()-headerStarted)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-header-read", System.nanoTime()-headerStarted)
                 val bodySize = readU32Le(header, 0)
                 if (bodySize > MAX_BODY) break
                 val bodyStarted = System.nanoTime()
                 val body = readFully(input, bodySize) ?: break
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-payload-read", System.nanoTime()-bodyStarted)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-payload-read", System.nanoTime()-bodyStarted)
                 val arrivalNanos = System.nanoTime()
                 stats.received(HEADER_LEN + bodySize)
                 onMessage(header, body, stats, arrivalNanos)
@@ -133,7 +139,7 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
                     val start = System.nanoTime()
                     ScreenCodec.decryptFrame(key, frameCounter.get(), header, body)
                         .also {
-                            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-decrypt", System.nanoTime()-start)
+                            com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-decrypt", System.nanoTime()-start)
                             stats.decrypted(System.nanoTime() - start, body.size)
                             frameCounter.incrementAndGet()
                         }
@@ -149,10 +155,10 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
                 }
                 val convertStart = System.nanoTime()
                 val annexB = ScreenCodec.lengthPrefixedToAnnexB(payload)
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-annexb", System.nanoTime()-convertStart)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-annexb", System.nanoTime()-convertStart)
                 val submitStart = System.nanoTime()
                 listener.onFrame(annexB, ScreenCodec.senderNanos(header), arrivalNanos)
-                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(lwipSession, "video-submit", System.nanoTime()-submitStart)
+                com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "video-submit", System.nanoTime()-submitStart)
             }
             OP_VIDEO_CONFIG -> {
                 val (codec, codecData) = ScreenCodec.detectConfig(body)

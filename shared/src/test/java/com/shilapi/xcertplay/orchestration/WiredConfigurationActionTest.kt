@@ -53,6 +53,24 @@ class WiredConfigurationActionTest {
         assertFalse(WiredConfigurationAction.fallbackAfterRejection(found = true, carPlayMode = true))
     }
 
+    @Test fun successfulResetInvalidatesOldSessionWithoutReadingPersistentMemory() {
+        val staleSession = WiredConfigurationAction.sessionNeedsTransition(true) {
+            error("Old enumeration must not be consulted after reset")
+        }
+        assertFalse(staleSession)
+        assertEquals(WiredConfigurationAction.USE,
+            WiredConfigurationAction.choose(true, true, 0, 2, staleSession))
+    }
+
+    @Test fun noResetPreservesRememberedSessionAndRequiredModeTransition() {
+        assertTrue(WiredConfigurationAction.sessionNeedsTransition(false) { true })
+        assertFalse(WiredConfigurationAction.sessionNeedsTransition(false) { false })
+        // Firmware 152 still needs a mode transition when reset has not yielded configuration 6.
+        assertEquals(WiredConfigurationAction.REQUEST_TRANSITION,
+            WiredConfigurationAction.choose(false, false, 0, 2,
+                WiredConfigurationAction.sessionNeedsTransition(true) { true }))
+    }
+
     @Test fun theMemoryMatchesOnlyTheSameEnumeration() {
         WiredSessionMemory.clear()
         assertFalse(WiredSessionMemory.startedOn("/dev/bus/usb/001/005"))

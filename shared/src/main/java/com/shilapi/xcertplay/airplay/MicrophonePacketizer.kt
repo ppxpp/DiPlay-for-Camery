@@ -21,6 +21,8 @@ data class MicrophoneConfig(
      * rule. The report's "Audio: rtp clock" line measures the iPhone's own clock for each stream.
      */
     val opusClockRate: Int = OPUS_CAPTURE_RATE,
+    val bindAddress: InetAddress? = null,
+    val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
 ) {
     val samplesPerPacket: Int
         get() = if (codec == AudioCodecKind.OPUS) {
@@ -35,6 +37,22 @@ data class MicrophoneConfig(
 
     val frameBytes: Int
         get() = samplesPerPacket * channels * 2
+
+    /** Maximum PCM frame duration is reduced only when its complete IP packet cannot fit. */
+    fun withPcmPacketBudget(maxShortenedMillis: Int, mtu: Int, ipv6: Boolean): MicrophoneConfig {
+        require(maxShortenedMillis in setOf(0, 5, 10, 20))
+        require(mtu > 0)
+        if (maxShortenedMillis == 0 || codec != AudioCodecKind.LPCM) return this
+        val overhead = MicrophonePacketizer.RTP_HEADER_LEN + MicrophonePacketizer.TAG_LEN +
+            MicrophonePacketizer.NONCE_LEN + 8 + if (ipv6) 40 else 20
+        fun fits(candidate: MicrophoneConfig) = candidate.frameBytes.toLong() + overhead <= mtu
+        if (fits(this)) return this
+        return listOf(20, 10, 5).asSequence()
+            .filter { it <= maxShortenedMillis && it < frameMillis }
+            .map { copy(frameMillis = it) }
+            .firstOrNull(::fits)
+            ?: throw IllegalArgumentException("No supported PCM frame fits egress MTU=$mtu")
+    }
 
     companion object {
         private const val OPUS_SAMPLES_PER_PACKET = 960

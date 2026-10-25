@@ -14,6 +14,8 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     private var appContext: Context? = null
     @Volatile private var consumer: ((MediaCommand) -> Unit)? = null
     @Volatile private var report: (String) -> Unit = {}
+    private val sdkLoadLock = Any()
+    @Volatile private var cachedLoader: ClassLoader? = null
     private var initialized = false
     private var initializing = false
     private var registeredManager: Any? = null
@@ -86,7 +88,33 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     @Synchronized
     override fun stop() { consumer = null; lastEvent = null }
 
-    private fun loadSdk(context: Context): ClassLoader {
+    /** Diagnostic microphone access shares the already provisioned SDK and connection. */
+    internal fun audioServiceForTest(context: Context): Pair<ClassLoader, Any> {
+        val launch = synchronized(this) {
+            if (!initialized && !initializing) { initializing = true; true } else false
+        }
+        if (launch) initializeSdk(context)
+        val loader = loadSdk(context)
+        val service = loader.loadClass("com.tencent.tai.pal.client.PALServiceManager")
+        val audioType = loader.loadClass("com.tencent.tai.pal.client.a")
+        val remoteType = loader.loadClass("com.tencent.tai.pal.audio.b")
+        val deadline = SystemClock.elapsedRealtime() + 12_000L
+        do {
+            val remote = runCatching {
+                val client = service.getMethod("a", Class::class.java).invoke(null, audioType) ?: return@runCatching null
+                client.javaClass.declaredFields.firstOrNull { it.type == remoteType }?.let {
+                    it.isAccessible = true
+                    it.get(client)
+                }
+            }.getOrNull()
+            if (remote != null) return loader to remote
+            Thread.sleep(50)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        error("PAL 音频服务未就绪或不支持麦克风焦点")
+    }
+
+    private fun loadSdk(context: Context): ClassLoader = synchronized(sdkLoadLock) {
+        cachedLoader?.let { return@synchronized it }
         // Provision this asset locally; proprietary SDK bytes are not committed to the fork.
         val bytes = context.assets.open("vehicle/pal-client.dex").use { it.readBytes() }
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -95,13 +123,31 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
         val directory = File(context.filesDir, "vehicle-pal-sdk").apply { mkdirs() }
         val optimized = File(context.codeCacheDir, "vehicle-pal-opt").apply { mkdirs() }
         val dex = File(directory, "pal-$digest.dex")
+        File(directory, "pal.tmp").delete()
         if (!dex.exists()) {
             val temporary = File(directory, "pal.tmp")
-            temporary.outputStream().use { it.write(bytes) }
-            check(temporary.renameTo(dex)) { "PAL dex install failed" }
+            try {
+                temporary.outputStream().use { it.write(bytes) }
+                check(temporary.renameTo(dex)) { "PAL dex install failed" }
+            } finally {
+                temporary.delete()
+            }
         }
+        pruneOldPalDex(directory, dex)
         dex.setReadOnly()
-        return DexClassLoader(dex.absolutePath, optimized.absolutePath, null, context.classLoader)
+        DexClassLoader(dex.absolutePath, optimized.absolutePath, null, context.classLoader).also { cachedLoader = it }
+    }
+
+    /** Keep only the DEX selected by the current bundled PAL asset. */
+    internal fun pruneOldPalDex(directory: File, current: File): Int {
+        var deleted = 0
+        directory.listFiles()
+            ?.filter {
+                it.isFile && it != current && it.name.startsWith("pal-") &&
+                    it.extension.equals("dex", ignoreCase = true)
+            }
+            ?.forEach { if (it.delete()) deleted += 1 }
+        return deleted
     }
 
     private fun register(loader: ClassLoader, managerClass: Class<*>) {

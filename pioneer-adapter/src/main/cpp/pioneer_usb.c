@@ -11,6 +11,21 @@
 /* Copy before kernel wait; never pin ART's heap in a JNI critical section. */
 struct write_result {int transferred;uint64_t copy_ns,io_ns;};
 static uint64_t usb_ns(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000000000+t.tv_nsec;}
+/* The synchronous caller owns this direct buffer until ioctl completes. No Java heap pin/copy. */
+JNIEXPORT void JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerUsbNative_bulkWriteDirect(
+ JNIEnv *env,jobject self,jint fd,jint endpoint,jobject buffer,jint length,jint timeout_ms,jlongArray result) {
+ (void)self;
+ if(!result||(*env)->GetArrayLength(env,result)<3){(*env)->ThrowNew(env,(*env)->FindClass(env,"java/lang/IllegalArgumentException"),"USB write metrics require 3 entries");return;}
+ void *data=(*env)->GetDirectBufferAddress(env,buffer);jlong cap=(*env)->GetDirectBufferCapacity(env,buffer);
+ jlong values[3]={-EINVAL,0,0};
+ if(fd>=0&&endpoint>0&&!(endpoint&0x80)&&data&&length>0&&length<=cap&&length<=16384&&timeout_ms>0){
+  struct usbdevfs_bulktransfer request;memset(&request,0,sizeof(request));
+  request.ep=endpoint;request.len=length;request.timeout=timeout_ms;request.data=data;
+  uint64_t before=usb_ns();int result=ioctl(fd,USBDEVFS_BULK,&request);int error=result<0?errno:0;
+  values[0]=result<0?-error:result;values[2]=(jlong)(usb_ns()-before);
+ }
+ (*env)->SetLongArrayRegion(env,result,0,3,values);
+}
 static struct write_result write_usb(JNIEnv *env,int fd,int endpoint,jbyteArray packet,int timeout_ms,int measured){
     struct write_result r={.transferred=-EINVAL,.copy_ns=0,.io_ns=0};
     int n=(*env)->GetArrayLength(env,packet);

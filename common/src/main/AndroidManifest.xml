@@ -61,18 +61,31 @@
         <activity android:name="com.shilapi.xcertplay.GatewayDeviceActivity"
             android:exported="false" android:hardwareAccelerated="false"
             android:theme="@style/Theme.Xcertplay" />
-        <activity android:name="com.shilapi.xcertplay.DiPlayActivity"
-            android:exported="true" android:launchMode="singleTop"
-            android:resizeableActivity="true"
-            android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-            android:theme="@style/Theme.Xcertplay">
+        <activity android:name="com.shilapi.xcertplay.DiPlayLauncherActivity"
+            android:taskAffinity="${applicationId}.launcher"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.Xcertplay.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name="com.shilapi.xcertplay.DiPlayActivity"
+            android:exported="true" android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:theme="@style/Theme.Xcertplay">
+
+        </activity>
         <service android:name="com.shilapi.xcertplay.DiPlaySessionService"
             android:exported="false" android:foregroundServiceType="connectedDevice|microphone|location" />
+
+        <activity
+            android:name="com.shilapi.xcertplay.CarMicTestActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Xcertplay" />
 
         <activity
             android:name="com.shilapi.xcertplay.CarPlayHostActivity"
@@ -82,7 +95,7 @@
             android:launchMode="singleTask"
             android:resizeableActivity="true"
             android:screenOrientation="fullSensor"
-            android:theme="@style/Theme.Xcertplay"
+            android:theme="@style/Theme.Xcertplay.Connection"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
@@ -91,6 +104,24 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/usb_device_filter" />
         </activity>
+
+        <!-- Keep normal Android USB selection except on verified root Pioneer firmware. -->
+        <activity-alias
+            android:name="com.shilapi.xcertplay.IphoneUsbAttachActivity"
+            android:targetActivity="com.shilapi.xcertplay.CarPlayHostActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_iphone_device_filter" />
+        </activity-alias>
+        <receiver android:name="com.shilapi.xcertplay.PioneerUsbAttachReceiver"
+            android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name="com.shilapi.xcertplay.AdbClusterActivity"

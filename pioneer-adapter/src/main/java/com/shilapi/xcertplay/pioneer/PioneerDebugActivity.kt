@@ -15,21 +15,32 @@ import java.io.File
 
 /** Separate diagnostic page avoids edits to upstream settings layout and translation machinery. */
 class PioneerDebugActivity : Activity() {
+    private val pendingInstalls = mutableMapOf<Int, String>()
     private lateinit var status: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() {
-            status.text = "${PioneerDebugService.addresses().joinToString("\n")}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n" +
+            val nextStatus = "${PioneerDebugService.addresses().joinToString("\n")}\n端口：${PioneerDebugRuntime.port}（${PioneerDebugRuntime.listenerState}）\n" +
                 "TCP 调试无需口令\nUSB：${PioneerUsbPolicy.mode(this@PioneerDebugActivity)} / 生效=${PioneerUsbPolicy.enabled(this@PioneerDebugActivity)}\n" +
-                "VPN 已授权：${runCatching { android.net.VpnService.prepare(this@PioneerDebugActivity) == null }.getOrDefault(false)}\n" +
-                "${PioneerDebugRuntime.lastCommand}\n${PioneerDebugRuntime.snapshot().toString(2)}"
+                "VPN 预授权：${PioneerVpnPermissionGrant.status(this@PioneerDebugActivity).optBoolean("preconsented")}\n" +
+                "${PioneerDebugRuntime.lastCommand}\nUSB授权验证暂停=${PioneerUsbPermissionProbe.holdsRequests(this@PioneerDebugActivity)}\n${PioneerDebugRuntime.snapshot().toString(2)}"
+            if (status.text.toString() != nextStatus) status.text = nextStatus
             handler.postDelayed(this, 1_000)
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val codes = savedInstanceState?.getIntArray("installerCodes") ?: intArrayOf()
+        val paths = savedInstanceState?.getStringArrayList("installerPaths").orEmpty()
+        codes.zip(paths).forEach { (code, path) -> pendingInstalls[code] = path }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 20, 24, 20) }
-        status = TextView(this).apply { textSize = 17f; setTextIsSelectable(true) }
+        status = TextView(this).apply {
+            textSize = 17f
+            // A selectable TextView takes focus and its once-per-second setText asks the
+            // ScrollView to reveal it, pulling the user away from the buttons below.
+            isFocusable = false
+            isFocusableInTouchMode = false
+        }
         column.addView(TextView(this).apply { text = "DiPlay 车机调试（有线验证）"; textSize = 22f })
         column.addView(status)
         fun button(label: String, action: () -> Unit) { column.addView(Button(this).apply { text = label; setOnClickListener { runCatching(action).onFailure {
@@ -43,8 +54,29 @@ class PioneerDebugActivity : Activity() {
         }
         button("启动 TCP 调试") { PioneerDebugRuntime.start(this) }
         button("启动有线连接") { PioneerDebugRuntime.request(this, "start-wired") }
+        button("车机麦克风录音测试（录 5 秒 / 历史回放）") {
+            startActivity(Intent().setClassName(packageName, "com.shilapi.xcertplay.CarMicTestActivity"))
+        }
         button("重试 VPN 授权（手动 ADB 授权后使用）") { PioneerDebugRuntime.request(this, "retry-vpn") }
         button("停止 CarPlay，保留 TCP 调试") { PioneerDebugRuntime.request(this, "stop") }
+        fun permissionProbe(action: String) {
+            Thread({
+                val result = runCatching { PioneerUsbPermissionProbe.run(applicationContext, action).toString(2) }
+                    .getOrElse { "USB授权验证失败：${it.message}" }
+                runOnUiThread {
+                    android.app.AlertDialog.Builder(this).setTitle("USB授权验证 · $action")
+                        .setMessage(result).setPositiveButton("关闭", null).show()
+                }
+            }, "usb-permission-probe-ui").apply { isDaemon = true; start() }
+        }
+        button("USB授权验证：查询当前权限") { permissionProbe("STATUS") }
+        button("USB授权验证：暂停DiPlay授权请求（先停止CarPlay）") { permissionProbe("HOLD") }
+        button("USB授权验证：只读检查高权限能力") { permissionProbe("INSPECT") }
+        button("USB授权验证：单次授予当前iPhone访问权") { permissionProbe("GRANT") }
+        button("USB授权验证：将当前iPhone默认关联到DiPlay") { permissionProbe("SET_DEFAULT") }
+        button("USB授权验证：清除当前iPhone的DiPlay默认关联") { permissionProbe("CLEAR_DEFAULT") }
+        button("USB授权验证：关闭测试，恢复正常授权流程") { permissionProbe("OFF") }
+        column.addView(TextView(this).apply { text = "授权验证只支持已验证先锋固件及唯一iPhone。测试暂停会跨重启保留；已有权限不撤销，系统自行显示的USB应用选择窗口不受此开关控制。测试完请关闭。" })
         button("打开系统 VPN 设置") { startActivity(Intent(android.provider.Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         button("USB 适配：自动识别") { PioneerUsbPolicy.setMode(this, "AUTO") }
         button("USB 适配：启用（下次连接生效）") { PioneerUsbPolicy.setMode(this, "ON") }
@@ -72,13 +104,44 @@ class PioneerDebugActivity : Activity() {
                 packageManager.queryIntentActivities(installer, 0).forEach { target ->
                     grantUriPermission(target.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                startActivity(installer)
+                installer.putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                val code = (4100..4115).firstOrNull { it !in pendingInstalls } ?: error("Too many pending installers")
+                pendingInstalls[code] = file.path
+                try { startActivityForResult(installer, code) }
+                catch (failure: Exception) { pendingInstalls.remove(code); throw failure }
             }
         }.onFailure {
             PioneerDebugRuntime.log(this, "APK installer unavailable: ${it.message}")
             Toast.makeText(this, "无法打开安装器：${it.message}", Toast.LENGTH_LONG).show()
         }
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putIntArray("installerCodes", pendingInstalls.keys.toIntArray())
+        outState.putStringArrayList("installerPaths", ArrayList(pendingInstalls.values))
+        super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("Uses the OEM package installer's activity result contract")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val path = pendingInstalls.remove(requestCode) ?: return
+        val app = applicationContext
+        Thread({
+            runCatching {
+                val file = File(path)
+                val installed = resultCode == RESULT_OK
+                val removed = PioneerUpdateCache.finish(
+                    File(app.cacheDir, "pioneer-update"),
+                    file,
+                    installedSuccessfully = installed,
+                )
+                val uri = FileProvider.getUriForFile(app, "$packageName.pioneer-updates", file)
+                app.revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                PioneerDebugRuntime.log(app, "APK_INSTALL_FINISHED result=$resultCode cacheRemoved=$removed retainedForRetry=${!installed}")
+            }.onFailure { PioneerDebugRuntime.log(app, "APK_INSTALL_CLEANUP_FAILED ${it.message}") }
+        }, "pioneer-apk-cleanup").apply { isDaemon = true; start() }
+    }
+
 }
 
 class PioneerUpdateProvider : FileProvider()

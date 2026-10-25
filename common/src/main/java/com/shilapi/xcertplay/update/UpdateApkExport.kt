@@ -35,11 +35,60 @@ internal object UpdateApkExport {
         }
     }
 
+    /** Remove historical exports while keeping the newest visible APK for manual recovery. */
+    fun pruneHistory(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching { pruneMediaStoreHistory(context.contentResolver) }
+        }
+        context.getExternalFilesDir(null)?.let { base ->
+            runCatching { pruneDirectoryHistory(File(base, "update")) }
+        }
+    }
+
     private fun copyToDirectory(directory: File, apk: File): File {
         if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Update storage is unavailable")
         // Keep only the newest APK so a long-lived head unit does not collect old releases.
         directory.listFiles()?.filter { it.isFile && it.name != apk.name }?.forEach { it.delete() }
         return apk.copyTo(File(directory, apk.name), overwrite = true)
+    }
+
+    internal fun pruneDirectoryHistory(directory: File) {
+        if (!directory.isDirectory) return
+        directory.listFiles().orEmpty()
+            .filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+            .sortedByDescending(File::lastModified)
+            .drop(1)
+            .forEach(File::delete)
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun pruneMediaStoreHistory(resolver: ContentResolver) {
+        val projection = arrayOf(
+            MediaStore.Downloads._ID,
+            MediaStore.Downloads.DATE_ADDED,
+        )
+        val rows = mutableListOf<Pair<Long, Long>>()
+        resolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.Downloads.RELATIVE_PATH}=? AND ${MediaStore.Downloads.MIME_TYPE}=?",
+            arrayOf("$DOWNLOADS_DIRECTORY/", APK_MIME),
+            "${MediaStore.Downloads.DATE_ADDED} DESC, ${MediaStore.Downloads._ID} DESC",
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+            val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DATE_ADDED)
+            while (cursor.moveToNext()) rows += cursor.getLong(idColumn) to cursor.getLong(dateColumn)
+        }
+        rows.drop(1).forEach { (id, _) ->
+            resolver.delete(
+                android.content.ContentUris.withAppendedId(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    id,
+                ),
+                null,
+                null,
+            )
+        }
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)

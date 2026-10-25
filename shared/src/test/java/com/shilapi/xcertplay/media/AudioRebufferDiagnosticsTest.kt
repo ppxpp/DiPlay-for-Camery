@@ -39,13 +39,13 @@ class AudioRebufferDiagnosticsTest {
             .build()
 
         val type = Class.forName("com.shilapi.xcertplay.media.AudioRenderer")
-        val renderer = type.declaredConstructors.single { it.parameterCount == 13 }
+        val renderer = type.declaredConstructors.single { it.parameterCount == 14 }
             .apply { isAccessible = true }
             .newInstance(
                 AudioFormat(AudioCodecKind.LPCM, 48_000, 2, 96, "media"),
                 false, false, 0, 0,
                 AudioFocusCoordinator(null, false, false),
-                0, 500, { msg: String -> reports.add(msg) }, 0L, false, null, false
+                0, 500, { msg: String -> reports.add(msg) }, 0L, false, null, false, null
             )
 
         fun set(name: String, value: Any?) = type.getDeclaredField(name).apply { isAccessible = true }.set(renderer, value)
@@ -76,9 +76,10 @@ class AudioRebufferDiagnosticsTest {
             // Check queue full flag reset when queue is empty
             set("droppedPacketsLogged", true)
             val audioPacketClass = Class.forName("com.shilapi.xcertplay.media.AudioRenderer\$AudioPacket")
-            val packetConstructor = audioPacketClass.declaredConstructors.single().apply { isAccessible = true }
+            val packetConstructor = audioPacketClass.declaredConstructors.first { it.parameterCount == 3 }
+                .apply { isAccessible = true }
             val dummyRtp = ByteArray(12 + 100)
-            val packetInstance = packetConstructor.newInstance(dummyRtp, 0)
+            val packetInstance = packetConstructor.newInstance(dummyRtp, 0, System.nanoTime())
 
             type.getDeclaredMethod("handle", audioPacketClass).apply { isAccessible = true }.invoke(renderer, packetInstance)
 
@@ -112,13 +113,13 @@ class AudioRebufferDiagnosticsTest {
             .build()
 
         val type = Class.forName("com.shilapi.xcertplay.media.AudioRenderer")
-        val renderer = type.declaredConstructors.single { it.parameterCount == 13 }
+        val renderer = type.declaredConstructors.single { it.parameterCount == 14 }
             .apply { isAccessible = true }
             .newInstance(
                 AudioFormat(AudioCodecKind.LPCM, 48_000, 2, 96, "media"),
                 false, false, 0, 0,
                 AudioFocusCoordinator(null, false, false),
-                0, 500, { msg: String -> reports.add(msg) }, 0L, false, null, false
+                0, 500, { msg: String -> reports.add(msg) }, 0L, false, null, false, null
             )
 
         fun set(name: String, value: Any?) = type.getDeclaredField(name).apply { isAccessible = true }.set(renderer, value)
@@ -160,9 +161,10 @@ class AudioRebufferDiagnosticsTest {
             set("started", true)
             set("running", true)
             val audioPacketClass = Class.forName("com.shilapi.xcertplay.media.AudioRenderer\$AudioPacket")
-            val packetConstructor = audioPacketClass.declaredConstructors.single().apply { isAccessible = true }
+            val packetConstructor = audioPacketClass.declaredConstructors.first { it.parameterCount == 3 }
+                .apply { isAccessible = true }
             val dummyRtp = ByteArray(12 + 100)
-            val packetInstance = packetConstructor.newInstance(dummyRtp, 0)
+            val packetInstance = packetConstructor.newInstance(dummyRtp, 0, System.nanoTime())
 
             @Suppress("UNCHECKED_CAST")
             val queue = get("queue") as java.util.concurrent.BlockingQueue<Any>

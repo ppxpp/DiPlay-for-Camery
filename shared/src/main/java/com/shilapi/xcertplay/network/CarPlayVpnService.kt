@@ -54,6 +54,7 @@ class CarPlayVpnService : VpnService() {
         val media: AirPlayMediaHandler,
         val additionalAddresses: List<InetAddress> = emptyList(),
         val listenerIdentity: AirPlayListenerIdentity? = null,
+        val nativeBinding: InterfaceSocketBinding? = null,
     )
 
     private val binder = LocalBinder()
@@ -66,14 +67,21 @@ class CarPlayVpnService : VpnService() {
     private var bridge: Ipv6NcmBridge? = null
     private var lwipBridge: PioneerLwipBridge? = null
     private var lwipControlPort: java.io.Closeable? = null
+    private var vpnFirewall: com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease? = null
     private var tun: ParcelFileDescriptor? = null
+    private var nativeLease: NativeNcmLease? = null
+    private var pioneerSession: com.shilapi.xcertplay.pioneer.PioneerWiredSession.Session? = null
     private var attachGeneration = 0
+    // Retain the VPN owner through generic teardown so a racing revoke is still reported.
+    private var vpnRevokeListener: AirPlaySessionListener? = null
+    private var revokedCleanupPending = false
 
     /** The exception chain behind the latest [AttachResult.Failed], for the diagnostic log. */
     @Volatile var lastAttachFailure: String? = null
         private set
 
-    override fun onBind(intent: Intent?): IBinder = binder
+    override fun onBind(intent: Intent?): IBinder =
+        if (intent?.action == SERVICE_INTERFACE) super.onBind(intent) ?: binder else binder
 
     @Synchronized
     fun attach(
@@ -86,27 +94,51 @@ class CarPlayVpnService : VpnService() {
         mfi: MfiAuthenticator?,
         listener: AirPlaySessionListener,
         media: AirPlayMediaHandler,
+        optimizedLwip: Boolean = false,
+        wiredBackend: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode? = null,
     ): AttachResult {
-        if (active.get()) {
+        if (active.get() || revokedCleanupPending) {
             Log.i(TAG, "replacing stale NCM/VPN attachment")
             releaseLocked()
         }
+        vpnRevokeListener = null
         active.set(true)
         val generation = ++attachGeneration
         return try {
+            val backend = if (!com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this))
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
+            else wiredBackend ?: if (optimizedLwip)
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED
+            else if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this))
+                com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP
+            else com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
+            check(backend != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM) {
+                "Native NCM requires its own attachment; switch manually"
+            }
+            val useLwip = backend != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN
+            val optimized = backend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED
+            if (useLwip) check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.enabled(this)) {
+                "Selected lwIP backend is unavailable; switch manually"
+            }
             val address = InetAddress.getByName(linkLocal)
             if (address !is Inet6Address || !address.isLinkLocalAddress) {
                 throw IllegalArgumentException("linkLocal must be a link-local IPv6 literal")
             }
             require(hostMac.size == 6) { "hostMac must be 6 bytes" }
 
-            if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
+            if (useLwip) {
+                pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
+                    if (optimized) com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.LWIP_OPTIMIZED
+                    else com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.LWIP)
+                com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("stack", "RUNNING")
                 val rawBridge = PioneerLwipBridge(ncm, hostMac, address.address,
                     diagnosticPath = java.io.File(filesDir, "pioneer-debug/lwip-native.log").absolutePath,
                     log = { listener.onDebugLog(it) },
-                    onError = { onTransportError(generation, listener, it) })
+                    onError = { onTransportError(generation, listener, it) }, optimized = optimized)
                 lwipBridge = rawBridge
                 rawBridge.start()
+                for (task in listOf("stack", "io-init", "components", "buffers", "bridge", "channel-ready"))
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update(task, "COMPLETE")
                 startAirPlayServer(generation, AirPlayAttachment(
                     InetAddress.getByName("127.0.0.1"), config.copy(port = 7000, pinInboundPorts = false),
                     identity, pairings, mfi, listener, media))
@@ -117,6 +149,23 @@ class CarPlayVpnService : VpnService() {
                 return AttachResult.Started
             }
 
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this)) {
+                pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
+                    com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.VPN)
+                val conflict = com.shilapi.xcertplay.pioneer.PioneerVpnPermissionGrant.conflict(this)
+                check(conflict == null) { conflict ?: "VPN conflict" }
+            }
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this)) {
+                com.shilapi.xcertplay.pioneer.PioneerVpnInitialization.await(this) { generation == attachGeneration }
+            }
+            else {
+                check(prepare(this) == null) { "VPN authorization is required; no backend fallback" }
+                com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("vpn-permission", "REUSED")
+            }
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("tun", "RUNNING")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-tun-establish-begin")
+            listener.onDebugLog("VPN_TUN_ESTABLISH begin backend=VPN")
+            val tunStarted = android.os.SystemClock.elapsedRealtime()
             val tunFd = Builder()
                 .addAddress(linkLocal, LINK_PREFIX)
                 .addRoute(LINK_LOCAL_ROUTE, LINK_PREFIX)
@@ -134,15 +183,39 @@ class CarPlayVpnService : VpnService() {
                 .addAllowedApplication(packageName)
                 .establish()
                 ?: throw IOException("VpnService.establish returned null")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("tun-info", "COMPLETE")
             tun = tunFd
+            vpnRevokeListener = listener
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("tun", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-tun-established")
+            listener.onDebugLog("VPN_TUN_ESTABLISHED backend=VPN elapsedMs=${android.os.SystemClock.elapsedRealtime() - tunStarted}")
 
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this)) {
+                vpnFirewall = com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease.open(this, address,
+                    current = { active.get() && generation == attachGeneration },
+                    log = listener::onDebugLog,
+                    onError = { onTransportError(generation, listener, it) },
+                    acquired = { vpnFirewall = it })
+            }
+
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("io-init", "RUNNING")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("components", "RUNNING")
             val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac,
                 onError = { error -> onTransportError(generation, listener, error) },
                 onDiagnostic = { message -> listener.onDebugLog(message) },
                 neighborAddress = if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.enabled(this)) address.address else null,
             )
-            ipv6Bridge.start()
             bridge = ipv6Bridge
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.once("components", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("bridge", "RUNNING")
+            ipv6Bridge.start()
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("buffers", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("io-init", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("channel-ready", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session", "RUNNING")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("bridge", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("vpn-bridge-started")
+            listener.onDebugLog("VPN_BRIDGE_STARTED backend=VPN")
 
             startAirPlayServer(
                 generation,
@@ -152,9 +225,39 @@ class CarPlayVpnService : VpnService() {
             )
             AttachResult.Started
         } catch (error: Exception) {
-            releaseLocked()
+            runCatching { releaseLocked() }.onFailure(error::addSuppressed)
             lastAttachFailure = attachFailure(error)
             AttachResult.Failed(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    /** Takes ownership of the kernel network lease without establishing a VPN/TUN. */
+    @Synchronized
+    internal fun attachNative(
+        lease: NativeNcmLease, config: AirPlayConfig, identity: AirPlayIdentity,
+        pairings: PairingStore, mfi: MfiAuthenticator?, listener: AirPlaySessionListener,
+        media: AirPlayMediaHandler,
+    ): AttachResult {
+        if (revokedCleanupPending) releaseLocked()
+        if (active.get()) return if (nativeLease === lease) AttachResult.AlreadyStarted
+            else AttachResult.Failed("Previous connection is still active; disconnect before starting native NCM")
+        vpnRevokeListener = null
+        active.set(true)
+        val generation = ++attachGeneration
+        nativeLease = lease
+        return try {
+            pioneerSession = com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
+                com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.NATIVE_NCM)
+            startAirPlayServer(generation, AirPlayAttachment(lease.binding.localAddress,
+                config.copy(pinInboundPorts = false), identity, pairings, mfi, listener, media,
+                nativeBinding = lease.binding))
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("channel-ready", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session", "RUNNING")
+            AttachResult.Started
+        } catch (error: Exception) {
+            runCatching { releaseLocked() }.onFailure(error::addSuppressed)
+            lastAttachFailure = attachFailure(error)
+            AttachResult.Failed("Native NCM: ${error.message}")
         }
     }
 
@@ -174,10 +277,11 @@ class CarPlayVpnService : VpnService() {
         additionalBindAddresses: List<InetAddress> = emptyList(),
         listenerIdentity: AirPlayListenerIdentity? = null,
     ): AttachResult {
-        if (active.get()) {
+        if (active.get() || revokedCleanupPending) {
             Log.i(TAG, "replacing stale local-only Wi-Fi attachment")
             releaseLocked()
         }
+        vpnRevokeListener = null
         active.set(true)
         val generation = ++attachGeneration
         return try {
@@ -209,6 +313,28 @@ class CarPlayVpnService : VpnService() {
 
     /** Port the AirPlay listener actually bound, which may differ from the configured port. */
     fun boundPort(): Int? = attachment?.config?.port
+
+    override fun onRevoke() {
+        synchronized(this) {
+            val owner = vpnRevokeListener ?: return
+            vpnRevokeListener = null
+            active.set(false)
+            val generation = ++attachGeneration
+            revokedCleanupPending = true
+            // Publish the terminal event before another attachment can replace this owner.
+            // Listeners enqueue controller shutdown; bridge close/join stays on the worker.
+            try {
+                owner.onTransportError("VPN_PERMISSION_REVOKED")
+            } finally {
+                Thread({
+                    synchronized(this) {
+                        if (attachGeneration == generation && revokedCleanupPending) releaseLocked()
+                    }
+                }, "vpn-revoke-cleanup").apply { isDaemon = true; start() }
+            }
+        }
+        // Do not stopSelf: a replacement attachment may already be running.
+    }
 
     override fun onDestroy() {
         detach()
@@ -248,7 +374,9 @@ class CarPlayVpnService : VpnService() {
         generation: Int,
         replacement: AirPlayAttachment,
     ) {
-        val servers = if (replacement.additionalAddresses.isEmpty()) {
+        val servers = if (replacement.nativeBinding != null) {
+            listOf(bindNativeListener(replacement.nativeBinding, replacement.config.port))
+        } else if (replacement.additionalAddresses.isEmpty()) {
             listOf(AirPlayPortSelector.bind(replacement.address, replacement.config.port) { busy, bound ->
                 Log.w(TAG, "AirPlay port $busy is in use; listening on $bound instead")
             })
@@ -274,6 +402,15 @@ class CarPlayVpnService : VpnService() {
                 start()
             }
         }
+    }
+
+    private fun bindNativeListener(binding: InterfaceSocketBinding, preferredPort: Int): ServerSocket {
+        for (port in (listOf(preferredPort) + AirPlayPortSelector.FALLBACK_PORTS + 0).distinct()) {
+            val server = ServerSocket()
+            try { binding.bind(server, port); return server }
+            catch (_: java.net.BindException) { /* binding already closed this attempt */ }
+        }
+        throw java.net.BindException("Native NCM has no available listener port")
     }
 
     private fun acceptLoop(
@@ -304,6 +441,11 @@ class CarPlayVpnService : VpnService() {
                         runtime.tcpAccepted = true
                         runtime.milestone(runtime.sessionId, "airplay-control-accepted")?.let(current.listener::onDebugLog)
                     }
+                    if (current.nativeBinding != null && runCatching { current.nativeBinding.validateAccepted(socket) }.isFailure) {
+                        socket.close()
+                        return@synchronized null
+                    }
+                    pioneerSession?.let { com.shilapi.xcertplay.pioneer.PioneerWiredSession.controlAccepted(it.id) }
                     val internalPeer = isInternalAirPlayPeer(socket.inetAddress, socket.localAddress)
                     current.listenerIdentity?.let { owner ->
                         current.listener.onTcpAccepted(AirPlayTcpAccepted(
@@ -324,6 +466,12 @@ class CarPlayVpnService : VpnService() {
                             // default interface method existed; do not silently inherit its no-op.
                             override fun onScreenFrameOutput(session: AirPlaySession, type: Int) {
                                 current.listener.onScreenFrameOutput(session, type)
+                            }
+
+                            override fun onTransportError(message: String) {
+                                if (current.nativeBinding != null)
+                                    this@CarPlayVpnService.onTransportError(generation, current.listener, IOException(message))
+                                else current.listener.onTransportError(message)
                             }
 
                             override fun onSessionActive(session: AirPlaySession) {
@@ -348,9 +496,10 @@ class CarPlayVpnService : VpnService() {
                             }
                         },
                         media = current.media,
+                        nativeBinding = current.nativeBinding,
                     ).also(::addSession)
                 }
-                session.start()
+                session?.start()
             }
         } catch (error: IOException) {
             if (active.get()) {
@@ -387,12 +536,15 @@ class CarPlayVpnService : VpnService() {
         error: Throwable,
     ) {
         val message = error.message ?: error.javaClass.simpleName
+        com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease.invalidate()
         Log.e(TAG, "CarPlay transport stopped: $message", error)
         Thread(
             {
                 val releasedGeneration = synchronized(this) {
                     if (generation != attachGeneration) return@Thread
-                    releaseLocked()
+                    runCatching { releaseLocked() }.onFailure { cleanup ->
+                        Log.e(TAG, "Transport cleanup failed", cleanup)
+                    }
                     attachGeneration
                 }
                 listener.onTransportError(message)
@@ -409,6 +561,7 @@ class CarPlayVpnService : VpnService() {
 
     /** Caller must hold this service's monitor. Closes only resources active for this attachment. */
     private fun releaseLocked() {
+        revokedCleanupPending = false
         attachGeneration += 1
         active.set(false)
         attachment = null
@@ -420,10 +573,18 @@ class CarPlayVpnService : VpnService() {
         lwipControlPort?.close(); lwipControlPort = null
         lwipBridge?.close()
         lwipBridge = null
+        // Ipv6NcmBridge.close also closes its TUN descriptor: release rules first.
+        vpnFirewall?.close()
+        vpnFirewall = null
         bridge?.close()
         bridge = null
         tun?.close()
         tun = null
+        val native = nativeLease
+        native?.close()
+        nativeLease = null
+        pioneerSession?.close()
+        pioneerSession = null
     }
 
     companion object {

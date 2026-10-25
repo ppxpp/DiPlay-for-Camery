@@ -1,6 +1,8 @@
 plugins {
     id 'com.android.library'
 }
+apply from: rootProject.file('gradle/native-ncm.gradle')
+
 android {
     namespace = 'com.shilapi.xcertplay.shared'
     compileSdk = 37
@@ -27,6 +29,11 @@ android {
         ndkBuild {
             path = file('src/main/jni/Android.mk')
         }
+    }
+    lint {
+        // Legacy findings are baselined; only new findings fail the build.
+        baseline = file('lint-baseline.xml')
+        abortOnError = true
     }
     buildFeatures {
         // Geely/Lynk head-unit input API (com.geely.inputservice); declarations in src/main/aidl.

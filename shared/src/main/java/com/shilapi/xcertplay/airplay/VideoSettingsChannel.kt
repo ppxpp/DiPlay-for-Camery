@@ -20,6 +20,9 @@ class VideoSettingsChannel(
     private val readKey: ByteArray,
     private val writeKey: ByteArray,
     private val log: (String) -> Unit,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
+    private val expectedPeer: InetAddress? = null,
+    private val onNativeFailure: (Throwable) -> Unit = {},
 ) : Closeable {
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
     private var portLease: Closeable? = null
@@ -32,7 +35,7 @@ class VideoSettingsChannel(
     fun listen(bindAddress: InetAddress): Int {
         val bound = ServerSocket().apply {
             reuseAddress = true
-            bind(InetSocketAddress(bindAddress, 0))
+            if (nativeBinding != null) nativeBinding.bind(this) else bind(InetSocketAddress(bindAddress, 0))
         }
         server = bound
         try { portLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(bound.localPort, false, lwipSession) }
@@ -44,11 +47,15 @@ class VideoSettingsChannel(
     private fun accept(bound: ServerSocket) {
         try {
             val accepted = bound.accept()
+            nativeBinding?.validateAccepted(accepted, expectedPeer)
             socket = accepted
             log("video settings channel connected")
             run(accepted)
         } catch (error: Exception) {
-            if (!closed.get()) log("video settings channel ended: ${error.message}")
+            if (!closed.get()) {
+                log("video settings channel ended: ${error.message}")
+                if (nativeBinding != null) onNativeFailure(error)
+            }
         } finally {
             close()
         }

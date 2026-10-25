@@ -113,6 +113,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import com.shilapi.xcertplay.orchestration.progress.ConnectionProgress
 import com.shilapi.xcertplay.pioneer.LocalConnectionExperiments
+import com.shilapi.xcertplay.orchestration.progress.transportTasks
 import com.shilapi.xcertplay.orchestration.progress.ConnectionStep
 import com.shilapi.xcertplay.orchestration.progress.ConnectionOutcome
 import com.shilapi.xcertplay.orchestration.progress.status
@@ -220,6 +221,7 @@ class CarPlayController(
                 IphoneUsbMatcher.appleVendor()
             },
             onDiagnostic = ::connectionDiagnostic,
+            preserveNcmKernelDriver = config.nativeNcmEnabled && config.transport == CarPlayTransport.WIRED,
             diagnosticClaim = com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.claimOverride(appContext, ::connectionDiagnostic),
             diagnosticSetConfiguration = com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.configurationOverride(appContext, ::connectionDiagnostic),
         )
@@ -230,11 +232,21 @@ class CarPlayController(
     }
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val touchExecutor: ExecutorService = if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled) &&
-        com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(appContext))
+        com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(appContext))
         java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.MILLISECONDS,
             java.util.concurrent.ArrayBlockingQueue<Runnable>(128)) else Executors.newSingleThreadExecutor()
     private val pioneerTouchQueue = PioneerTouchQueue(touchExecutor, ::debugLog)
-    private val diagnosticTouchSequence = java.util.concurrent.atomic.AtomicLong()
+    private val wiredTouchDispatcher = BoundedTouchDispatcher<AirPlaySession>(
+        execute = { touchExecutor.execute(it) },
+        isCurrent = { session, token -> !closed && activeSession === session && session.mainScreenSessionToken() === token },
+        send = { session, contacts -> session.sendTouch(contacts) },
+        sendTimed = { session, contacts, enteredNs -> session.sendTouch(contacts, enteredNs = enteredNs) },
+        onFailure = { session, token, reason ->
+            if (!closed && activeSession === session && session.mainScreenSessionToken() === token)
+                session.pioneerTransportFailed("touch", IOException(reason))
+        },
+        diagnostic = ::debugLog,
+    )
     private val tunnelExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hostId = UUID.randomUUID().toString().uppercase(Locale.US)
@@ -246,6 +258,7 @@ class CarPlayController(
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
+    @Volatile private var usbResetInCurrentAttempt = false
     @Volatile private var wiredDeviceName: String? = null
     private val usbAdbGrantAttempts = mutableSetOf<String>()
     private val pendingUsbAdbGrants = mutableSetOf<String>()
@@ -386,6 +399,8 @@ class CarPlayController(
             }
         }
         if (!current()) return
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session", "COMPLETE")
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("media", "RUNNING")
         connectionProgress?.step(ConnectionStep.VIDEO)
         if (!current()) return
         if (replacement) vehicleSessionListener?.invoke(session, true)
@@ -446,7 +461,10 @@ class CarPlayController(
             if (closed) return
             connectionDiagnostic("VIDEO_FIRST_OUTPUT type=$type activeMatch=${activeSession === session} sessionClosed=${session.isClosed}")
             if (activeSession !== session) return
-            if (type == 110) connectionProgress?.firstFrame()
+            if (type == 110) {
+                connectionProgress?.transportTasks()
+                connectionProgress?.firstFrame()
+            }
             uiListener?.onScreenFrameOutput(session, type)
         }
         override fun onTransportError(message: String) {
@@ -537,15 +555,51 @@ class CarPlayController(
     }
 
     fun start() {
-        synchronized(this) {
-            if (closed) return
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.beginAttempt()
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("config", "COMPLETE")
+        synchronized(this) { if (closed) return }
+        if (config.transport == CarPlayTransport.WIRED &&
+            (config.nativeNcmEnabled || config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM) &&
+            !com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeNcmIncluded) {
+            fail(java.io.IOException("Native NCM is not included in this build; select another wired connection method in Settings"))
+            return
         }
+        if (!hasRequiredUsbService()) return
+        if (config.transport == CarPlayTransport.WIRED &&
+            config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+            com.shilapi.xcertplay.pioneer.PioneerRootSession.start(appContext)
+            executor.execute {
+                runCatching { com.shilapi.xcertplay.network.Ipv6NcmBridge.prepare() }
+                    .onFailure { if (!closed) fail(it) }
+            }
+        }
+        if (config.transport == CarPlayTransport.WIRED && config.nativeNcmEnabled)
+            com.shilapi.xcertplay.network.NativeNcmPreparation.connectionRequested()
+        if (config.transport == CarPlayTransport.WIRED &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+            // Fence before receiver registration, USB discovery/configuration or any claim.
+            // Waiting on the connection executor keeps homepage prewarm off the UI thread.
+            executor.execute {
+                try {
+                    com.shilapi.xcertplay.network.NativeNcmPreparation.awaitReady(appContext) { !closed }
+                    com.shilapi.xcertplay.network.NativeNcmLease.awaitReleased(appContext,
+                        isCurrent = { !closed }, log = ::connectionDiagnostic)
+                    mainHandler.post { if (!closed) startPrepared() }
+                } catch (error: Throwable) {
+                    if (!closed) fail(error)
+                }
+            }
+        } else startPrepared()
+    }
+
+    private fun startPrepared() {
+        synchronized(this) { if (closed) return }
         if (config.transport == CarPlayTransport.WIRED && com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.enabled(appContext)) {
             com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.controllerStart()
         }
         connectionDiagnostic("UPSTREAM_ALIGNMENT ${LocalConnectionExperiments.summary()}")
         connectionDiagnostic("start transport=${config.transport}")
-        if (!hasRequiredUsbService()) return
         videoListener?.let { listener ->
             videoGate = VideoInCarGate(
                 readParked = listener::readParked,
@@ -591,16 +645,19 @@ class CarPlayController(
         if (closed) return false
         val enteredNs = System.nanoTime()
         val session = activeSession ?: return false
-        if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled) && com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active)
+        if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive)
             return pioneerTouchQueue.submit(session, contacts, isMove, enteredNs)
+        if (com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive) {
+            val token = session.mainScreenSessionToken() ?: return false
+            return wiredTouchDispatcher.offer(session, token, contacts, isMove)
+        }
         // Switching a debug comparison must never merge across uncoalesced event tasks.
         if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) pioneerTouchQueue.barrier()
         return try {
             // Upstream serial delivery: keep every MOVE/DOWN/UP. Timing metadata does not alter HID.
             touchExecutor.execute {
-                if (com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active)
-                    session.sendTouch(contacts, enteredNs, diagnosticTouchSequence.incrementAndGet())
-                else session.sendTouch(contacts)
+                session.sendTouch(contacts)
             }
             true
         } catch (_: Exception) {
@@ -739,7 +796,8 @@ class CarPlayController(
 
     fun sendMediaButton(index: Int): Boolean {
         if (closed) return false
-        mediaIntentRevision.incrementAndGet()
+        val revision = mediaIntentRevision.incrementAndGet()
+        debugLog("Audio playback: media command=$index revision=$revision phonePlaying=${nowPlayingSnapshot().playing}")
         val session = activeSession ?: return false
         return try {
             if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled)) pioneerTouchQueue.barrier()
@@ -754,6 +812,9 @@ class CarPlayController(
         synchronized(wirelessResourceLock) {
             if (closed) return
             closed = true
+            connectionProgress?.stop(ConnectionOutcome.CANCELLED)
+            if (config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
+                com.shilapi.xcertplay.pioneer.PioneerRootSession.finish(appContext)
             remoteGatewayConnection?.close()
             // Order cancellation with address-preference commits and generation replacement.
             wirelessGeneration.incrementAndGet()
@@ -775,6 +836,7 @@ class CarPlayController(
         availabilityPollGeneration.incrementAndGet()
         permissionPollGeneration += 1
         pioneerTouchQueue.clear()
+        wiredTouchDispatcher.close()
         touchExecutor.shutdownNow()
         tunnelExecutor.shutdownNow()
         val service = vpnService
@@ -919,7 +981,10 @@ class CarPlayController(
             playbackStatus.acceptUpdate(frame)?.let { it to (it.playing != previousPlaying) }
         }?.let { (update, playingChanged) ->
             nowPlayingListener?.invoke(update)
-            if (playingChanged) playbackListener?.invoke(update.playing)
+            if (playingChanged) {
+                debugLog("Audio playback: phonePlaying=${update.playing} mediaCommandRevision=${mediaIntentRevision.get()}")
+                playbackListener?.invoke(update.playing)
+            }
         }
     }
 
@@ -2058,6 +2123,12 @@ class CarPlayController(
         pendingUsbAdbGrants.clear()
         phase = Phase.IPHONE
         reenumerationAttempts = 0
+        usbResetInCurrentAttempt = false
+        if (config.transport == CarPlayTransport.WIRED &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(appContext) &&
+            com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(appContext) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN) {
+            com.shilapi.xcertplay.pioneer.PioneerVpnInitialization.begin(appContext, this) { !closed }
+        }
         onStatus(CarPlayStatus.DiscoveringIphone)
         checkIphoneAvailability()
     }
@@ -2071,6 +2142,7 @@ class CarPlayController(
             scheduleAvailabilityPoll(Phase.IPHONE, ::checkIphoneAvailability)
         } else {
             com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.mark("usb-discovered")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("device-detect", "COMPLETE")
             lastIphoneListing = null
             debugLog(
                 "wired iPhone discovered vid=0x${device.vendorId.toString(16)} " +
@@ -2091,16 +2163,58 @@ class CarPlayController(
         debugLog("wired iPhone not listed by Android; USB devices=[$listed]")
     }
 
+    private val usbRootGrantAttempts = mutableSetOf<String>()
+    private val pendingUsbRootGrants = mutableSetOf<String>()
+
     private fun requestIphonePermission(device: UsbDevice) {
         mainHandler.post { doRequestIphonePermission(device) }
     }
 
-    private fun doRequestIphonePermission(device: UsbDevice, allowAdbFallback: Boolean = true) {
+    private fun doRequestIphonePermission(device: UsbDevice, allowAdbFallback: Boolean = true, allowRootGrant: Boolean = true) {
         if (closed) return
         if (usbAdbGrantKey(device) in pendingUsbAdbGrants) return
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("permission-check", "COMPLETE")
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-permission", "RUNNING")
+        val rootKey = "$permissionPollGeneration:${usbAdbGrantKey(device)}"
+        if (rootKey in pendingUsbRootGrants) return
+        if (allowRootGrant && !requireUsbManager().hasPermission(device) && config.transport == CarPlayTransport.WIRED &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() &&
+            !com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.holdsRequests(appContext) &&
+            usbRootGrantAttempts.add(rootKey)) {
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("permission-request", "RUNNING")
+            pendingUsbRootGrants.add(rootKey)
+            val expectedPhase = phase
+            val expectedGeneration = permissionPollGeneration
+            onStatus(CarPlayStatus.RequestingIphonePermission)
+            connectionDiagnostic("USB permission route=PIONEER_ROOT starting node=${device.deviceName}")
+            executor.execute {
+                val result = runCatching {
+                    com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.grantForConnection(appContext, device) {
+                        !closed && phase == expectedPhase && permissionPollGeneration == expectedGeneration
+                    }
+                }
+                mainHandler.post {
+                    pendingUsbRootGrants.remove(rootKey)
+                    if (closed || phase != expectedPhase || permissionPollGeneration != expectedGeneration) return@post
+                    val live = requireUsbManager().deviceList[device.deviceName]
+                    if (live == null || live.deviceId != device.deviceId) {
+                        connectionDiagnostic("USB permission route=PIONEER_ROOT stale attachment; rediscover")
+                        checkIphoneAvailability()
+                        return@post
+                    }
+                    connectionDiagnostic("USB permission route=PIONEER_ROOT result=" +
+                        (result.getOrNull()?.optString("verdict") ?: result.exceptionOrNull()?.javaClass?.simpleName))
+                    // The app process rechecks permission; failure continues through existing consent routes.
+                    doRequestIphonePermission(live, allowAdbFallback, allowRootGrant = false)
+                }
+            }
+            return
+        }
         try {
             when (val request = iphoneHost.requestPermission(device, allowAdbFallback)) {
                 is IphoneUsbHost.PermissionRequest.AlreadyGranted -> {
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-permission",
+                        if (rootKey in usbRootGrantAttempts) "COMPLETE" else "REUSED")
                     debugLog("wired iPhone USB permission already granted")
                     permissionGrant.set(false)
                     onIphonePermission(IphoneUsbHost.PermissionResult.Granted(request.device))
@@ -2167,14 +2281,25 @@ class CarPlayController(
             is IphoneUsbHost.PermissionResult.Granted -> {
                 // The system broadcast and the polling fallback can both observe the grant.
                 if (!permissionGrant.compareAndSet(false, true)) return
+                if (com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.snapshot().none { it.id == "usb-permission" && it.state == "REUSED" })
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-permission", "COMPLETE")
+                com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("permission-request", "COMPLETE")
                 debugLog("wired iPhone USB permission granted")
                 permissionPollGeneration++
                 when (phase) {
                     Phase.REENUMERATION, Phase.IPHONE -> {
                         val configuration = IphoneCarPlayConfiguration.find(result.device)
                         val carPlayMode = configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true
-                        val sessionAlreadyStarted = WiredSessionMemory.startedOn(result.device.deviceName) ||
-                            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.startedOnThisBoot(appContext, result.device.deviceName)
+                        // Once this attempt has reset the stale enumeration, the ready CarPlay
+                        // configuration is the result of that reset. Remembering the old session
+                        // must not force a second mode transition and another 1-2 second wait.
+                        val sessionAlreadyStarted = WiredConfigurationAction.sessionNeedsTransition(usbResetInCurrentAttempt) {
+                            WiredSessionMemory.startedOn(result.device.deviceName) ||
+                                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.startedOnThisBoot(
+                                    appContext,
+                                    result.device.deviceName,
+                                )
+                        }
                         val action = WiredConfigurationAction.choose(
                             found = configuration != null,
                             carPlayMode = carPlayMode,
@@ -2260,7 +2385,7 @@ class CarPlayController(
             com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.startedOnThisBoot(appContext, device.deviceName)
         if (fallbackAfterRejection && usedEnumeration &&
             com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() &&
-            !com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active &&
+            !com.shilapi.xcertplay.pioneer.PioneerWiredSession.active && !com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active &&
             IphoneCarPlayConfiguration.find(device)?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true) {
             // Two real reconnects confirmed 0x52 is accepted without detaching this used node.
             // Reset it immediately rather than paying the same 2.5 second futile wait each time.
@@ -2307,13 +2432,15 @@ class CarPlayController(
         executor.execute {
             val reset = runCatching {
                 check(!closed && phase == Phase.REENUMERATION && attempt == reenumerationAttempts &&
-                    generation == availabilityPollGeneration.get() && !com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active) { "USB reset requires stopped data paths" }
+                    generation == availabilityPollGeneration.get() && !com.shilapi.xcertplay.pioneer.PioneerWiredSession.active &&
+                    !com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active) { "USB reset requires stopped data paths" }
                 val connection = requireUsbManager().openDevice(previous)
                     ?: error("Could not open iPhone for reconnect reset")
                 try { com.shilapi.xcertplay.pioneer.PioneerUsbNative.resetDevice(connection.fileDescriptor) }
                 finally { connection.close() }
             }
             connectionDiagnostic("USB_RECONNECT_RESET elapsedMs=$elapsed rc=${reset.getOrNull()} error=${reset.exceptionOrNull()?.javaClass?.simpleName}")
+            if (reset.isSuccess) usbResetInCurrentAttempt = true
             // ENODEV may be the expected detach; the new enumeration is the success criterion.
             mainHandler.post {
                 if (!closed && phase == Phase.REENUMERATION && attempt == reenumerationAttempts &&
@@ -2401,17 +2528,30 @@ class CarPlayController(
 
     private fun openDataPaths(device: UsbDevice) {
         if (closed) return
+        try { com.shilapi.xcertplay.network.NativeNcmLease.requireReleased(appContext) }
+        catch (error: Throwable) { fail(error); return }
         phase = Phase.DATAPATHS
         wiredDeviceName = device.deviceName
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
         onStatus(CarPlayStatus.OpeningDataPaths)
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-open", "RUNNING")
+        com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-interfaces", "RUNNING")
         iphoneHost.openIap2UsbSessionAsync(device, executor) { result ->
             when (result) {
                 is IphoneUsbHost.Iap2SessionResult.Connected -> {
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-open", "COMPLETE")
+                    com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("usb-interfaces", "COMPLETE")
                     try {
-                        val ncm = openNcm(device)
-                        runStack(result.session, ncm)
+                        val native = if (config.nativeNcmEnabled)
+                            com.shilapi.xcertplay.network.NativeNcmLease.open(appContext, device, config.linkLocal,
+                                isCurrent = { !closed && wiredDeviceName == device.deviceName },
+                                log = ::connectionDiagnostic, onError = { error ->
+                                    runCatching { vpnService?.detach() }
+                                    if (!closed) fail(error)
+                                }) else null
+                        val ncm = if (native == null) openNcm(device) else null
+                        runStack(result.session, ncm, native)
                     } catch (error: Throwable) {
                         result.session.close()
                         fail(error)
@@ -2441,7 +2581,8 @@ class CarPlayController(
             diagnosticClaim = com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.claimOverride(appContext, ::connectionDiagnostic))
     }
 
-    private fun runStack(usbSession: Iap2UsbSession, ncm: NcmUsbBridge) {
+    private fun runStack(usbSession: Iap2UsbSession, ncm: NcmUsbBridge?,
+        native: com.shilapi.xcertplay.network.NativeNcmLease? = null) {
         phase = Phase.CONTROL
         val interfacesReadyNs = System.nanoTime()
         var pairCompletedNs = 0L
@@ -2466,6 +2607,7 @@ class CarPlayController(
             debugLog("wired USBMUX host opened")
             onStatus(CarPlayStatus.Pairing)
             val pairingClient = LockdownPairingClient(mux)
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("pair", "RUNNING")
             val savedPairRecord = loadPairRecord()
             var pairRecord = savedPairRecord ?: pairNewRecord(pairingClient)
             debugLog(
@@ -2476,6 +2618,8 @@ class CarPlayController(
                 },
             )
             pairCompletedNs = System.nanoTime()
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("pair", "COMPLETE")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("authenticate", "RUNNING")
             onStatus(CarPlayStatus.ConnectingControl)
             val carKitClient = LockdownCarKitClient(mux)
             // syslog_relay transfers the whole phone log before filtering. It competes with USBMUX
@@ -2579,6 +2723,7 @@ class CarPlayController(
             ownedCsm = csm
             this.csm = csm
             debugLog("wired iAP2 CSM channel opened")
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("authenticate", "COMPLETE")
 
             var wiredSessionEstablished = false
             var wiredAttemptTimedOut = false
@@ -2598,7 +2743,7 @@ class CarPlayController(
                             wiredAttemptTimedOut = true
                             debugLog(
                                 "wired start: no AirPlay session ${WiredStartWatchdog.TIMEOUT_MILLIS / 1000} s " +
-                                    "after carplay-start-session; NCM ${ncm.trafficSummary(watchedAirPlayPort)}",
+                                    "after carplay-start-session; NCM ${ncm?.trafficSummary(watchedAirPlayPort) ?: "native NCM"}",
                             )
                             fail(IphoneUsbException.TimedOut("The iPhone did not open CarPlay over USB in time"))
                         }
@@ -2622,9 +2767,18 @@ class CarPlayController(
                     })
                 }
             }
-            val ncmHostMac = ncm.hostMac ?: config.hostMac
+            val ncmHostMac = native?.hostMac ?: ncm?.hostMac ?: config.hostMac
             debugLog("ncm using hostMac=${ncmHostMac.macString()}")
-            if (!attachVpn(ncm, ncmHostMac, wiredListener)) {
+            if (native != null) {
+                onStatus(CarPlayStatus.AttachingNetwork)
+                val service = awaitVpnService() ?: throw IphoneUsbException.DeviceUnavailable("Could not bind AirPlay service")
+                when (val result = service.attachNative(native, airPlayConfig, identity, pairings,
+                    mfiSession?.client, wiredListener, media)) {
+                    CarPlayVpnService.AttachResult.Started -> Unit
+                    is CarPlayVpnService.AttachResult.Failed -> throw IphoneUsbException.DeviceUnavailable(result.message)
+                    else -> throw IphoneUsbException.DeviceUnavailable("Native NCM attachment already owned")
+                }
+            } else if (!attachVpn(requireNotNull(ncm), ncmHostMac, wiredListener)) {
                 throw IphoneUsbException.DeviceUnavailable("Could not attach the NCM/VPN AirPlay transport")
             }
             ncmOwnedLocally = false
@@ -2632,7 +2786,7 @@ class CarPlayController(
             lwipRuntime.milestone(lwipRuntime.sessionId,"interfaces-ready", interfacesReadyNs)?.let(::debugLog)
             lwipRuntime.milestone(lwipRuntime.sessionId,"pair-complete", pairCompletedNs)?.let(::debugLog)
             debugLog("LWIP_LINK sessionId=${lwipRuntime.sessionId} controllerAttempt=$diagnosticAttempt")
-            debugLog("wired NCM/VPN AirPlay transport attached")
+            debugLog("wired backend=${if (native != null) "NATIVE_NCM" else "EXISTING"} attached; automatic fallback disabled")
             if (closed) {
                 vpnService?.detach()
                 return
@@ -2641,7 +2795,7 @@ class CarPlayController(
             val mfi = mfiSession?.client
                 ?: throw IphoneUsbException.DeviceUnavailable("MFi coprocessor client is unavailable")
             val endpoint = Iap2WiredCarPlayEndpoint(
-                ipv6Addresses = listOf(config.linkLocal),
+                ipv6Addresses = listOf(native?.binding?.localAddress?.let { java.net.InetAddress.getByAddress(it.address).hostAddress } ?: config.linkLocal),
                 airPlayPort = vpnService?.boundPort() ?: airPlayConfig.port,
                 publicKey = identity.publicKeyHex,
                 sourceVersion = airPlayConfig.sourceVersion,
@@ -2654,7 +2808,9 @@ class CarPlayController(
                     "location=${config.identification.locationInformationEnabled} " +
                     "vehicleStatus=${config.identification.vehicleStatusEnabled}",
             )
+            com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session-auth", "RUNNING")
             val result = Iap2WiredControlClient(csm, Iap2MfiAuthenticationClient(mfi)).run(
+                onAuthenticated = { com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("session-auth", "COMPLETE") },
                 identification = config.identification,
                 endpoint = endpoint,
                 availableCurrentMilliAmps = config.availableCurrentMilliAmps,
@@ -2680,15 +2836,15 @@ class CarPlayController(
                     if (stage != null) runtime.milestone(runtime.sessionId, stage)?.let(::debugLog)
                 },
                 maxStartRequests = if (LocalConnectionExperiments.WIRED_START_REQUEST_RETRIES &&
-                    com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(appContext)) 4 else Int.MAX_VALUE,
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(appContext)) 4 else Int.MAX_VALUE,
                 onStartSessionSent = {
                     startWatchdog.startSessionSent()
                     connectionProgress?.sessionRequested()
                 },
                 retryNetworkReady = {
                     LocalConnectionExperiments.WIRED_START_REQUEST_RETRIES &&
-                    com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.active &&
-                        !com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.tcpAccepted
+                    com.shilapi.xcertplay.pioneer.PioneerWiredSession.adaptationActive &&
+                        com.shilapi.xcertplay.pioneer.PioneerWiredSession.current?.controlAccepted == false
                 },
             )
             onStatus(
@@ -2709,7 +2865,10 @@ class CarPlayController(
                 if (csm === ownedCsm) csm = null
                 if (mux === ownedMux) mux = null
             }
-            if (ncmOwnedLocally) ncm.close()
+            if (ncmOwnedLocally) {
+                runCatching { ncm?.close() }
+                runCatching { native?.close() }.onFailure { debugLog("Native NCM cleanup unconfirmed", it) }
+            }
             runCatching { ownedCsm?.close() }
             runCatching { ownedMux?.close() }
             runCatching { usbSession.close() }
@@ -3225,6 +3384,8 @@ class CarPlayController(
                 mfi = mfiSession?.client,
                 listener = listener,
                 media = media,
+                optimizedLwip = config.optimizedLwipEnabled,
+                wiredBackend = config.wiredBackend,
             )
         } catch (error: Throwable) {
             ncm.close()
@@ -3328,6 +3489,8 @@ class CarPlayController(
     }
 
     private fun fail(error: Throwable, generation: Int? = null) {
+        if (config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
+            com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease.invalidate()
         synchronized(wirelessResourceLock) {
             if (closed || generation != null && generation != wirelessGeneration.get()) return
             val wireless = config.transport == CarPlayTransport.WIRELESS

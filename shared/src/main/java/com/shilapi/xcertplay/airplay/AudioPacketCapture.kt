@@ -6,6 +6,7 @@ import java.io.Closeable
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -68,8 +69,13 @@ class AudioPacketCapture(
                 }
             } catch (error: Exception) {
                 Log.w(TAG, "audio capture could not open type=$streamType", error)
+                runCatching { file.delete() }
                 null
             }
+        }
+        if (captureDirectory != null && output != null) {
+            synchronized(retentionLock) { activeFiles.add(file) }
+            prune(captureDirectory)
         }
     }
 
@@ -122,15 +128,54 @@ class AudioPacketCapture(
                     "audio capture stopped type=$streamType packets=$packets " +
                         "bytes=$bytesWritten file=${file.absolutePath}",
                 )
+                synchronized(retentionLock) { activeFiles.remove(file) }
+                file.parentFile?.let { prune(it) }
             }
         }
     }
 
-    private companion object {
-        const val TAG = "xcertplay-usb"
-        const val VERSION = 1
-        const val HEADER_BYTES = 16
-        const val FLUSH_INTERVAL_PACKETS = 16
-        val MAGIC = "XCAUDIO1".toByteArray(Charsets.US_ASCII)
+    companion object {
+        private const val TAG = "xcertplay-usb"
+        private const val VERSION = 1
+        private const val HEADER_BYTES = 16
+        private const val FLUSH_INTERVAL_PACKETS = 16
+        private val MAGIC = "XCAUDIO1".toByteArray(Charsets.US_ASCII)
+        private const val MAX_RETAINED_FILES = 4
+        private const val MAX_RETAINED_BYTES = 64L * 1024L * 1024L
+        private val retentionLock = Any()
+        private val activeFiles = Collections.synchronizedSet(mutableSetOf<File>())
+
+        /**
+         * Keep diagnostic captures useful without letting a forgotten debug marker fill the
+         * head unit. Files currently being written are never removed.
+         */
+        fun prune(
+            directory: File,
+            maxFiles: Int = MAX_RETAINED_FILES,
+            maxBytes: Long = MAX_RETAINED_BYTES,
+            keep: Set<File> = synchronized(retentionLock) { activeFiles.toSet() },
+        ): Int {
+            if (!directory.isDirectory) return 0
+            synchronized(retentionLock) {
+                val kept = keep.filter { it.isFile && it.parentFile == directory }.toMutableSet()
+                val candidates = directory.listFiles()
+                    ?.filter { it.isFile && it.extension.equals("xcap", true) && it !in kept }
+                    ?.sortedWith(compareByDescending<File> { it.lastModified() }.thenByDescending { it.name })
+                    ?: return 0
+                var retained = kept.size
+                var retainedBytes = kept.sumOf { it.length() }
+                var deleted = 0
+                for (file in candidates) {
+                    val length = file.length()
+                    if (retained < maxFiles && retainedBytes + length <= maxBytes) {
+                        retained += 1
+                        retainedBytes += length
+                    } else if (file.delete()) {
+                        deleted += 1
+                    }
+                }
+                return deleted
+            }
+        }
     }
 }

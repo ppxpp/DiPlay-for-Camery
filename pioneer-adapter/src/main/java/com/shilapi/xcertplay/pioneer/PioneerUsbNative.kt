@@ -11,6 +11,7 @@ object PioneerUsbNative {
     private external fun disconnectAndSelect(fd: Int, configuration: Int, interfaces: IntArray): String
     external fun bulkWriteMeasured(fd: Int, endpoint: Int, packet: ByteArray, timeoutMs: Int): LongArray
     external fun bulkWrite(fd: Int, endpoint: Int, packet: ByteArray, timeoutMs: Int): Int
+    external fun bulkWriteDirect(fd: Int, endpoint: Int, buffer: java.nio.ByteBuffer, length: Int, timeoutMs: Int, metrics: LongArray)
     external fun clearHalt(fd: Int, endpoint: Int): Int
     external fun setAlternate(fd: Int, iface: Int, alternate: Int): Int
     external fun resetDevice(fd: Int): Int

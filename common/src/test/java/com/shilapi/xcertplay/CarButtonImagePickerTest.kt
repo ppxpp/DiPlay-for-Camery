@@ -164,18 +164,28 @@ class CarButtonImagePickerTest {
         match = IntentFilter.MATCH_CATEGORY_TYPE
     }
 
-    @Test fun defaultCarButtonUsesToyotaNameAndIcon() = withHome { activity ->
+    @Test fun defaultCarButtonUsesUppercaseToyotaNameAndIcon() = withHome { activity ->
         val previousName = AirPlayPersistence.loadOemLabel(activity)
         AirPlayPersistence.saveOemLabel(activity, "")
         try {
             val prefix = activity.getString(R.string.car_button_name) + " · "
             val name = homeButtons(activity).single { it.text.toString().startsWith(prefix) }
-            assertEquals(prefix + "Toyota", name.text.toString())
+            assertEquals(prefix + "TOYOTA", name.text.toString())
 
             val icon = BitmapFactory.decodeResource(activity.resources, R.raw.ic_car_home)
             assertNotNull(icon)
             assertEquals(192, icon.width)
             assertEquals(192, icon.height)
+        } finally {
+            AirPlayPersistence.saveOemLabel(activity, previousName)
+        }
+    }
+
+    @Test fun legacyToyotaDefaultMigratesToTheNewLabel() = withHome { activity ->
+        val previousName = AirPlayPersistence.loadOemLabel(activity)
+        AirPlayPersistence.saveOemLabel(activity, "Toyota")
+        try {
+            assertEquals("TOYOTA", AirPlayPersistence.loadOemLabel(activity))
         } finally {
             AirPlayPersistence.saveOemLabel(activity, previousName)
         }
