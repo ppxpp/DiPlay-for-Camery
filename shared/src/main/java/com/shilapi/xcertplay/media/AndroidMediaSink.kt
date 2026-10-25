@@ -670,6 +670,11 @@ class AndroidMediaSink(
         if (before != after) onMediaAudioChanged(after)
     }
 
+    /** Diagnostics are advisory: a failing reporter must not stop microphone capture. */
+    private fun reportAudioDiagnostic(message: String) {
+        runCatching { onAudioDiagnostic(message) }
+    }
+
     @Synchronized
     override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) {
         if (microphoneClosed) return
@@ -689,7 +694,7 @@ class AndroidMediaSink(
                 budget.mtu, budget.ipv6) else config
             val wireBytes = if (effectiveConfig.codec == AudioCodecKind.LPCM)
                 (effectiveConfig.frameBytes + 36 + 8 + if (config.host is java.net.Inet4Address) 20 else 40).toString() else "VARIABLE_ENCODED"
-            onAudioDiagnostic("Microphone: packet layout rate=${effectiveConfig.sampleRate} channels=${effectiveConfig.channels} codec=${effectiveConfig.codec} requestedFrameMs=${config.frameMillis} frameMs=${effectiveConfig.frameMillis} pcmBytes=${effectiveConfig.frameBytes} ipBytes=$wireBytes mtu=${budget?.mtu} interfaceMtu=${budget?.interfaceMtu} mtuSource=${budget?.source ?: "UNCHANGED_OTHER_VEHICLE"} interface=${budget?.interfaceName}")
+            reportAudioDiagnostic("Microphone: packet layout rate=${effectiveConfig.sampleRate} channels=${effectiveConfig.channels} codec=${effectiveConfig.codec} requestedFrameMs=${config.frameMillis} frameMs=${effectiveConfig.frameMillis} pcmBytes=${effectiveConfig.frameBytes} ipBytes=$wireBytes mtu=${budget?.mtu} interfaceMtu=${budget?.interfaceMtu} mtuSource=${budget?.source ?: "UNCHANGED_OTHER_VEHICLE"} interface=${budget?.interfaceName}")
             val uplink = microphoneUplinks.computeIfAbsent(id) {
                 MicrophoneUplink(effectiveConfig, onAudioDiagnostic,
                     applicationPackage = appContext?.packageName,
@@ -703,7 +708,7 @@ class AndroidMediaSink(
             }
         } catch (error: Exception) {
             Log.e("xcertplay-usb", "microphone start failed stream=$id", error)
-            MicrophoneCaptureStats.reportStartFailure(config, error, onAudioDiagnostic)
+            MicrophoneCaptureStats.reportStartFailure(config, error, ::reportAudioDiagnostic)
             onMicrophoneStopped(id)
         }
     }
@@ -721,7 +726,7 @@ class AndroidMediaSink(
     fun startMicrophoneProbe(context: android.content.Context, choice: String) {
         check(!microphoneClosed) { "Media sink is closed" }
         check(microphoneUplinks.isEmpty()) { "Wait until the current call or Siri finishes" }
-        MicrophoneProbe.start(context.applicationContext, choice, onAudioDiagnostic)
+        MicrophoneProbe.start(context.applicationContext, choice, ::reportAudioDiagnostic)
     }
 
     private fun enterCommunicationMode(id: AudioStreamId, requestedMode: Int = AudioManager.MODE_IN_COMMUNICATION) {

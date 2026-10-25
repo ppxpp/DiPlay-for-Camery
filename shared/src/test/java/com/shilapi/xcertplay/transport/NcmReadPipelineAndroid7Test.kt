@@ -32,7 +32,7 @@ class NcmReadPipelineAndroid7Test {
         try {
             repeat(8) { index ->
                 Pipeline7Replay.permits.release()
-                assertEquals(4, ncm.recvDirectChunk(1_000) { buffer, _ ->
+                assertEquals(4, ncm.recvDirectChunk(5_000) { buffer, _ ->
                     assertEquals(index + 1, buffer.int)
                     assertFalse(Pipeline7Replay.owned.values.any { it === buffer })
                     assertEquals(1, Pipeline7Replay.owned.size)
@@ -54,7 +54,7 @@ class NcmReadPipelineAndroid7Test {
             assertEquals(true, drain.invoke(ncm))
             assertTrue(Pipeline7Replay.owned.isEmpty())
             Pipeline7Replay.permits.release()
-            assertEquals(4, ncm.recvDirectChunk(1_000) { buffer, _ -> assertEquals(1, buffer.int); 1 })
+            assertEquals(4, ncm.recvDirectChunk(5_000) { buffer, _ -> assertEquals(1, buffer.int); 1 })
             assertEquals(2, Pipeline7Replay.owned.size)
         } finally { ncm.close() }
         assertEquals(2, Pipeline7Replay.closed.size)

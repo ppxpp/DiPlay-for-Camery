@@ -103,6 +103,10 @@ class SettingsBackupServer(
         closed = true
         runCatching { server?.close() }
         server = null
+        // Rebinding the typed port can fail until the accept loop releases the old listener.
+        thread?.takeIf { it !== Thread.currentThread() }?.let { worker ->
+            runCatching { worker.join(ACCEPT_POLL_MILLIS + 250L) }
+        }
         thread = null
         connections?.shutdown()
         connections = null

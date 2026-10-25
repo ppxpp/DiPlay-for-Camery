@@ -92,6 +92,25 @@ function isManifest(value: unknown): value is StoredManifest {
   });
 }
 
+type ManifestLoad =
+  | { kind: "ok"; stored: StoredManifest }
+  | { kind: "missing" }
+  | { kind: "invalid" };
+
+async function loadManifest(env: Env, key: string): Promise<ManifestLoad> {
+  const object = await env.META.get(key);
+  if (!object) return { kind: "missing" };
+
+  let stored: unknown;
+  try {
+    stored = await object.json();
+  } catch {
+    return { kind: "invalid" };
+  }
+  if (!isManifest(stored) || !isManagedManifest(stored)) return { kind: "invalid" };
+  return { kind: "ok", stored };
+}
+
 export async function latestManifestResponse(
   request: Request,
   env: Env,
@@ -114,21 +133,57 @@ export async function latestManifestResponse(
   // channel choice. New clients always send their client id, including the
   // persisted fallback when Android ID is unavailable.
   const legacyStable = requestedChannel === "stable" && !clientId;
-  const channel = legacyStable ? "beta" : requestedChannel;
 
-  const object = await env.META.get(`apps/${appId}/${platform}/${channel}/latest.json`);
-  if (!object) return json({ error: "not_found" }, 404);
+  let channel = requestedChannel;
+  let stored: StoredManifest;
 
-  let stored: unknown;
-  try {
-    stored = await object.json();
-  } catch {
-    return json({ error: "invalid_manifest" }, 502);
+  if (legacyStable) {
+    // The legacy client cannot choose a channel, so serve whichever published
+    // channel carries the newer version. Equal versions keep stable first.
+    const [stable, beta] = await Promise.all([
+      loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
+      loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
+    ]);
+    const candidates: Array<{ channel: string; stored: StoredManifest }> = [];
+    for (const [candidateChannel, loaded] of [
+      ["stable", stable],
+      ["beta", beta],
+    ] as const) {
+      if (loaded.kind === "ok" && loaded.stored.management?.enabled !== false) {
+        candidates.push({ channel: candidateChannel, stored: loaded.stored });
+      }
+    }
+    if (candidates.length === 0) {
+      if (stable.kind === "invalid" || beta.kind === "invalid") {
+        return json({ error: "invalid_manifest" }, 502);
+      }
+      // The legacy client renders a 404 as a failed check. A 200 response
+      // without release fields is parsed as "no update available".
+      return json({
+        schemaVersion: 1,
+        appId,
+        platform,
+        channel: requestedChannel,
+        updateAvailable: false,
+      });
+    }
+    candidates.sort((left, right) => {
+      if (left.stored.versionCode !== right.stored.versionCode) {
+        return right.stored.versionCode - left.stored.versionCode;
+      }
+      return left.channel === "stable" ? -1 : 1;
+    });
+    channel = candidates[0].channel;
+    stored = candidates[0].stored;
+  } else {
+    const loaded = await loadManifest(env, `apps/${appId}/${platform}/${channel}/latest.json`);
+    if (loaded.kind === "missing") return json({ error: "not_found" }, 404);
+    if (loaded.kind === "invalid") return json({ error: "invalid_manifest" }, 502);
+    stored = loaded.stored;
   }
-  if (!isManifest(stored) || !isManagedManifest(stored)) return json({ error: "invalid_manifest" }, 502);
 
   const management = stored.management ?? { enabled: true, mode: "all" as const, notes: "" };
-  if (!management.enabled) return json({ error: "update_unavailable" }, 404);
+  if (!legacyStable && !management.enabled) return json({ error: "update_unavailable" }, 404);
 
   if (!legacyStable) {
     if (management.mode === "whitelist" && (!clientId || !management.ids?.includes(clientId))) {
