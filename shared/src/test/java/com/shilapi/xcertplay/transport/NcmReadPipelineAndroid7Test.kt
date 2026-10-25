@@ -8,6 +8,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -78,8 +79,9 @@ object Pipeline7Replay {
     val closed = ConcurrentHashMap.newKeySet<UsbRequest>()
     val buffers = ConcurrentHashMap.newKeySet<Int>()
     var sequence = 0 // only the single reaper writes this
+    @Volatile var connectionClosed = false
     fun reset() { submissions.clear(); permits.drainPermits(); owned.clear(); cancelled.clear()
-        closed.clear(); buffers.clear(); sequence = 0 }
+        closed.clear(); buffers.clear(); sequence = 0; connectionClosed = false }
 }
 @Implements(UsbRequest::class)
 class Pipeline7RequestShadow {
@@ -103,12 +105,22 @@ class Pipeline7RequestShadow {
 }
 @Implements(UsbDeviceConnection::class)
 class Pipeline7ConnectionShadow {
-    @Implementation fun requestWait(): UsbRequest {
-        val next = Pipeline7Replay.submissions.take()
-        Pipeline7Replay.permits.acquire()
-        if (!Pipeline7Replay.cancelled.remove(next.request)) next.buffer.putInt(++Pipeline7Replay.sequence)
-        Pipeline7Replay.owned.remove(next.request)
-        return next.request
+    @Implementation fun requestWait(): UsbRequest? {
+        while (!Pipeline7Replay.connectionClosed) {
+            val next = Pipeline7Replay.submissions.poll(10, TimeUnit.MILLISECONDS) ?: continue
+            while (!Pipeline7Replay.permits.tryAcquire(10, TimeUnit.MILLISECONDS)) {
+                if (Pipeline7Replay.connectionClosed) return null
+            }
+            if (Pipeline7Replay.connectionClosed) return null
+            if (!Pipeline7Replay.cancelled.remove(next.request)) next.buffer.putInt(++Pipeline7Replay.sequence)
+            Pipeline7Replay.owned.remove(next.request)
+            return next.request
+        }
+        return null
     }
-    @Implementation fun close() = Unit
+    @Implementation fun close() {
+        Pipeline7Replay.connectionClosed = true
+        Pipeline7Replay.submissions.clear()
+        Pipeline7Replay.owned.clear()
+    }
 }
