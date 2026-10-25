@@ -94,8 +94,8 @@ object PioneerRootSession {
             socket.soTimeout = 3000
             check(socket.peerCredentials.uid == 0 && socket.peerCredentials.pid == status.getInt("pid")) { "ROOT_INIT_PEER_CHANGED" }
             check(current()) { "ROOT_INIT_CANCELLED" }
-            NativeNcmWarmProtocol.submitTask(socket.outputStream, directory.canonicalPath)
-            NativeNcmWarmProtocol.requireAccepted(socket.inputStream)
+            PioneerRootTaskProtocol.submitTask(socket.outputStream, directory.canonicalPath)
+            PioneerRootTaskProtocol.requireAccepted(socket.inputStream)
         }
     }
 

@@ -558,6 +558,12 @@ class CarPlayController(
         com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.beginAttempt()
         com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.update("config", "COMPLETE")
         synchronized(this) { if (closed) return }
+        if (config.transport == CarPlayTransport.WIRED &&
+            (config.nativeNcmEnabled || config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM) &&
+            !com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeNcmIncluded) {
+            fail(java.io.IOException("Native NCM is not included in this build; select another wired connection method in Settings"))
+            return
+        }
         if (!hasRequiredUsbService()) return
         if (config.transport == CarPlayTransport.WIRED &&
             config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&

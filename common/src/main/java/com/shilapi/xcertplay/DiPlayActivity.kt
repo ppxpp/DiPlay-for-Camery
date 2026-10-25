@@ -1931,11 +1931,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.USB_CONNECTION,
             getString(R.string.settings_usb_connection), R.drawable.ic_dp_connection) { card ->
-            if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
-                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.entries
-                choice(card, getString(R.string.settings_wired_backend), listOf(
-                    getString(R.string.settings_wired_backend_lwip), getString(R.string.settings_native_ncm),
-                    getString(R.string.settings_wired_backend_optimized), getString(R.string.settings_wired_backend_vpn)),
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.selectorVisible &&
+                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
+                val labels = modes.map { mode -> when (mode) {
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM -> NativeNcmSettingsLabel.label(this)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
+                } }
+                choice(card, getString(R.string.settings_wired_backend), labels,
                     modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
                     markReconnectNeeded()

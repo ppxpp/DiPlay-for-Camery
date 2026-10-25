@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+apply(from = rootProject.file("gradle/native-ncm.gradle"))
+
 android {
     namespace = "com.shilapi.xcertplay.host"
     compileSdk {

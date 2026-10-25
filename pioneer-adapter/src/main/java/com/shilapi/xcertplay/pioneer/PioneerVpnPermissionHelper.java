@@ -63,7 +63,7 @@ public final class PioneerVpnPermissionHelper {
             result.put("token", token).put("helperUid", Process.myUid()).put("helperPid", Process.myPid())
                 .put("package", pkg).put("targetUid", uid).put("userId", user).put("action", action)
                 .put("helperStartupMs", entered - request.getLong("requestedAtMs"));
-            NativeNcmModule.Guard guard = () -> {
+            PioneerRootGuard guard = () -> {
                 requireLive(request, SystemClock.elapsedRealtime());
                 if (new File(candidate, "cancel").exists()) throw new IOException("VPN_TASK_CANCELLED");
                 if (!request.getString("boot").equals(readFile(new File("/proc/sys/kernel/random/boot_id"), 128).trim()))
@@ -76,7 +76,7 @@ public final class PioneerVpnPermissionHelper {
             };
             guard.check();
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("VPN_UNSUPPORTED_DEVICE");
-            PioneerNativeNcmPrewarm.requireSupportedFirmware(); // Catalog check only; never ensureLoaded().
+            PioneerFirmwareCatalog.requireSupportedFirmware(); // Catalog check only; never ensureLoaded().
             result.put("selfVpnOwner", requireNoOtherVpn(pkg, user));
             guard.check();
             String before = query(pkg, user, guard);
@@ -92,9 +92,9 @@ public final class PioneerVpnPermissionHelper {
                     Os.fchown(marker.getFD(), uid, uid);
                 }
                 guard.check();
-                NativeNcmFirewall.Result command;
-                try { command = NativeNcmCommand.run((action.equals("REVOKE") ? new String[]{"/system/bin/appops", "set", "--user", String.valueOf(user), pkg, "ACTIVATE_VPN", "ignore"} : arguments("set", pkg, user)), 1500); }
-                catch (NativeNcmFirewall.CompletionUnknown uncertain) {
+                PioneerInterfaceFirewall.Result command;
+                try { command = PioneerRootCommand.run((action.equals("REVOKE") ? new String[]{"/system/bin/appops", "set", "--user", String.valueOf(user), pkg, "ACTIVATE_VPN", "ignore"} : arguments("set", pkg, user)), 1500); }
+                catch (PioneerInterfaceFirewall.CompletionUnknown uncertain) {
                     result.put("unresolvedChild", !uncertain.childStopped);
                     throw uncertain;
                 }
@@ -119,14 +119,14 @@ public final class PioneerVpnPermissionHelper {
             if (action.equals("INSPECT")) {
                 JSONObject chains = new JSONObject();
                 for (String chain : new String[]{"CARNET_IN", "CARNET_OUT"}) {
-                    NativeNcmFirewall.Result dump = NativeNcmCommand.run(new String[]{"/system/bin/ip6tables","-t","filter","-S",chain},1200);
+                    PioneerInterfaceFirewall.Result dump = PioneerRootCommand.run(new String[]{"/system/bin/ip6tables","-t","filter","-S",chain},1200);
                     chains.put(chain,new JSONObject().put("exit",dump.exit).put("rules",dump.output));
                 }
                 result.put("firewallChains",chains);
                 try { result.put("helperOomScoreAdj", readFile(new File("/proc/self/oom_score_adj"), 128).trim()); }
                 catch (Exception error) { result.put("helperOomReadError",error.toString()); }
                 try {
-                    NativeNcmFirewall.Result logs = NativeNcmCommand.run(new String[]{"/system/bin/logcat","-d","-b","main","-b","events","-b","crash","-t","800","-v","threadtime","DiPlayVpnRoot:V","ActivityManager:I","AndroidRuntime:E","libc:F","*:S"},1000);
+                    PioneerInterfaceFirewall.Result logs = PioneerRootCommand.run(new String[]{"/system/bin/logcat","-d","-b","main","-b","events","-b","crash","-t","800","-v","threadtime","DiPlayVpnRoot:V","ActivityManager:I","AndroidRuntime:E","libc:F","*:S"},1000);
                     result.put("processExitEvents", killLines(logs.output));
                 } catch (Exception error) { result.put("processExitReadError",error.toString()); }
                 result.put("kernelExitEvents", kernelKillEvents());
@@ -145,8 +145,8 @@ public final class PioneerVpnPermissionHelper {
             Throwable cause = error instanceof java.lang.reflect.InvocationTargetException
                 ? ((java.lang.reflect.InvocationTargetException) error).getTargetException() : error;
             try {
-                if (cause instanceof NativeNcmFirewall.CompletionUnknown)
-                    result.put("unresolvedChild", !((NativeNcmFirewall.CompletionUnknown) cause).childStopped);
+                if (cause instanceof PioneerInterfaceFirewall.CompletionUnknown)
+                    result.put("unresolvedChild", !((PioneerInterfaceFirewall.CompletionUnknown) cause).childStopped);
                 result.put("code", "ERROR").put("error", cause.getClass().getSimpleName() + ": " + cause.getMessage());
             }
             catch (Exception ignored) { }
@@ -232,9 +232,9 @@ public final class PioneerVpnPermissionHelper {
         return java.util.regex.Pattern.compile("(?im)^\\s*(?:ACTIVATE_VPN|android:activate_vpn):\\s*allow(?:[;\\s]|$)")
             .matcher(output).find();
     }
-    private static String query(String pkg, int user, NativeNcmModule.Guard guard) throws Exception {
+    private static String query(String pkg, int user, PioneerRootGuard guard) throws Exception {
         guard.check();
-        NativeNcmFirewall.Result result = NativeNcmCommand.run(arguments("get", pkg, user), 1000);
+        PioneerInterfaceFirewall.Result result = PioneerRootCommand.run(arguments("get", pkg, user), 1000);
         if (result.exit != 0) throw new IOException("VPN_APPOP_QUERY_FAILED exit=" + result.exit + " " + result.output);
         return result.output;
     }

@@ -20,7 +20,7 @@ class VideoSettingsChannel(
     private val readKey: ByteArray,
     private val writeKey: ByteArray,
     private val log: (String) -> Unit,
-    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
     private val expectedPeer: InetAddress? = null,
     private val onNativeFailure: (Throwable) -> Unit = {},
 ) : Closeable {

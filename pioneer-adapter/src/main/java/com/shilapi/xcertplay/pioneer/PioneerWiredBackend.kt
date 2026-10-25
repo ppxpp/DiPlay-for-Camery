@@ -5,18 +5,20 @@ import android.content.Context
 /** Manual choice only. A failed native connection must never change this preference. */
 object PioneerWiredBackend {
     enum class Mode { LWIP, NATIVE_NCM, LWIP_OPTIMIZED, VPN }
+    val selectorVisible: Boolean get() = BuildConfig.DEBUG
+    val nativeNcmIncluded: Boolean get() = BuildConfig.NATIVE_NCM_INCLUDED
+    fun availableModes(): List<Mode> = Mode.entries.filter { it != Mode.NATIVE_NCM || nativeNcmIncluded }
+    fun requireAvailable(mode: Mode) {
+        require(mode in availableModes()) { "Native NCM is not included in this build; select another wired connection method" }
+    }
     private fun prefs(context: Context) = context.getSharedPreferences("pioneer-adapter", Context.MODE_PRIVATE)
     fun mode(context: Context): Mode {
         val value = prefs(context).getString("wired_backend", null)
-        return Mode.entries.firstOrNull { it.name == value }
-            ?: if (prefs(context).getBoolean("native_ncm_enabled", false)) Mode.NATIVE_NCM
-            else if (!prefs(context).contains("wired_backend") &&
-                context.getSharedPreferences("pioneer-debug", Context.MODE_PRIVATE).getString("network_backend", "LWIP") == "VPN") Mode.VPN
-            else Mode.LWIP
+        return availableModes().firstOrNull { it.name == value } ?: Mode.VPN
     }
     fun save(context: Context, mode: Mode) {
-        check(prefs(context).edit().putString("wired_backend", mode.name)
-            .putBoolean("native_ncm_enabled", mode == Mode.NATIVE_NCM).commit()) { "Could not save wired backend" }
+        requireAvailable(mode)
+        check(prefs(context).edit().putString("wired_backend", mode.name).commit()) { "Could not save wired backend" }
     }
     fun explicitLwip(context: Context): Boolean = prefs(context).contains("wired_backend") && mode(context) in setOf(Mode.LWIP, Mode.LWIP_OPTIMIZED)
     fun optimizedEnabled(context: Context): Boolean = mode(context) == Mode.LWIP_OPTIMIZED
@@ -24,9 +26,6 @@ object PioneerWiredBackend {
     fun usesVehicleAdaptation(context: Context): Boolean = PioneerUsbPolicy.matchesDevice() &&
         PioneerUsbPolicy.enabled(context)
 
-    fun nativeEnabled(context: Context): Boolean = mode(context) == Mode.NATIVE_NCM
+    fun nativeEnabled(context: Context): Boolean = nativeNcmIncluded && mode(context) == Mode.NATIVE_NCM
 
-    fun saveNativeEnabled(context: Context, enabled: Boolean) {
-        save(context, if (enabled) Mode.NATIVE_NCM else Mode.LWIP)
-    }
 }

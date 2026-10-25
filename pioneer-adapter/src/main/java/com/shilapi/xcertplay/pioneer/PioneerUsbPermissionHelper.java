@@ -70,7 +70,7 @@ public final class PioneerUsbPermissionHelper {
                     !request.getString("appStart").equals(processStart(pid))) throw new IOException("APP_PROCESS_CHANGED");
             };
             guard.check();
-            PioneerNativeNcmPrewarm.requireSupportedFirmware(); // Read-only firmware check, no NCM load.
+            PioneerFirmwareCatalog.requireSupportedFirmware(); // Read-only firmware check, no NCM load.
             UsbManager usb = (UsbManager) context.getSystemService(Context.USB_SERVICE);
             if (usb == null) throw new IOException("USB_SERVICE_MISSING");
             UsbDevice device = current(usb, request);

@@ -1,4 +1,6 @@
 plugins { id("com.android.library") }
+apply(from = rootProject.file("gradle/native-ncm.gradle"))
+
 android {
     namespace = "com.shilapi.xcertplay.pioneer"
     compileSdk = 37

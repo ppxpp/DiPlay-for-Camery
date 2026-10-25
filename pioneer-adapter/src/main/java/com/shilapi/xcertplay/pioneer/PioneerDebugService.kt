@@ -265,6 +265,8 @@ class PioneerDebugService : Service() {
                 send(socket, reply.put("mode", mode).put("message", "聚合计时开关立即生效；连接与错误日志继续保留"))
             }
             "native-ncm-startup" -> {
+                require(PioneerWiredBackend.selectorVisible) { "Wired backend controls are debug-only" }
+                require(PioneerWiredBackend.nativeNcmIncluded) { "Native NCM is not included in this build" }
                 require(PioneerUsbPolicy.matchesDevice())
                 fun choice(key: String): Boolean? = if (!request.has(key)) null else
                     request.getString(key).also { require(it == "ON" || it == "OFF") } == "ON"
@@ -278,6 +280,7 @@ class PioneerDebugService : Service() {
                     .put("message", "仅调整NCM启动策略；预热开关须重启应用进程后对比，不重启车机、不切换后端"))
             }
             "network-backend" -> {
+                require(PioneerWiredBackend.selectorVisible) { "Wired backend controls are debug-only" }
                 val mode = request.getString("mode")
                 val backend = PioneerWiredBackend.Mode.entries.firstOrNull { it.name == mode }
                 require(backend != null) { "mode must be LWIP, NATIVE_NCM, LWIP_OPTIMIZED or VPN" }
@@ -369,6 +372,7 @@ class PioneerDebugService : Service() {
             })
 
     private fun nativeNcmLeaseDiagnostics(): JSONArray {
+        if (!PioneerWiredBackend.nativeNcmIncluded) return JSONArray()
         val root = File(filesDir, "native-ncm")
         val records = root.listFiles().orEmpty().filter {
             it.isDirectory && it.name.matches(Regex("[0-9a-f]{32}"))
@@ -428,6 +432,8 @@ class PioneerDebugService : Service() {
             .put("networkBackend", if (PioneerWiredBackend.nativeEnabled(this)) "NATIVE_NCM"
                 else if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
+            .put("nativeNcmIncluded", PioneerWiredBackend.nativeNcmIncluded)
+            .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
             .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
             .put("vpnPermission", PioneerVpnPermissionGrant.status(this))

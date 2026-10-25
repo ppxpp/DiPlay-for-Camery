@@ -23,7 +23,7 @@ class NtpClock(
     /** The control connection's local address; its family picks the listener's wildcard. */
     private val bindAddress: InetAddress? = null,
     private val exactBindAddress: Boolean = false,
-    private val nativeBinding: com.shilapi.xcertplay.network.NativeNcmBinding? = null,
+    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
     private val expectedPeer: InetAddress? = null,
     private val onFailure: (Throwable) -> Unit = {},
 ) : Closeable {

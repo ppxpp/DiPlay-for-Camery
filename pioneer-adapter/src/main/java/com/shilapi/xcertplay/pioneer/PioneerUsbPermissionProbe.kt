@@ -61,7 +61,7 @@ object PioneerUsbPermissionProbe {
             return status(app)
         }
         check(PioneerUsbPolicy.matchesDevice()) { "Verified Pioneer firmware required" }
-        PioneerNativeNcmPrewarm.requireSupportedFirmware() // Catalog check only; no driver load.
+        PioneerFirmwareCatalog.requireSupportedFirmware() // Catalog check only; no driver load.
         val usb = app.getSystemService(UsbManager::class.java) ?: error("USB service unavailable")
         val device = selectDevice(usb.deviceList.values.toList(), node)
         val before = usb.hasPermission(device)
