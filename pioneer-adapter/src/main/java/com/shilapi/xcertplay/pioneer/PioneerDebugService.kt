@@ -432,6 +432,8 @@ class PioneerDebugService : Service() {
             .put("networkBackend", if (PioneerWiredBackend.nativeEnabled(this)) "NATIVE_NCM"
                 else if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
+            .put("usbLaunchPolicy", PioneerUsbLaunchPolicy.snapshot(this))
+            .put("sampledAtMs", System.currentTimeMillis())
             .put("nativeNcmIncluded", PioneerWiredBackend.nativeNcmIncluded)
             .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())

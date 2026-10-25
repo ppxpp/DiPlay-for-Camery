@@ -51,6 +51,7 @@ object PioneerRootSession {
                     val state = runCatching { JSONObject(file.readText()).optString("state") }.getOrNull()
                     if (finishing.get()) break
                     if (state == "READY") {
+                        PioneerUsbLaunchPolicy.rootReady(app)
                         PioneerConnectionTasks.update("root", "COMPLETE")
                         PioneerConnectionTrace.mark("root-init-ready")
                         break
