@@ -186,6 +186,20 @@ class PioneerDebugService : Service() {
                     android.os.Process.killProcess(android.os.Process.myPid())
                 }, "self-restart-probe").start()
             }
+            "navigation-hud" -> {
+                check(BuildConfig.DEBUG) { "HUD lab controls are debug-only" }
+                require(PioneerUsbPolicy.matchesDevice())
+                val action = request.optString("action", "STATUS")
+                require(action in listOf("STATUS", "OPEN", "PROBE", "METER", "CLEAR"))
+                if (action != "STATUS") {
+                    require(request.toString().length <= 4096)
+                    startActivity(Intent().setClassName(packageName, "com.shilapi.xcertplay.NavigationHudLabActivity")
+                        .putExtra("hud_debug_request", request.toString())
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                }
+                send(socket, reply.put("scheduled", action != "STATUS")
+                    .put("lab", JSONObject(PioneerDebugRuntime.navigationHudLabState)))
+            }
             "car-mic-test" -> {
                 val action = request.optString("action", "STATUS")
                 require(action in listOf("STATUS", "OPEN"))
@@ -479,6 +493,7 @@ class PioneerDebugService : Service() {
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
             .put("usbLaunchPolicy", PioneerUsbLaunchPolicy.snapshot(this))
             .put("sampledAtMs", System.currentTimeMillis())
+            .put("navigationHud", JSONObject(PioneerDebugRuntime.navigationHudState))
             .put("nativeNcmIncluded", PioneerWiredBackend.nativeNcmIncluded)
             .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
             .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())

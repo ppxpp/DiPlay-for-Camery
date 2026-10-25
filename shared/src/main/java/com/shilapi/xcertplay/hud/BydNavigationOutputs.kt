@@ -69,6 +69,7 @@ object BydNavigationOutputs {
 
     fun start(context: Context) {
         val app = context.applicationContext
+        PioneerNavigationBridge.start(app)
         useStandalone = BydStandaloneHudOutput.available(app)
         if (useStandalone) standalone.start { BydStandaloneNavigationBridge.initialize(app) }
         else {
@@ -92,6 +93,7 @@ object BydNavigationOutputs {
         }
         if (frame.messageId != BydHudRouteState.ROUTE_GUIDANCE_UPDATE &&
             frame.messageId != BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE) return
+        PioneerNavigationBridge.onFrame(frame)
         val owned = frame // Iap2Frame is immutable and defensively copies its payload.
         updateOverlay(owned)
         fceCluster.submit { FceClusterBridge.onFrame(owned) }
@@ -156,6 +158,7 @@ object BydNavigationOutputs {
 
     /** Best effort while alive; Android does not guarantee callbacks before force-stop. */
     fun endNow(preserveTurnOverlay: Boolean = false) {
+        PioneerNavigationBridge.end()
         standalone.clear(); hud.clear(); cluster.clear(); fceCluster.clear(); BydClusterSong.end(); BydCarPlayCall.end()
         // Only a wireless session replacement retains the card. Explicit controller close
         // and wired disconnect still clear it immediately.

@@ -141,6 +141,50 @@ class NavigationHudLabActivity : Activity() {
         output = TextView(this).apply { setTextIsSelectable(true); textSize = 12f }
         body.addView(output)
         record("实验页打开，未发送任何导航数据")
+        handleDebugIntent(intent)
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDebugIntent(intent)
+    }
+    private fun handleDebugIntent(intent: Intent) {
+        val raw = intent.getStringExtra("hud_debug_request") ?: return
+        if (!com.shilapi.xcertplay.pioneer.BuildConfig.DEBUG ||
+            !com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) return
+        runCatching {
+            val request = JSONObject(raw)
+            val action = request.getString("action")
+            record("REMOTE $action requestId=${request.optString("requestId").take(64)}")
+            when (action) {
+                "OPEN" -> Unit
+                "PROBE" -> probe()
+                "CLEAR" -> task { clearMeter() }
+                "METER" -> {
+                    require(directionNames.isNotEmpty()) { "Probe Meter constants first" }
+                    fun choose(view: Spinner, key: String, fallback: String) {
+                        val name = request.optString(key, fallback)
+                        val index = (0 until view.count).firstOrNull { view.getItemAtPosition(it) == name }
+                        require(index != null) { "Unsupported $key=$name" }
+                        view.setSelection(index)
+                    }
+                    choose(direction, "direction", "METER_GUIDE_DIRECTION_LEFT")
+                    choose(guideState, "guideState", "METER_GUIDE_STATE_TBT")
+                    choose(naviState, "naviState", "METER_NAVI_STATE_INGUIDE")
+                    choose(arrival, "arrival", "METER_ARRIVE_EVENT_TYPE_INVALID")
+                    choose(source, "source", "METER_NAVI_INFO_TYPE_AUTONAVI")
+                    val meters = request.optInt("distance", 300)
+                    require(meters in 0..1_000_000)
+                    distance.setText(meters.toString())
+                    road.setText(request.optString("road", "HUD测试路").take(128))
+                    val exit = request.optInt("roundabout", 0)
+                    require(exit in 0..9)
+                    roundabout.setText(exit.toString())
+                    pushMeter()
+                }
+                else -> error("Unsupported HUD action")
+            }
+        }.onFailure { record("REMOTE ERROR $it") }
     }
     private fun text(value: String) { body.addView(TextView(this).apply { text = value; textSize = 16f }) }
     private fun edit(label: String, initial: String) = EditText(this).apply {
@@ -178,6 +222,9 @@ class NavigationHudLabActivity : Activity() {
             entries.addLast("${System.currentTimeMillis()} $value")
             while (entries.size > 250) entries.removeFirst()
             output.text = entries.joinToString("\n")
+            com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.navigationHudLabState = JSONObject()
+                .put("updatedAtMs", System.currentTimeMillis())
+                .put("entries", org.json.JSONArray(entries.toList())).toString()
         }
     }
     private fun task(action: () -> Unit) {
@@ -310,7 +357,24 @@ class NavigationHudLabActivity : Activity() {
     private fun clearMeter() {
         if (!ownsMeter) { record("本页未发送 Meter，跳过全局 onMapExit"); return }
         val ctl = controllerClass
-        val result = ctl.getMethod("onMapExit").invoke(ctl.getMethod("getInstance").invoke(null))
+        val controller = ctl.getMethod("getInstance").invoke(null)
+        val infoType = Class.forName("jp.pioneer.ceam.MeterService.MeterNaviInfo")
+        val info = infoType.getConstructor().newInstance()
+        for ((setter, constant) in listOf(
+            "setNaviInfoType" to "METER_NAVI_INFO_TYPE_AUTONAVI",
+            "setNaviState" to "METER_NAVI_STATE_NOTINGUIDE",
+            "setGuideState" to "METER_GUIDE_STATE_INVALID",
+            "setGuideDir" to "METER_GUIDE_DIRECTION_INVALID",
+            "setArriveEventType" to "METER_ARRIVE_EVENT_TYPE_INVALID",
+            "setMapDrawingMode" to "METER_MAP_DRAWING_MODE_INVALID")) {
+            infoType.getMethod(setter, Int::class.javaPrimitiveType).invoke(info, ctl.getField(constant).getInt(null))
+        }
+        infoType.getMethod("setNextRdName", String::class.java).invoke(info, "")
+        infoType.getMethod("setNextRdDistance", Int::class.javaPrimitiveType).invoke(info, 0)
+        val stopped = ctl.getMethod("setNaviInfo", infoType).invoke(controller, info)
+        check(stopped == true) { "Meter stop rejected" }
+        record("停止引导=$stopped")
+        val result = ctl.getMethod("onMapExit").invoke(controller)
         if (result == true) ownsMeter = false
         record("onMapExit=$result；屏幕清除待确认")
     }
