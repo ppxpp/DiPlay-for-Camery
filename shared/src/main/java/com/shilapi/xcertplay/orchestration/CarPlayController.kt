@@ -796,7 +796,8 @@ class CarPlayController(
 
     fun sendMediaButton(index: Int): Boolean {
         if (closed) return false
-        mediaIntentRevision.incrementAndGet()
+        val revision = mediaIntentRevision.incrementAndGet()
+        debugLog("Audio playback: media command=$index revision=$revision phonePlaying=${nowPlayingSnapshot().playing}")
         val session = activeSession ?: return false
         return try {
             if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled)) pioneerTouchQueue.barrier()
@@ -980,7 +981,10 @@ class CarPlayController(
             playbackStatus.acceptUpdate(frame)?.let { it to (it.playing != previousPlaying) }
         }?.let { (update, playingChanged) ->
             nowPlayingListener?.invoke(update)
-            if (playingChanged) playbackListener?.invoke(update.playing)
+            if (playingChanged) {
+                debugLog("Audio playback: phonePlaying=${update.playing} mediaCommandRevision=${mediaIntentRevision.get()}")
+                playbackListener?.invoke(update.playing)
+            }
         }
     }
 

@@ -44,7 +44,10 @@ internal class MicrophoneUplink(
         )
     },
     private val noAudioRestartMillis: Long = NO_AUDIO_RESTART_MILLIS,
+    private val inputAudioManager: android.media.AudioManager? = null,
 ) : Closeable {
+    private val experiment = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current()
+    private val pioneerExperiment get() = vehicleMicrophoneLease != null
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
     private var portLease: Closeable? = null
     private var vehicleMicrophoneLease: PioneerMicrophoneLease? = null
@@ -52,6 +55,8 @@ internal class MicrophoneUplink(
     private val stats = MicrophoneCaptureStats(config, report = { message ->
         Log.i(TAG, message)
         onDiagnostic(message)
+    }, snapshot = { values ->
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.microphoneUplinkState = org.json.JSONObject(values).toString()
     })
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var socket: DatagramSocket? = null
@@ -92,7 +97,11 @@ internal class MicrophoneUplink(
         // and app recording. Audio type only selects processing, not microphone ownership.
         vehicleMicrophoneLease = PioneerMicrophoneLease.acquire(applicationPackage, onDiagnostic)
         val source = when {
-            vehicleMicrophoneLease != null -> MediaRecorder.AudioSource.MIC
+            vehicleMicrophoneLease != null -> when (experiment.micSource) {
+                "VOICE_RECOGNITION" -> MediaRecorder.AudioSource.VOICE_RECOGNITION
+                "VOICE_COMMUNICATION" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+                else -> MediaRecorder.AudioSource.MIC
+            }
             config.audioType == "telephony" -> telephonyMicrophoneSource(
                 speakerphoneCall = speakerphoneCall,
                 carPhoneState = PhoneAudioRoute.carPlayCallsUseCarAudio(),
@@ -133,7 +142,7 @@ internal class MicrophoneUplink(
         val bufferSize = maxOf(minBuffer * 2, config.frameBytes * 4)
         // Some head units throw on VOICE_RECOGNITION at build(); VOICE_COMMUNICATION works there.
         val nextRecorder = createRecorder(source, channelMask, bufferSize)
-            ?: if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION) {
+            ?: if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION && vehicleMicrophoneLease == null) {
                 stats.useVoiceCommunicationSource()
                 createRecorder(MediaRecorder.AudioSource.VOICE_COMMUNICATION, channelMask, bufferSize)
             } else {
@@ -170,19 +179,37 @@ internal class MicrophoneUplink(
             if (config.audioType == "telephony") {
                 echoCanceller = createEchoCanceller()
                 if (!speakerphoneCall) effects = voiceEffects(nextRecorder.audioSessionId)
+                if (pioneerExperiment && experiment.softwareAec == "ON")
+                    check(echoCanceller != null) { "Forced software AEC unavailable for negotiated format" }
+                if (pioneerExperiment && experiment.platformEffects == "ON") {
+                    check(effects.filterIsInstance<AcousticEchoCanceler>().any { it.enabled }) { "Forced platform AEC unavailable" }
+                    if (NoiseSuppressor.isAvailable()) check(effects.filterIsInstance<NoiseSuppressor>().any { it.enabled }) { "Forced platform NS unavailable" }
+                }
                 if (echoReference != null) {
                     Log.i(TAG, "microphone echo canceller enabled=${echoCanceller != null} tail=${ECHO_TAIL_MILLIS}ms")
                 }
             }
             nextRecorder.startRecording()
+            val token = runCatching { vehicleMicrophoneLease?.currentToken() }.getOrNull()
+            val mode = inputAudioManager?.mode
+            stats.environment(mapOf("testId" to experiment.testId, "configurationRevision" to experiment.revision,
+                "softwareAecActive" to (echoCanceller != null), "platformEffectsActive" to effectState(),
+                "requestedRate" to config.sampleRate, "captureRate" to nextRecorder.sampleRate,
+                "audioMode" to mode, "micToken" to token))
+            onDiagnostic("Microphone: capture environment rate=${nextRecorder.sampleRate} mode=$mode micToken=$token")
+            onDiagnostic("Audio experiment microphone: ${experiment.json()} negotiatedRate=${config.sampleRate} codec=${config.codec} source=$source")
             stats.started(routeType(nextRecorder))
-            thread = Thread({ capture(nextRecorder, nextSocket) }, "carplay-mic").apply {
-                isDaemon = true
-                start()
-            }
+            val workerLease = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.hold()
+            try {
+                thread = Thread({ capture(nextRecorder, nextSocket, workerLease) }, "carplay-mic").apply {
+                    isDaemon = true
+                    start()
+                }
+            } catch (error: Throwable) { workerLease.close(); throw error }
             true
         } catch (error: Exception) {
             Log.e(TAG, "microphone recording failed", error)
+            runCatching { onDiagnostic("Audio experiment capture rejected testId=${experiment.testId} reason=${error.message?.take(180)}") }
             stats.failure(MicrophoneFailureStage.RECORDING, error)
             release()
             false
@@ -213,10 +240,19 @@ internal class MicrophoneUplink(
             recorder.release()
             return null
         }
+        if (vehicleMicrophoneLease != null && experiment.preferredBuiltin) runCatching {
+            val builtIn = inputAudioManager?.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS)
+                ?.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_MIC }
+            if (builtIn != null) {
+                val accepted = recorder.setPreferredDevice(builtIn)
+                onDiagnostic("Microphone: Pioneer preferred built-in accepted=$accepted")
+            }
+        }.onFailure { Log.w(TAG, "Pioneer preferred microphone unavailable", it) }
         return recorder
     }
 
     private fun createEchoCanceller(): CallEchoCanceller? {
+        if (pioneerExperiment && (experiment.softwareAec == "OFF" || experiment.platformEffects == "ON")) return null
         val reference = echoReference ?: return null
         if (config.channels != 1 || config.sampleRate != reference.sampleRate) {
             Log.i(TAG, "microphone echo canceller skipped rate=${config.sampleRate} channels=${config.channels}")
@@ -225,8 +261,25 @@ internal class MicrophoneUplink(
         return echoCancellerFactory(config.frameBytes / 2, config.sampleRate, ECHO_TAIL_MILLIS)
     }
 
+    private fun effectState(): String = effects.joinToString { effect ->
+        runCatching { "${effect.descriptor.name}:${effect.enabled}" }.getOrDefault("unavailable")
+    }
+
     private fun voiceEffects(sessionId: Int): List<AudioEffect> {
-        if (PhoneAudioRoute.carPlayCallsUseCarAudio()) {
+        if (pioneerExperiment && experiment.platformEffects == "OFF") {
+            val disabled = mutableListOf<AudioEffect>()
+            try {
+                if (AcousticEchoCanceler.isAvailable()) disabled += checkNotNull(
+                    configuredEffect("AEC", false) { AcousticEchoCanceler.create(sessionId) }) { "Forced platform AEC OFF rejected" }
+                if (NoiseSuppressor.isAvailable()) disabled += checkNotNull(
+                    configuredEffect("NS", false) { NoiseSuppressor.create(sessionId) }) { "Forced platform NS OFF rejected" }
+                return disabled
+            } catch (error: Throwable) {
+                disabled.forEach(::releaseEffect)
+                throw error
+            }
+        }
+        if (PhoneAudioRoute.carPlayCallsUseCarAudio() && !(pioneerExperiment && (experiment.platformEffects == "ON" || experiment.softwareAec == "ON"))) {
             // In the car's phone audio state its own processing handles echo and noise, and was only measured
             // with the platform effects off.
             Log.i(TAG, "microphone effects left to the car's phone audio state")
@@ -277,6 +330,7 @@ internal class MicrophoneUplink(
                 val status = effect.setEnabled(enabled)
                 if (status == AudioEffect.SUCCESS && effect.enabled == enabled) {
                     Log.i(TAG, "microphone effect=$name enabled=$enabled")
+                    runCatching { onDiagnostic("Audio experiment effect=$name enabled=$enabled testId=${experiment.testId}") }
                     return effect
                 }
                 Log.w(TAG, "microphone effect=$name could not be ${if (enabled) "enabled" else "disabled"} status=$status")
@@ -298,25 +352,56 @@ internal class MicrophoneUplink(
         }
     }
 
-    private fun capture(recorder: AudioRecord, socket: DatagramSocket) {
+    private fun capture(recorder: AudioRecord, socket: DatagramSocket, workerLease: Closeable) {
         runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO) }
         val frame = ByteArray(config.frameBytes)
         val readBuffer = ByteArray(maxOf(frame.size, MIN_READ_BYTES))
         val counters = MicrophoneCounters()
-        val routeInfo = { routeType(recorder) }
+        val routeInfo = {
+            stats.environment(mapOf("requestedRate" to config.sampleRate, "captureRate" to recorder.sampleRate,
+                "testId" to experiment.testId, "configurationRevision" to experiment.revision,
+                "softwareAecActive" to (echoCanceller != null), "platformEffectsActive" to effectState(),
+                "source" to recorder.audioSource, "audioMode" to inputAudioManager?.mode,
+                "micToken" to runCatching { vehicleMicrophoneLease?.currentToken() }.getOrNull()))
+            routeType(recorder)
+        }
         var canceller = echoCanceller
-        val clock = canceller?.let { CaptureClock(config.sampleRate) }
+        var clock = canceller?.let { CaptureClock(config.sampleRate) }
         val reference = canceller?.let { ShortArray(it.frameSamples) }
         var filled = 0
         var readRestarts = 0
         var noAudioRestarts = 0
         var lastAudioNs = System.nanoTime()
+        var ownershipCheckNs = 0L
+        var ownershipRestores = 0
+        val captureStartedNs = System.nanoTime()
+        var reasserted = false
         try {
             while (running.get()) {
+                val ownershipNow = System.nanoTime()
+                val lease = vehicleMicrophoneLease
+                if (config.audioType == "telephony" && lease != null && experiment.reassertAfterStartMs > 0 && !reasserted &&
+                    ownershipNow - captureStartedNs >= experiment.reassertAfterStartMs * 1_000_000L) {
+                    reasserted = true
+                    check(lease.restoreOwnership(force = true) && restartRecording(recorder)) { "Vehicle call delayed microphone grant failed" }
+                    clock = canceller?.let { CaptureClock(config.sampleRate) }
+                    filled = 0
+                    onDiagnostic("Microphone: delayed grant completed testId=${experiment.testId}")
+                }
+                if (config.audioType == "telephony" && lease != null && experiment.ownershipRecovery && ownershipNow - ownershipCheckNs >= experiment.ownershipCheckMs * 1_000_000L) {
+                    ownershipCheckNs = ownershipNow
+                    if (!lease.ownsCurrentToken()) {
+                        check(ownershipRestores++ < experiment.ownershipMaxRestores && lease.restoreOwnership()) { "Vehicle call microphone ownership could not be restored" }
+                        check(restartRecording(recorder)) { "Vehicle call microphone restart failed" }
+                        clock = canceller?.let { CaptureClock(config.sampleRate) }
+                        filled = 0
+                        onDiagnostic("Microphone: call capture restarted after ownership change count=$ownershipRestores")
+                    }
+                }
                 stats.reading()
                 val count = recorder.read(readBuffer, 0, readBuffer.size, AudioRecord.READ_BLOCKING)
                 stats.read(count)
-                if (count > 0) clock?.read(recorder, count / 2)
+                if (count > 0) { stats.rawLevel(readBuffer, count); clock?.read(recorder, count / 2) }
                 if (count < 0) {
                     if (running.get()) {
                         Log.e(TAG, "microphone read failed code=$count")
@@ -395,7 +480,7 @@ internal class MicrophoneUplink(
         } finally {
             stats.flush(ended = true, routeType = routeInfo)
             running.set(false)
-            release()
+            try { release() } finally { workerLease.close() }
         }
     }
 
@@ -457,6 +542,11 @@ internal class MicrophoneUplink(
         echoCanceller = null
         current.close()
         if (!running.get()) return // close/release already owns all recorder effects.
+        check(!(pioneerExperiment && experiment.softwareAec == "ON")) { "Forced software AEC failed; refusing fallback to a different test strategy" }
+        if (pioneerExperiment && experiment.platformEffects == "OFF") {
+            onDiagnostic("Audio experiment: software AEC failed; platform effects remain forced OFF testId=${experiment.testId}")
+            return
+        }
         effects.filterIsInstance<NoiseSuppressor>().forEach { ns ->
             runCatching { ns.setEnabled(true) }
                 .onFailure { Log.w(TAG, "microphone platform NS could not be restored", it) }
@@ -475,6 +565,7 @@ internal class MicrophoneUplink(
             if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(recorder!!.audioSessionId) else null
         }?.let { effects = effects + it }
         Log.i(TAG, "microphone native echo processing stopped; using platform effects")
+        runCatching { onDiagnostic("Audio experiment software AEC fallback testId=${experiment.testId} effects=${effectState()}") }
     }
 
     override fun close() {

@@ -149,6 +149,14 @@ class PioneerDebugService : Service() {
                 send(socket, reply.put("format", "png"), bytes)
             }
             "status" -> send(socket, status(request.optBoolean("compact", false)).put("ok", true))
+            "audio-experiments" -> {
+                if (request.optString("action", "STATUS") in setOf("SET", "RESET")) {
+                    val host = PioneerDebugRuntime.snapshot()
+                    check(!host.optBoolean("hostStateTimeout") && !host.has("hostStateError")) { "Host state unavailable" }
+                    check(!host.optBoolean("controllerRunning") && !host.optBoolean("backgroundSession")) { "Stop CarPlay before changing audio experiments" }
+                }
+                send(socket, reply.put("audioExperiments", PioneerAudioExperiments.command(this, request)))
+            }
             "vpn-permission" -> send(socket, reply.put("vpnPermission", PioneerVpnPermissionGrant.run(
                 this, request.optString("action", "STATUS"))))
             "vpn-native" -> send(socket, reply.put(
@@ -177,6 +185,43 @@ class PioneerDebugService : Service() {
                         android.os.SystemClock.elapsedRealtime() + 3_000L, pending)
                     android.os.Process.killProcess(android.os.Process.myPid())
                 }, "self-restart-probe").start()
+            }
+            "car-mic-test" -> {
+                val action = request.optString("action", "STATUS")
+                require(action in listOf("STATUS", "OPEN"))
+                if (action == "OPEN") {
+                    val rate = request.optInt("captureRate", 16_000)
+                    val mode = request.optString("captureMode", "NORMAL")
+                    val source = request.optString("captureSource", "MIC")
+                    val gain = request.optInt("gainDb", 0)
+                    val playbackStream = request.optInt("playbackStream", if (PioneerUsbPolicy.matchesDevice() && !request.optBoolean("standardPlayback", false)) 403 else 0)
+                    require(playbackStream in listOf(0, 401, 403))
+                    require(!request.optBoolean("standardPlayback", false) || playbackStream == 0)
+                    val palMicType = request.optInt("palMicType", 0)
+                    require(palMicType in listOf(0, 200, 230))
+                    val replayFile = request.optString("replayFile", "")
+                    require(replayFile.isEmpty() || replayFile.matches(Regex("mic-[0-9]{8}-[0-9]{6}-[0-9]{3}\\.wav")))
+                    require(source in listOf("MIC", "VOICE_RECOGNITION", "VOICE_COMMUNICATION") && gain in 0..18)
+                    require(rate in listOf(16_000, 32_000, 48_000) && mode in listOf("NORMAL", "COMMUNICATION"))
+                    startActivity(Intent().setClassName(packageName, "com.shilapi.xcertplay.CarMicTestActivity")
+                        .putExtra("captureRate", rate).putExtra("captureMode", mode)
+                        .putExtra("captureSource", source).putExtra("gainDb", gain).putExtra("palMicType", palMicType)
+                        .putExtra("voiceEffects", request.optBoolean("voiceEffects", false))
+                        .putExtra("replayFile", replayFile).putExtra("playbackStream", playbackStream)
+                        .putExtra("standardPlayback", request.optBoolean("standardPlayback", false))
+                        .putExtra("stereoPlayback", request.optBoolean("stereoPlayback", true))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                }
+                val saved = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
+                    .getString("car_mic_guided_result", "{}") ?: "{}"
+                val crashFile = File(filesDir, "logs/last-crash.txt")
+                val crash = runCatching {
+                    if (crashFile.length() in 1..16_384) PioneerDebugRuntime.redact(crashFile.readText()) else null
+                }.getOrNull()
+                send(socket, reply.put("test", JSONObject(PioneerDebugRuntime.carMicTestState))
+                    .put("lastCrash", crash ?: JSONObject.NULL)
+                    .put("lastSaved", JSONObject(saved))
+                    .put("message", if (action == "OPEN") "已请求打开车机引导页；录音需点击车机确认" else "仅查询，不启动录音"))
             }
             "host-ui" -> {
                 require(PioneerUsbPolicy.matchesDevice())

@@ -82,6 +82,12 @@
             android:exported="false" android:foregroundServiceType="connectedDevice|microphone|location" />
 
         <activity
+            android:name="com.shilapi.xcertplay.CarMicTestActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Xcertplay" />
+
+        <activity
             android:name="com.shilapi.xcertplay.CarPlayHostActivity"
             android:taskAffinity="${applicationId}.carplay"
             android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"

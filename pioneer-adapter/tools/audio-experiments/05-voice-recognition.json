@@ -1,0 +1,23 @@
+{
+  "testId": "05-voice-recognition",
+  "micSource": "VOICE_RECOGNITION",
+  "callMode": "KEEP",
+  "micGrantOrder": "SOURCE_FIRST",
+  "grantDelayMs": 150,
+  "sourceDelayMs": 150,
+  "ownershipRecovery": true,
+  "ownershipCheckMs": 1000,
+  "ownershipMaxRestores": 3,
+  "preferredBuiltin": true,
+  "softwareAec": "DEFAULT",
+  "platformEffects": "DEFAULT",
+  "callStream": 402,
+  "callFocus": "TRANSIENT",
+  "blockCompanionPlay": true,
+  "muteLocalMedia": true,
+  "micIdentity": "APP",
+  "playbackIdentity": "DEFAULT",
+  "reassertAfterStartMs": 0,
+  "callSourcePolicy": "PRESERVE_PHONE",
+  "oversizePcmPacketMs": 0
+}

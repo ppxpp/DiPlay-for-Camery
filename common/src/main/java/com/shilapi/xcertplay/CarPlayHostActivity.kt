@@ -979,6 +979,11 @@ class CarPlayHostActivity : ComponentActivity() {
                 .put("carPlayNightMode", carPlayNightMode.key).put("carPlayNight", darkMode)
                 .put("vehicleNight", com.shilapi.xcertplay.pioneer.CamryDayNight.latestNight)
                 .put("microphoneProbe", com.shilapi.xcertplay.media.MicrophoneProbe.snapshot())
+                .put("audioExperiments", com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.snapshot())
+                .put("phoneMediaPlaying", controller?.nowPlayingSnapshot()?.playing)
+                .put("mediaCommandRevision", controller?.mediaCommandRevision())
+                .put("microphoneUplink", org.json.JSONObject(com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.microphoneUplinkState))
+                .put("siriTest", org.json.JSONObject(com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.siriTestState))
                 .put("diagnosticLogDropped", AsyncDiagnosticLog.droppedCount)
         }, retryVpn = { if (!vpnRootPending) vpnRootAttempted = false; requestStartupPrerequisites() }, videoGesture = ::startDebugVideoGesture, videoTap = ::debugVideoTap,
             hostUi = ::debugHostUi,
@@ -6838,6 +6843,23 @@ class CarPlayHostActivity : ComponentActivity() {
         check(!debugGestureRunning) { "Wait for timed gesture to finish" }
         val started = System.nanoTime()
         val result = when (action) {
+            "SIRI" -> controller?.requestSiri() == true
+            "SIRI_TEST" -> {
+                val runtime = com.shilapi.xcertplay.pioneer.PioneerDebugRuntime
+                runtime.siriTestState = org.json.JSONObject().put("state", "waiting-confirmation").toString()
+                appDialogBuilder().setTitle("Siri 收音测试")
+                    .setMessage("点击开始后，听到 Siri 提示音，请正常说：现在几点。无需打字反馈，我会自动检查采样和发送指标。")
+                    .setPositiveButton("开始") { _, _ ->
+                        val at = System.currentTimeMillis()
+                        val sent = controller?.requestSiri() == true
+                        runtime.siriTestState = org.json.JSONObject().put("state", if (sent) "requested" else "failed")
+                            .put("startedAtMs", at).put("sent", sent).toString()
+                        appendLog("SIRI_MIC_TEST requested=$sent atMs=$at")
+                    }.setNegativeButton("稍后") { _, _ ->
+                        runtime.siriTestState = org.json.JSONObject().put("state", "cancelled").toString()
+                    }.show()
+                true
+            }
             "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE) == true
             "AUDIO_TAKE", "AUDIO_RELEASE" -> {
                 check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice())

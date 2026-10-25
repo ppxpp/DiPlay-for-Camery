@@ -19,6 +19,9 @@ object PioneerDebugRuntime {
     @Volatile var port: Int = 0
     @Volatile var listenerState = "未启动"
     @Volatile var lastCommand = ""
+    @Volatile var carMicTestState = "{}"
+    @Volatile var microphoneUplinkState = "{}"
+    @Volatile var siriTestState = "{}"
     @Volatile var control: ((String) -> Unit)? = null
     @Volatile var hostState: (() -> JSONObject)? = null
     @Volatile var videoSettings: ((JSONObject) -> JSONObject)? = null
@@ -94,7 +97,7 @@ object PioneerDebugRuntime {
     }
 
     fun runHostUi(action: String): JSONObject {
-        require(action in listOf("AUDIO_TAKE", "AUDIO_RELEASE", "MEDIA_PAUSE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"))
+        require(action in listOf("SIRI_TEST", "SIRI", "AUDIO_TAKE", "AUDIO_RELEASE", "MEDIA_PAUSE", "SETTINGS_OPEN", "SETTINGS_CLOSE", "BACKGROUND", "FOREGROUND", "MIC_PROBE_AUTO", "MIC_PROBE_MIC", "MIC_PROBE_VOICE_RECOGNITION", "MIC_PROBE_VOICE_COMMUNICATION", "MIC_PROBE_BUILTIN_MIC", "MIC_PROBE_MIC_16K", "MIC_PROBE_MIC_16K_NORMAL", "MIC_PROBE_VOICE_COMMUNICATION_16K", "MIC_PROBE_VOICE_BUILTIN", "MIC_PROBE_PIONEER_MIC_16K", "MIC_PROBE_PIONEER_MIC_16K_NORMAL", "MIC_PROBE_CALL_PIPELINE"))
         val latch = CountDownLatch(1)
         var result: Result<JSONObject>? = null
         main.post {

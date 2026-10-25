@@ -140,7 +140,8 @@ object MicrophoneProbe {
                 port = receiver.localPort, key = ByteArray(32),
             )
             val uplink = MicrophoneUplink(config, onDiagnostic = { line -> diagnostics.add(line); report(line) },
-                applicationPackage = context.packageName)
+                applicationPackage = context.packageName,
+                inputAudioManager = context.getSystemService(android.media.AudioManager::class.java))
             try {
                 check(uplink.start()) { "Production microphone capture failed" }
                 val until = SystemClock.elapsedRealtime() + 4000
