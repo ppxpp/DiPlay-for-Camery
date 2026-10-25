@@ -135,6 +135,9 @@ jobs:
             | sed -n 's/.*="\([^"]*\)".*/\1/p')"
           APP_VERSION="$(printf '%s' "$VERSION_NAME" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
           test -n "$VERSION_NAME" || { echo "::error::Could not read versionName"; exit 1; }
+          case "$VERSION_NAME" in
+            .|..|*/*) echo "::error::versionName cannot be used as an object key: $VERSION_NAME"; exit 1 ;;
+          esac
           test -n "$VERSION_CODE" || { echo "::error::Could not read versionCode"; exit 1; }
           test "$BUILD_CHANNEL" = "$CHANNEL" || {
             echo "::error::APK update channel '$BUILD_CHANNEL' does not match publishing channel '$CHANNEL'"
@@ -196,7 +199,7 @@ jobs:
           )
           APK_SHA="$(sha256sum "$RELEASE_DIR/$APK_NAME" | awk '{print $1}')"
           APK_SIZE="$(stat -c%s "$RELEASE_DIR/$APK_NAME")"
-          ASSET_PREFIX="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/${APP_VERSION}"
+          ASSET_PREFIX="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/${VERSION_NAME}"
           jq -n \
             --arg version "$APP_VERSION" \
             --arg versionName "$VERSION_NAME" \
@@ -256,7 +259,7 @@ jobs:
             --cache-control "public, max-age=31536000, immutable" \
             --only-show-errors
           aws s3 cp "$RELEASE_DIR/latest.json" \
-            "s3://${R2_META_BUCKET}/${META_PREFIX}/releases/${APP_VERSION}.json" \
+            "s3://${R2_META_BUCKET}/${META_PREFIX}/releases/${VERSION_NAME}.json" \
             --endpoint-url "$ENDPOINT" \
             --content-type "application/json; charset=utf-8" \
             --cache-control "no-store" \
