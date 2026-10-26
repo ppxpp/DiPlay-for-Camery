@@ -1,33 +1,33 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { fetchReleases, type ChannelKey, type Release } from '../data/releases.ts';
 
-type Release = {
-  version: string;
-  versionName: string;
-  versionCode: number;
-  publishedAt: string | null;
-  notes: string;
-  artifacts: Array<{ name: string; url: string | null; size?: number }>;
-};
+const props = withDefaults(
+  defineProps<{
+    initialStable?: Release[];
+    initialBeta?: Release[];
+  }>(),
+  { initialStable: () => [], initialBeta: () => [] },
+);
 
-const channel = ref<'stable' | 'beta'>('stable');
-const releases = ref<Release[]>([]);
+const initialChannel: ChannelKey =
+  props.initialStable.length === 0 && props.initialBeta.length > 0 ? 'beta' : 'stable';
+const channel = ref<ChannelKey>(initialChannel);
+const releases = ref<Release[]>(
+  initialChannel === 'stable' ? props.initialStable : props.initialBeta,
+);
 const error = ref('');
-const loading = ref(true);
+const loading = ref(releases.value.length === 0);
 let requestId = 0;
 
-async function fetchReleases(target: 'stable' | 'beta'): Promise<Release[]> {
-  const response = await fetch(`/api/v1/apps/diplay/android/${target}/releases`, {
-    cache: 'no-store',
-  });
-  if (!response.ok) throw new Error(`请求失败（${response.status}）`);
-  return (await response.json()).releases ?? [];
-}
-
-async function load(next: 'stable' | 'beta' = channel.value, fallbackWhenEmpty = false) {
+async function load(
+  next: ChannelKey = channel.value,
+  fallbackWhenEmpty = false,
+  silent = false,
+) {
   const id = ++requestId;
   channel.value = next;
-  loading.value = true;
+  if (!silent) loading.value = true;
   error.value = '';
   try {
     let target = next;
@@ -50,7 +50,7 @@ async function load(next: 'stable' | 'beta' = channel.value, fallbackWhenEmpty =
   }
 }
 
-function setChannel(next: 'stable' | 'beta') {
+function setChannel(next: ChannelKey) {
   if (channel.value === next) return;
   void load(next);
 }
@@ -61,7 +61,9 @@ function formatPublishedAt(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-onMounted(() => load('stable', true));
+onMounted(() => {
+  void load(channel.value, true, releases.value.length > 0);
+});
 </script>
 
 <template>
@@ -178,6 +180,12 @@ onMounted(() => load('stable', true));
               </a>
               <span v-else class="btn primary btn--compact" aria-disabled="true">下载 APK</span>
             </template>
+            <a
+              class="btn secondary btn--compact"
+              :href="`/releases/${channel}/${release.versionCode}/`"
+            >
+              详情
+            </a>
           </div>
         </div>
 

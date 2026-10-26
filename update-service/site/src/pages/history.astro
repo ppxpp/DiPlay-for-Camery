@@ -4,6 +4,9 @@ import ReleaseHistory from '../components/ReleaseHistory.vue';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { site } from '../data/site.ts';
+import { fetchReleasesForBuild } from '../data/releases.ts';
+
+const initial = await fetchReleasesForBuild();
 
 const title = `历史版本 · ${site.shortName}`;
 const description = 'DiPlay 凯美瑞版历史版本，可按正式版或内测版筛选下载。';
@@ -61,7 +64,7 @@ const structuredData = {
           <p class="page-lead">已发布版本长期保留，可按正式版或内测版筛选下载。</p>
         </div>
 
-        <ReleaseHistory client:load />
+        <ReleaseHistory client:load initial-stable={initial.stable} initial-beta={initial.beta} />
       </div>
     </main>
 
