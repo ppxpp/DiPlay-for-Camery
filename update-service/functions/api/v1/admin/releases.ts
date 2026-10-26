@@ -19,11 +19,16 @@ function requestedReleaseKey(input: Record<string, unknown>): string | null {
   return value;
 }
 
+async function findSnapshotKey(bucket: R2Bucket, prefix: string, releaseKey: string): Promise<string | null> {
+  const direct = `${prefix}${releaseKey}.json`;
+  if (await readManifest(bucket, direct)) return direct;
+  // Older releases were stored under the app version instead of versionName.
+  const releases = await allReleaseManifests(bucket, prefix);
+  return releases.find(({ manifest }) => releaseKeyOf(manifest) === releaseKey)?.key ?? null;
+}
+
 async function snapshotKeyFor(bucket: R2Bucket, prefix: string, manifest: StoredManifest): Promise<string> {
-  const key = `${prefix}${releaseKeyOf(manifest)}.json`;
-  if (await readManifest(bucket, key)) return key;
-  const legacy = `${prefix}${manifest.version}.json`;
-  return legacy !== key && await readManifest(bucket, legacy) ? legacy : key;
+  return await findSnapshotKey(bucket, prefix, releaseKeyOf(manifest)) ?? `${prefix}${manifest.version}.json`;
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -56,7 +61,8 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400);
   const management = parseManagement(input.management);
   if (!management) return json({ error: "invalid_management" }, 400);
-  const releaseKeyPath = `${releasePrefix(app, platform, channel)}${releaseKey}.json`;
+  const releaseKeyPath = await findSnapshotKey(env.META, releasePrefix(app, platform, channel), releaseKey);
+  if (!releaseKeyPath) return json({ error: "release_not_found" }, 404);
   const manifest = await readManifest(env.META, releaseKeyPath);
   if (!manifest) return json({ error: "release_not_found" }, 404);
   if (version && manifest.version !== version) return json({ error: "release_not_found" }, 404);
@@ -84,7 +90,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const prefix = releasePrefix(app, platform, channel);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const previous = await readManifest(env.META, latestKey);
-  const target = await readManifest(env.META, `${prefix}${releaseKey}.json`);
+  const targetKey = await findSnapshotKey(env.META, prefix, releaseKey);
+  if (!targetKey) return json({ error: "release_not_found" }, 404);
+  const target = await readManifest(env.META, targetKey);
   if (!target) return json({ error: "release_not_found" }, 404);
   if (version && target.version !== version) return json({ error: "release_not_found" }, 404);
   if (previous && releaseKeyOf(previous) !== releaseKey) {
