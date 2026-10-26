@@ -66,6 +66,7 @@ internal class NativeNcmLease private constructor(
         File(directory, "request.json").writeText(JSONObject()
             .put("bus", bus).put("device", number).put("product", device.productId)
             .put("configuration", config.id).put("control", function.control.id).put("data", function.data.id)
+            .put("camryAdaptation", com.shilapi.xcertplay.pioneer.CamryAdaptation.requestMode())
             .put("apk", context.applicationInfo.sourceDir)
             .put("appPid", Process.myPid()).put("appStart", appProcessStart())
             .put("address", address).put("requestedAtMs", SystemClock.elapsedRealtime()).put("deadline", deadline).put("boot", bootIdentity()).toString())
@@ -313,7 +314,7 @@ internal class NativeNcmLease private constructor(
                 val processStart = File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19]
                 val command = "CLASSPATH=${quote(apk)} /system/bin/app_process " +
                     "/system/bin com.shilapi.xcertplay.pioneer.PioneerNativeNcmPrewarm " +
-                    "${quote(result.path)} ${quote(apk)} ${quote(boot)} ${Process.myPid()} $deadline ${quote(processStart)} ${if (com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.holdsRequests(context)) "" else "USB_GRANT"} " +
+                    "${quote(result.path)} ${quote(apk)} ${quote(boot)} ${Process.myPid()} $deadline ${quote(processStart)} ${if (com.shilapi.xcertplay.pioneer.PioneerUsbPermissionProbe.holdsRequests(context)) "NO_USB_GRANT" else "USB_GRANT"} ${com.shilapi.xcertplay.pioneer.CamryAdaptation.requestMode()} " +
                     "</dev/null >/dev/null 2>&1 &"
                 val service = rootService() // A missing service cannot dispatch a delayed loader.
                 val pending = File(result.path + ".request")

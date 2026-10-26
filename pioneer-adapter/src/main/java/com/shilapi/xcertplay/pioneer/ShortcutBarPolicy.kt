@@ -27,6 +27,15 @@ object ShortcutBarPolicy {
     private var attached = false
     private var foreground = false
 
+    fun adaptationChanged(context: Context) {
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { adaptationChanged(context) }
+            return
+        }
+        if (CamryAdaptation.enabled()) attach(context.applicationContext)
+        if (attached) send(context, show = !CamryAdaptation.enabled() || !foreground || !hidesBottomArrow(context))
+    }
+
     fun hidesBottomArrow(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(HIDE_KEY, true)
 
@@ -51,7 +60,7 @@ object ShortcutBarPolicy {
             when (event) {
                 Lifecycle.Event.ON_START -> {
                     foreground = true
-                    send(app, show = !hidesBottomArrow(app))
+                    if (CamryAdaptation.enabled()) send(app, show = !hidesBottomArrow(app))
                 }
                 Lifecycle.Event.ON_STOP -> {
                     foreground = false

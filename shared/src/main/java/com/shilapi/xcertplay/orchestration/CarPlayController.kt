@@ -182,6 +182,7 @@ class CarPlayController(
     val connectionProgress: ConnectionProgress? = null,
 ) : Closeable {
     init {
+        com.shilapi.xcertplay.pioneer.CamryAdaptation.initialize(context.applicationContext)
         require(!config.locationReportingEnabled || locationProvider != null) {
             "A location provider is required when location reporting is enabled"
         }

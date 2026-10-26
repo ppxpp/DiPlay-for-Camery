@@ -51,7 +51,7 @@ class PioneerVpnFirewallLease private constructor() : Closeable {
             val dir = File(root, token).apply { check(mkdir()); Os.chmod(path, 0x1c0) }
             val started = SystemClock.elapsedRealtime()
             val request = JSONObject().put("token", token).put("stableToken", stable).put("persistent", true)
-                .put("package", app.packageName).put("uid", app.applicationInfo.uid).put("apk", app.applicationInfo.sourceDir)
+                .put("camryAdaptation", CamryAdaptation.requestMode()).put("package", app.packageName).put("uid", app.applicationInfo.uid).put("apk", app.applicationInfo.sourceDir)
                 .put("boot", File("/proc/sys/kernel/random/boot_id").readText().trim()).put("appPid", Process.myPid())
                 .put("appStart", File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19])
                 .put("interface", owner.name).put("index", owner.index)

@@ -115,6 +115,7 @@ public final class PioneerNativeNcmHelper {
 
     private void configure() throws Exception {
         preparationStep("configureStartMs");
+        CamryAdaptation.INSTANCE.useRequestMode(request);
         if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("Native NCM requires the verified Pioneer firmware family");
         int bus = request.getInt("bus"), device = request.getInt("device");
         File[] entries = new File("/sys/bus/usb/devices").listFiles();

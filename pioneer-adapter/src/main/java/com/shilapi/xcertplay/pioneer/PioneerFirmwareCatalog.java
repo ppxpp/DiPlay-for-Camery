@@ -1,17 +1,14 @@
 package com.shilapi.xcertplay.pioneer;
 
-import android.os.Build;
-import android.system.Os;
 import java.io.IOException;
 
-/** Shared privileged-operation allowlist. Does not load or depend on kernel modules. */
+/** General helpers use the common model policy; only module selection checks exact firmware. */
 public final class PioneerFirmwareCatalog {
     private PioneerFirmwareCatalog() { }
     public static void requireSupportedFirmware() throws Exception {
-        String version = String.valueOf(Class.forName("android.os.SystemProperties")
-            .getMethod("get", String.class).invoke(null, "ro.product.version"));
-        requireSupported(version, Build.FINGERPRINT, Os.uname().release, Build.VERSION.SDK_INT, Os.uname().machine);
+        if (!CamryAdaptation.INSTANCE.enabled()) throw new IOException("CAMRY_ADAPTATION_DISABLED");
     }
+    /** Kernel-module selection only: a .ko must still match its exact audited kernel. */
     static void requireSupported(String version, String fingerprint, String kernel, int sdk, String machine) throws IOException {
         String expected;
         if (version.equals("1.000062_1")) expected = "4.9.17-g2b63fe51";

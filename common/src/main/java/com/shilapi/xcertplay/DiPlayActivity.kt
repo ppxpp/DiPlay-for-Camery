@@ -117,6 +117,7 @@ internal enum class SettingsCategory {
 
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
 internal enum class SettingsSection {
+    CAMRY_ADAPTATION,
     CARPLAY_CONTROLS,
     WHEEL_KEYS,
     CONNECTION_SETUP,
@@ -155,7 +156,7 @@ internal object SettingsInformationArchitecture {
         SettingsCategory.AUDIO to setOf(SettingsSection.AUDIO_ROUTING),
         SettingsCategory.NAVIGATION to setOf(SettingsSection.LOCATION, SettingsSection.BYD_NAVIGATION),
         SettingsCategory.VEHICLE to setOf(
-            SettingsSection.CARPLAY_CONTROLS,
+            SettingsSection.CAMRY_ADAPTATION,            SettingsSection.CARPLAY_CONTROLS,
             SettingsSection.WHEEL_KEYS,
             SettingsSection.CAR_BUTTON,
         ),
@@ -1812,6 +1813,32 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
+        filteredSection(content, SettingsSection.CAMRY_ADAPTATION,
+            getString(R.string.settings_camry_section), R.drawable.ic_dp_car) { card ->
+            val policy = com.shilapi.xcertplay.pioneer.CamryAdaptation
+            val status = label("", 14, MUTED)
+            fun updateStatus() {
+                val selected = policy.mode(this)
+                val enabled = when (selected) {
+                    com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.AUTO -> com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesModel()
+                    com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.ON -> true
+                    com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.OFF -> false
+                }
+                status.text = getString(if (selected == com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.AUTO) {
+                    if (enabled) R.string.settings_camry_detected else R.string.settings_camry_not_detected
+                } else if (enabled) R.string.settings_camry_enabled else R.string.settings_camry_disabled)
+            }
+            choice(card, getString(R.string.settings_camry_title), listOf(
+                getString(R.string.settings_camry_auto), getString(R.string.settings_camry_on),
+                getString(R.string.settings_camry_off)), policy.mode(this).ordinal, reconnects = false) {
+                policy.save(this, com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.entries[it])
+                updateStatus()
+                markReconnectNeeded()
+            }
+            card.addView(label(getString(R.string.settings_camry_description), 14, MUTED))
+            updateStatus()
+            card.addView(status)
+        }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
             val gestureFingers = listOf(0, 2, 3, 4)

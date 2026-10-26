@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_section">車機適配</string>
+    <string name="settings_camry_title">Camry A 導航適配</string>
+    <string name="settings_camry_description">啟用此機型的 USB、VPN、音訊、麥克風及 HUD 等適配。修改後重新連接 CarPlay 生效。</string>
+    <string name="settings_camry_auto">自動辨識（預設）</string>
+    <string name="settings_camry_on">啟用</string>
+    <string name="settings_camry_off">不啟用</string>
+    <string name="settings_camry_enabled">目前選擇：啟用適配</string>
+    <string name="settings_camry_disabled">目前選擇：不啟用適配</string>
+    <string name="settings_camry_detected">辨識結果：Camry A 導航，適配已啟用</string>
+    <string name="settings_camry_not_detected">辨識結果：未匹配 Camry A 導航，適配未啟用</string>
+</resources>

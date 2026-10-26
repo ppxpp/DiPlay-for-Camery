@@ -44,6 +44,7 @@ public final class PioneerVpnFirewallHelper {
             directory = dir;
             status.put("token", token).put("pid", Process.myPid())
                 .put("helperStartupMs",SystemClock.elapsedRealtime()-request.getLong("requestedAtMs"));
+            CamryAdaptation.INSTANCE.useRequestMode(request);
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("VPN_FIREWALL_UNSUPPORTED_DEVICE");
             PioneerFirmwareCatalog.requireSupportedFirmware();
             String name = request.getString("interface");

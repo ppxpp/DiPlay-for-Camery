@@ -37,6 +37,7 @@ public final class PioneerRootSessionHelper {
             File files = descriptor.getParentFile().getParentFile();
             PioneerVpnPermissionHelper.requirePackage(uid, app.uid, request.getString("apk"), app.sourceDir,
                 System.getenv("CLASSPATH"), files, new File(app.dataDir, "files"));
+            CamryAdaptation.INSTANCE.useRequestMode(request);
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("ROOT_INIT_UNSUPPORTED_DEVICE");
             long now = SystemClock.elapsedRealtime();
             if (request.getLong("requestedAtMs") > now || request.getLong("expiresAt") <= now ||

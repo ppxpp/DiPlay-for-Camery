@@ -27,8 +27,8 @@ object CamryDayNight {
         retryPending = false
         initialize()
     }
-    @Volatile var latestNight: Boolean? = null
-        private set
+    @Volatile private var lastNight: Boolean? = null
+    val latestNight: Boolean? get() = lastNight.takeIf { CamryAdaptation.enabled() }
 
     /** A later host opening can retry an exhausted initialization; success never registers twice. */
     fun start() {
@@ -43,6 +43,7 @@ object CamryDayNight {
     }
 
     private fun initialize() {
+        if (!CamryAdaptation.enabled()) return
         if (querying) return
         attempts++
         try {
@@ -122,8 +123,9 @@ object CamryDayNight {
     }
 
     private fun publish(night: Boolean, source: String) {
+        if (!CamryAdaptation.enabled()) return
         if (latestNight == night) return
-        latestNight = night
+        lastNight = night
         Log.i(TAG, "mode=${if (night) "night" else "day"} source=$source")
         observers.values.toList().forEach { it(night) }
     }
