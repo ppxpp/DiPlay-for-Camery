@@ -132,6 +132,25 @@ describe("admin release management", () => {
     expect(stored(bucket, LATEST_KEY).management.notes).toBe("当前版本说明");
   });
 
+  it("saves a release whose snapshot still uses the legacy version key", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}0.2.21.json`]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: OLD_NAME,
+      version: "0.2.21",
+      management: { enabled: true, mode: "all", notes: "旧版本补充说明" },
+    });
+    expect(response.status).toBe(200);
+    expect(stored(bucket, `${PREFIX}0.2.21.json`).management.notes).toBe("旧版本补充说明");
+    expect(stored(bucket, LATEST_KEY).versionName).toBe(NEW_NAME);
+  });
+
   it("rolls back to a versionName release and disables the previous snapshot", async () => {
     const bucket = memoryBucket({
       [LATEST_KEY]: manifest(NEW_NAME, 2001),
