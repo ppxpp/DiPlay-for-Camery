@@ -147,7 +147,7 @@ async function save(release: Release) {
 }
 
 async function rollback(release: Release) {
-  if (!window.confirm(`将自动更新推荐版本回撤到 ${release.versionName ?? release.version}？当前推荐版本会停止下发。`)) return;
+  if (!window.confirm(`将自动更新推荐版本设为 ${release.versionName ?? release.version}？原推荐版本会停止下发。`)) return;
   try {
     await request('/api/v1/admin/releases', {
       method: 'POST',
@@ -157,7 +157,7 @@ async function rollback(release: Release) {
         version: release.version,
       }),
     });
-    message.value = `已回撤到 ${release.versionName ?? release.version}`;
+    message.value = `已设为当前下发版本：${release.versionName ?? release.version}`;
     await load();
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : '回撤失败';
@@ -336,7 +336,7 @@ onUnmounted(() => {
                 type="button"
                 @click="rollback(release)"
               >
-                回撤到此版本
+                设为当前下发版本
               </button>
             </div>
           </header>
