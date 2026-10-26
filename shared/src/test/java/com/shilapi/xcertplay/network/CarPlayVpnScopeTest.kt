@@ -229,7 +229,11 @@ class CarPlayVpnScopeTest {
                 assertEquals(listOf("allow:${service.packageName}", "establish"), VpnScopeBoundary.calls)
                 assertNull(VpnScopeBoundary.backendAtEstablish)
                 assertReleased(service)
-            } finally { service.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }
+            } finally {
+                service.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit()
+                com.shilapi.xcertplay.pioneer.CamryAdaptation.useRequestMode(
+                    org.json.JSONObject().put("camryAdaptation", "AUTO"))
+            }
         }
     }
 
