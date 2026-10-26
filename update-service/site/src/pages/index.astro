@@ -5,6 +5,31 @@ import Hero from '../components/Hero.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { site } from '../data/site.ts';
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      name: site.name,
+      alternateName: site.shortName,
+      url: 'https://diplay.mgulu.com/',
+      inLanguage: 'zh-CN',
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: site.name,
+      alternateName: site.shortName,
+      description: site.intro,
+      url: 'https://diplay.mgulu.com/',
+      applicationCategory: 'MultimediaApplication',
+      operatingSystem: 'Android',
+      inLanguage: 'zh-CN',
+      isAccessibleForFree: true,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+    },
+  ],
+};
 ---
 
 <!doctype html>
@@ -23,6 +48,14 @@ import { site } from '../data/site.ts';
     <meta property="og:title" content={site.name} />
     <meta property="og:description" content={site.intro} />
     <meta property="og:locale" content="zh_CN" />
+    <meta property="og:url" content="https://diplay.mgulu.com/" />
+    <meta property="og:image" content="https://diplay.mgulu.com/app-icon.png" />
+    <meta property="og:image:alt" content={site.name} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={site.name} />
+    <meta name="twitter:description" content={site.intro} />
+    <link rel="canonical" href="https://diplay.mgulu.com/" />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
   </head>
   <body>
     <SiteHeader current="home" />
