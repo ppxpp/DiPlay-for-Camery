@@ -13,13 +13,14 @@ type Management = {
 };
 type Release = {
   channel: Channel;
+  releaseKey: string;
   version: string;
   versionName?: string;
   versionCode: number;
   publishedAt?: string;
   management?: Management;
 };
-type ApiRelease = Omit<Release, 'channel'>;
+type ApiRelease = Omit<Release, 'channel' | 'releaseKey'> & { releaseKey?: string };
 
 const channel = ref<ChannelFilter>('all');
 const authenticated = ref(false);
@@ -69,6 +70,7 @@ async function load() {
         nextReleases.push({
           ...release,
           channel: result.channel,
+          releaseKey: release.releaseKey ?? release.versionName ?? release.version,
           management: { enabled: true, mode: 'all', notes: '', ...release.management },
         });
       }
@@ -128,6 +130,7 @@ async function save(release: Release) {
       method: 'PUT',
       body: JSON.stringify({
         channel: release.channel,
+        releaseKey: release.releaseKey,
         version: release.version,
         management: {
           ...management,
@@ -136,7 +139,7 @@ async function save(release: Release) {
         },
       }),
     });
-    message.value = `${release.version} 已保存`;
+    message.value = `${release.versionName ?? release.version} 已保存`;
     await load();
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : '保存失败';
@@ -144,13 +147,17 @@ async function save(release: Release) {
 }
 
 async function rollback(release: Release) {
-  if (!window.confirm(`将自动更新推荐版本回撤到 ${release.version}？当前推荐版本会停止下发。`)) return;
+  if (!window.confirm(`将自动更新推荐版本回撤到 ${release.versionName ?? release.version}？当前推荐版本会停止下发。`)) return;
   try {
-    const result = await request('/api/v1/admin/releases', {
+    await request('/api/v1/admin/releases', {
       method: 'POST',
-      body: JSON.stringify({ channel: release.channel, version: release.version }),
+      body: JSON.stringify({
+        channel: release.channel,
+        releaseKey: release.releaseKey,
+        version: release.version,
+      }),
     });
-    message.value = `已回撤到 ${result.currentVersion}`;
+    message.value = `已回撤到 ${release.versionName ?? release.version}`;
     await load();
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : '回撤失败';
@@ -283,7 +290,7 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="release-list">
-        <article v-for="release in releases" :key="`${release.channel}-${release.version}`" class="release-card admin-release">
+        <article v-for="release in releases" :key="`${release.channel}-${release.releaseKey}`" class="release-card admin-release">
           <header class="release-card-head">
             <div class="release-identity">
               <span class="release-icon" aria-hidden="true">
@@ -306,7 +313,7 @@ onUnmounted(() => {
                 <div class="release-title-row">
                   <h2>{{ release.versionName ?? release.version }}</h2>
                   <span
-                    v-if="release.version === currentVersions[release.channel]"
+                    v-if="release.releaseKey === currentVersions[release.channel]"
                     class="tag tag--brand"
                   >
                     当前推荐
@@ -324,7 +331,7 @@ onUnmounted(() => {
 
             <div class="release-actions">
               <button
-                v-if="release.version !== currentVersions[release.channel]"
+                v-if="release.releaseKey !== currentVersions[release.channel]"
                 class="btn secondary btn--compact"
                 type="button"
                 @click="rollback(release)"

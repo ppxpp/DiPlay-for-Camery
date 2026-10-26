@@ -3,6 +3,28 @@ import type { Env, StoredManifest } from "../../../_shared/management";
 import { allReleaseManifests, json, parseManagement, readManifest, releasePrefix, writeManifest } from "../../../_shared/management";
 
 const SEGMENT = /^[a-z0-9][a-z0-9-]{0,63}$/;
+// Snapshot keys use the display version when present, so releases that share an
+// app version stay independently addressable.
+const RELEASE_KEY = /^[^\u0000-\u001f\u007f/\\]{1,200}$/;
+
+function releaseKeyOf(manifest: StoredManifest): string {
+  return manifest.versionName ?? manifest.version;
+}
+
+function requestedReleaseKey(input: Record<string, unknown>): string | null {
+  const value = typeof input.releaseKey === "string" ? input.releaseKey
+    : typeof input.versionName === "string" ? input.versionName
+      : typeof input.version === "string" ? input.version : "";
+  if (!RELEASE_KEY.test(value) || value === "." || value === "..") return null;
+  return value;
+}
+
+async function snapshotKeyFor(bucket: R2Bucket, prefix: string, manifest: StoredManifest): Promise<string> {
+  const key = `${prefix}${releaseKeyOf(manifest)}.json`;
+  if (await readManifest(bucket, key)) return key;
+  const legacy = `${prefix}${manifest.version}.json`;
+  return legacy !== key && await readManifest(bucket, legacy) ? legacy : key;
+}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
@@ -14,7 +36,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const prefix = releasePrefix(app, platform, channel);
   const current = await readManifest(env.META, `apps/${app}/${platform}/${channel}/latest.json`);
   const releases = await allReleaseManifests(env.META, prefix);
-  return json({ currentVersion: current?.version ?? null, releases: releases.map(({ manifest }) => manifest) });
+  return json({
+    currentVersion: current ? releaseKeyOf(current) : null,
+    releases: releases.map(({ manifest }) => ({ ...manifest, releaseKey: releaseKeyOf(manifest) })),
+  });
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
@@ -27,18 +52,20 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const platform = typeof input.platform === "string" ? input.platform : "android";
   const channel = typeof input.channel === "string" ? input.channel : "stable";
   const version = typeof input.version === "string" ? input.version : "";
-  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !/^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$/.test(version)) return json({ error: "invalid_release" }, 400);
+  const releaseKey = requestedReleaseKey(input);
+  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400);
   const management = parseManagement(input.management);
   if (!management) return json({ error: "invalid_management" }, 400);
-  const releaseKey = `${releasePrefix(app, platform, channel)}${version}.json`;
-  const manifest = await readManifest(env.META, releaseKey);
+  const releaseKeyPath = `${releasePrefix(app, platform, channel)}${releaseKey}.json`;
+  const manifest = await readManifest(env.META, releaseKeyPath);
   if (!manifest) return json({ error: "release_not_found" }, 404);
+  if (version && manifest.version !== version) return json({ error: "release_not_found" }, 404);
   manifest.management = management;
-  await writeManifest(env.META, releaseKey, manifest);
+  await writeManifest(env.META, releaseKeyPath, manifest);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const latest = await readManifest(env.META, latestKey);
-  if (latest?.version === version) await writeManifest(env.META, latestKey, manifest);
-  return json({ ok: true, release: manifest });
+  if (latest && releaseKeyOf(latest) === releaseKey) await writeManifest(env.META, latestKey, manifest);
+  return json({ ok: true, releaseKey, release: manifest });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -51,17 +78,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const platform = typeof input.platform === "string" ? input.platform : "android";
   const channel = typeof input.channel === "string" ? input.channel : "stable";
   const version = typeof input.version === "string" ? input.version : "";
-  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !/^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$/.test(version)) return json({ error: "invalid_release" }, 400);
+  const releaseKey = requestedReleaseKey(input);
+  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400);
 
+  const prefix = releasePrefix(app, platform, channel);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const previous = await readManifest(env.META, latestKey);
-  const target = await readManifest(env.META, `${releasePrefix(app, platform, channel)}${version}.json`);
+  const target = await readManifest(env.META, `${prefix}${releaseKey}.json`);
   if (!target) return json({ error: "release_not_found" }, 404);
-  if (previous && previous.version !== target.version) {
-    const previousKey = `${releasePrefix(app, platform, channel)}${previous.version}.json`;
+  if (version && target.version !== version) return json({ error: "release_not_found" }, 404);
+  if (previous && releaseKeyOf(previous) !== releaseKey) {
     const previousSnapshot: StoredManifest = { ...previous, management: { ...(previous.management ?? { enabled: false, mode: "all", notes: "" }), enabled: false } };
-    await writeManifest(env.META, previousKey, previousSnapshot);
+    await writeManifest(env.META, await snapshotKeyFor(env.META, prefix, previous), previousSnapshot);
   }
   await writeManifest(env.META, latestKey, target);
-  return json({ ok: true, currentVersion: target.version, previousVersion: previous?.version ?? null });
+  return json({ ok: true, currentVersion: releaseKey, previousVersion: previous ? releaseKeyOf(previous) : null });
 };

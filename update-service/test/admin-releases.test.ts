@@ -1,0 +1,154 @@
+import { describe, expect, it } from "vitest";
+import { createSession, sessionCookieName } from "../functions/_shared/admin-auth";
+import { onRequestGet, onRequestPost, onRequestPut } from "../functions/api/v1/admin/releases";
+
+const ADMIN_SECRET = "test-session-secret";
+const ADMIN_USERNAME = "admin";
+const BASE_URL = "https://upd.example.com/api/v1/admin/releases";
+const PREFIX = "apps/diplay/android/beta/releases/";
+const LATEST_KEY = "apps/diplay/android/beta/latest.json";
+const OLD_NAME = "0.2.21_凯美瑞A导航适配版_0.2.0";
+const NEW_NAME = "0.2.21_凯美瑞A导航适配版_0.2.1";
+
+function manifest(versionName: string, versionCode: number, notes = "") {
+  return {
+    schemaVersion: 1,
+    version: "0.2.21",
+    versionName,
+    versionCode,
+    publishedAt: "2026-10-26T07:39:36Z",
+    mandatory: false,
+    management: { enabled: false, mode: "all", notes },
+    artifacts: [{
+      name: `${versionName}.apk`,
+      arch: "universal",
+      key: `${PREFIX}${versionName}/${versionName}.apk`,
+      checksumsKey: `${PREFIX}${versionName}/SHA256SUMS.txt`,
+      sha256: "a".repeat(64),
+      size: 1,
+    }],
+  };
+}
+
+function memoryBucket(initial: Record<string, unknown>) {
+  const store = new Map(Object.entries(initial).map(([key, value]) => [key, JSON.stringify(value)]));
+  return {
+    store,
+    get: async (key: string) => store.has(key)
+      ? { key, json: async () => JSON.parse(store.get(key)!) }
+      : null,
+    put: async (key: string, body: string) => { store.set(key, body); },
+    list: async ({ prefix }: { prefix: string }) => ({
+      objects: [...store.keys()].filter((key) => key.startsWith(prefix)).sort().map((key) => ({ key })),
+      truncated: false,
+    }),
+  };
+}
+
+async function context(bucket: ReturnType<typeof memoryBucket>) {
+  const env = {
+    META: bucket as never,
+    ASSET_BASE_URL: "https://dl.example.com",
+    ADMIN_USERNAME,
+    ADMIN_PASSWORD_HASH: "unused",
+    ADMIN_SESSION_SECRET: ADMIN_SECRET,
+  };
+  const token = await createSession(env as never);
+  return {
+    env: env as never,
+    headers: { cookie: `${sessionCookieName}=${token}`, "content-type": "application/json" },
+  };
+}
+
+function call(handler: typeof onRequestPut, env: never, headers: Record<string, string>, body?: unknown) {
+  const init: RequestInit = { method: "GET", headers };
+  if (body !== undefined) {
+    init.method = "PUT";
+    init.body = JSON.stringify(body);
+  }
+  return handler({ request: new Request(`${BASE_URL}?channel=beta`, init), env, params: {} } as never);
+}
+
+function stored(bucket: ReturnType<typeof memoryBucket>, key: string) {
+  return JSON.parse(bucket.store.get(key)!);
+}
+
+describe("admin release management", () => {
+  it("exposes the versionName release key and uses it for the current release", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${OLD_NAME}.json`]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestGet as never, env, headers);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.currentVersion).toBe(OLD_NAME);
+    expect(body.releases.map((release: { releaseKey: string }) => release.releaseKey).sort())
+      .toEqual([NEW_NAME, OLD_NAME].sort());
+  });
+
+  it("saves a non-current release under its own key without touching latest", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${OLD_NAME}.json`]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: NEW_NAME,
+      version: "0.2.21",
+      management: { enabled: true, mode: "all", notes: "新版本说明" },
+    });
+    expect(response.status).toBe(200);
+
+    expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
+      .toEqual({ enabled: true, mode: "all", notes: "新版本说明" });
+    expect(stored(bucket, `${PREFIX}${OLD_NAME}.json`).management)
+      .toEqual({ enabled: false, mode: "all", notes: "" });
+    expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
+    expect(stored(bucket, LATEST_KEY).management.notes).toBe("");
+  });
+
+  it("updates the latest pointer only when the edited release is current", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${OLD_NAME}.json`]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: NEW_NAME,
+      version: "0.2.21",
+      management: { enabled: true, mode: "all", notes: "当前版本说明" },
+    });
+    expect(response.status).toBe(200);
+    expect(stored(bucket, LATEST_KEY).management.notes).toBe("当前版本说明");
+  });
+
+  it("rolls back to a versionName release and disables the previous snapshot", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${OLD_NAME}.json`]: manifest(OLD_NAME, 2000, "旧版本说明"),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPost as never, env, headers, {
+      channel: "beta",
+      releaseKey: OLD_NAME,
+      version: "0.2.21",
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.currentVersion).toBe(OLD_NAME);
+    expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
+    expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management.enabled).toBe(false);
+  });
+});
