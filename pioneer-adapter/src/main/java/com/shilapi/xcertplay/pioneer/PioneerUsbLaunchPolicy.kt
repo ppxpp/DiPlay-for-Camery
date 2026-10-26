@@ -9,6 +9,17 @@ object PioneerUsbLaunchPolicy {
     private const val ALIAS = "com.shilapi.xcertplay.IphoneUsbAttachActivity"
     private const val RECEIVER = "com.shilapi.xcertplay.PioneerUsbAttachReceiver"
 
+    fun restoreSystemLaunchIfDisabled(context: Context) {
+        if (CamryAdaptation.enabled()) return
+        val manager = context.packageManager
+        runCatching {
+            manager.setComponentEnabledSetting(ComponentName(context.packageName, ALIAS),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+            manager.setComponentEnabledSetting(ComponentName(context.packageName, RECEIVER),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        }
+    }
+
     @Synchronized fun rootReady(context: Context) {
         if (!PioneerUsbPolicy.matchesDevice() || enabled(context)) return
         val manager = context.packageManager

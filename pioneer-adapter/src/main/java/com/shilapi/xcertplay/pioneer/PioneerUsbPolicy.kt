@@ -6,21 +6,19 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.os.Build
 
-/** Narrow firmware default, with an explicit override for device comparison. */
+/** Common adaptation gate; raw model detection is kept separate from the user decision. */
 object PioneerUsbPolicy {
-    fun matchesDevice(): Boolean = Build.VERSION.SDK_INT == 25 &&
+    fun matchesDevice(): Boolean = CamryAdaptation.enabled()
+
+    fun matchesModel(): Boolean = Build.VERSION.SDK_INT == 25 &&
         Build.MODEL.replace('-', '_').equals("SABRESD_MX6DQ", true) &&
         Build.DEVICE.startsWith("tamago", ignoreCase = true)
 
-    fun enabled(context: Context): Boolean = when (prefs(context).getString("usb_mode", "AUTO")) {
-        "ON" -> true
-        "OFF" -> false
-        else -> matchesDevice()
-    }
-    fun mode(context: Context): String = prefs(context).getString("usb_mode", "AUTO")!!
+    fun enabled(context: Context): Boolean = CamryAdaptation.enabled()
+    fun mode(context: Context): String = CamryAdaptation.mode(context).name
     fun setMode(context: Context, mode: String) {
         require(mode in listOf("AUTO", "ON", "OFF")) { "usb_mode must be AUTO, ON or OFF" }
-        prefs(context).edit().putString("usb_mode", mode).apply()
+        CamryAdaptation.save(context, CamryAdaptation.Mode.valueOf(mode))
     }
     fun configurationMode(context: Context): String = prefs(context).getString("configuration_mode", "REINITIALIZE")!!
     fun setConfigurationMode(context: Context, mode: String) {
