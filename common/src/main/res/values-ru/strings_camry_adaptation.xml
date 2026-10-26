@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_section">Интеграция с головным устройством</string>
+    <string name="settings_camry_title">Адаптация Camry A Navigation</string>
+    <string name="settings_camry_description">Включает USB, VPN, звук, микрофон и HUD для этой модели. После изменения переподключите CarPlay.</string>
+    <string name="settings_camry_auto">Автоопределение (по умолчанию)</string>
+    <string name="settings_camry_on">Включить</string>
+    <string name="settings_camry_off">Отключить</string>
+    <string name="settings_camry_enabled">Выбрано: адаптация включена</string>
+    <string name="settings_camry_disabled">Выбрано: адаптация отключена</string>
+    <string name="settings_camry_detected">Обнаружена Camry A Navigation: адаптация включена</string>
+    <string name="settings_camry_not_detected">Camry A Navigation не обнаружена: адаптация отключена</string>
+</resources>

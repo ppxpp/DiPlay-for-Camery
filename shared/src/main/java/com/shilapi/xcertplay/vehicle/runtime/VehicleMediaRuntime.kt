@@ -250,8 +250,7 @@ class VehicleMediaRuntime private constructor(
             }
         }
         fun create(context: Context, sendCommand: (MediaCommand) -> Boolean, report: (String) -> Unit): VehicleMediaRuntime? =
-            if (VehicleAudioRouting.available && context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
-                    .getBoolean("vehicle_adaptation_enabled", true)) VehicleMediaRuntime(context, sendCommand, report) else null
+            if (VehicleAudioRouting.available) VehicleMediaRuntime(context, sendCommand, report) else null
     }
 }
 

@@ -472,6 +472,9 @@ class PioneerDebugService : Service() {
             .put("upstreamAlignment", LocalConnectionExperiments.summary())
             .put("connectionTimeline", JSONArray(PioneerConnectionTrace.snapshot()))
             .put("usbMode", PioneerUsbPolicy.mode(this)).put("pioneerUsbEnabled", PioneerUsbPolicy.enabled(this))
+            .put("camryAdaptationMode", CamryAdaptation.mode(this).name)
+            .put("camryAdaptationApplied", CamryAdaptation.requestMode())
+            .put("matchedModel", PioneerUsbPolicy.matchesModel())
             .put("matchedFirmware", PioneerUsbPolicy.matchesDevice()).put("devices", JSONArray(devices))
             .put("lastCommand", PioneerDebugRuntime.lastCommand)
             .put("networkBackend", if (PioneerWiredBackend.nativeEnabled(this)) "NATIVE_NCM"

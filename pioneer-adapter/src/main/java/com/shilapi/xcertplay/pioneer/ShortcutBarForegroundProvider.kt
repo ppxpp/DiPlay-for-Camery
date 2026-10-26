@@ -11,7 +11,10 @@ import android.net.Uri
  */
 class ShortcutBarForegroundProvider : ContentProvider() {
     override fun onCreate(): Boolean {
-        context?.let { ShortcutBarPolicy.attach(it.applicationContext) }
+        context?.let {
+            CamryAdaptation.initialize(it.applicationContext)
+            ShortcutBarPolicy.attach(it.applicationContext)
+        }
         return false
     }
 

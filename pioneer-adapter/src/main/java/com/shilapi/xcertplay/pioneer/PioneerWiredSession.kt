@@ -34,7 +34,10 @@ object PioneerWiredSession {
     }
 
     @Synchronized private fun end(owner: Session) {
-        if (current === owner) current = null
+        if (current === owner) {
+            current = null
+            CamryAdaptation.sessionEnded()
+        }
     }
 
     fun firstFrame(id: Long) {

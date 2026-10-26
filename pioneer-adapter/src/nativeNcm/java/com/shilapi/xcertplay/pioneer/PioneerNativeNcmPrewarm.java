@@ -15,7 +15,7 @@ import java.io.FileOutputStream;
  */
 public final class PioneerNativeNcmPrewarm {
     public static void main(String[] args) {
-        if (Process.myUid() != 0 || (args.length != 6 && args.length != 7)) return;
+        if (Process.myUid() != 0 || (args.length != 6 && args.length != 7 && args.length != 8)) return;
         File result = null;
         String state = "FAILED";
         String error = "";
@@ -55,6 +55,7 @@ public final class PioneerNativeNcmPrewarm {
                 owner.check();
             };
             guard.check();
+            CamryAdaptation.INSTANCE.useRequestMode(new JSONObject().put("camryAdaptation", args.length == 8 ? args[7] : "AUTO"));
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IllegalStateException("UNSUPPORTED_PIONEER_FIRMWARE");
             firmware = String.valueOf(Class.forName("android.os.SystemProperties")
                 .getMethod("get", String.class).invoke(null, "ro.product.version"));
@@ -67,8 +68,9 @@ public final class PioneerNativeNcmPrewarm {
             NativeNcmModule.ensureLoaded(apk, boot, guard);
             guard.check();
             PioneerNativeNcmHelper.verifyFirewallTools();
-            if (args.length == 7) {
-                if (!args[6].equals("USB_GRANT")) throw new IllegalArgumentException("Invalid prewarm action");
+            if (args.length >= 7 && !args[6].equals("USB_GRANT") && !args[6].equals("NO_USB_GRANT"))
+                throw new IllegalArgumentException("Invalid prewarm action");
+            if (args.length >= 7 && args[6].equals("USB_GRANT")) {
                 try { usbPermission = PioneerUsbPermissionHelper.grantDuringPrewarm(apk, directoryStat.st_uid, guard); }
                 catch (Exception unavailable) { usbPermission.put("code", "FAILED").put("error", unavailable.getClass().getSimpleName()); }
             }

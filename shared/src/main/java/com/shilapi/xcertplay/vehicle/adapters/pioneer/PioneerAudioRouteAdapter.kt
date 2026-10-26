@@ -10,8 +10,11 @@ import com.shilapi.xcertplay.vehicle.api.DefaultAudioRouteController
 
 /** Pioneer firmware encodes both its output bus and MediaManager token in contentType. */
 internal object PioneerAudioRouteAdapter : AudioRouteController {
-    override val available: Boolean by lazy {
-        Build.VERSION.SDK_INT == 25 && runCatching {
+    override val available: Boolean get() =
+        com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled() && capabilitiesAvailable
+
+    private val capabilitiesAvailable: Boolean by lazy {
+        runCatching {
             AudioManager::class.java.getField("STREAM_TAI_WECARFLOW_MEDIA").getInt(null) == 401 &&
                 AudioManager::class.java.getField("STREAM_AMAP_NAVI_GUIDE").getInt(null) == 400 &&
                 AudioTrack::class.java.getMethod("setTokenName", String::class.java) != null
