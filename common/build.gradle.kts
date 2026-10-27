@@ -4,6 +4,11 @@ plugins {
 }
 
 apply(from = rootProject.file("gradle/native-ncm.gradle"))
+apply(from = rootProject.file("gradle/analytics.gradle"))
+
+// gradle/analytics.gradle decided whether the Umeng SDK belongs in this build; the tracker the rest
+// of the app calls is picked from src/umeng or src/noUmeng accordingly.
+val umengAnalytics: Boolean = extra["diplayAnalyticsUmeng"] as Boolean
 
 android {
     namespace = "com.shilapi.xcertplay.host"
@@ -58,6 +63,13 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.ui)
     implementation(libs.zxing.core)
+    // implementation, never api: only the tracker compiled into this module may touch Umeng, so a
+    // consumer cannot call the SDK around the Analytics facade.
+    if (umengAnalytics) {
+        implementation(libs.umeng.common)
+        implementation(libs.umeng.asms)
+        implementation(libs.umeng.apm)
+    }
     testImplementation(libs.junit)
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("org.mockito:mockito-core:5.20.0")

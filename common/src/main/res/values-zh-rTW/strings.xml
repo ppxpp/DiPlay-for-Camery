@@ -77,10 +77,8 @@
     <string name="status_attaching_ncm">正在連線 NCM/AirPlay 網路</string>
     <string name="status_failed">失敗：%1$s</string>
     <string name="msg_car_hotspot_off">車機熱點「%1$s」尚未開啟。請在車機設定中開啟後再連線。</string>
-    <string name="home_public_preview">公開預覽\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">選擇 iPhone ·\u0020</string>
     <string name="audio_saved_value">已儲存：%1$d</string>
-    <string name="about_public_preview_prefix">公開預覽\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">DiPlay 透過車機熱點「%1$s」連線。請在車機設定中開啟熱點後再連線。</string>
     <string name="edit_saved_hotspot_prefix">編輯已儲存的熱點 ·\u0020</string>
     <string name="cluster_adb_multi_device">如果 ADB 列出多個裝置，請使用 adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow。使用 adb devices 查詢 ID。</string>
@@ -1026,7 +1024,19 @@
 
     <string name="settings_hotspot_interface">熱點網路介面（選填）</string>
     <string name="settings_hotspot_interface_description">僅用於把熱點放在 Android 不認為是 Wi-Fi 熱點的網路介面上的車機，例如部分吉利、領克及其它高通車機上的 eth0.3。留空則自動尋找。</string>
-    <string name="disclaimer_agree_swipe_hint">同意並繼續\n左右滑動翻頁</string>
+    <string name="disclaimer_swipe_hint">左右滑動翻頁</string>
     <string name="settings_update_client_id">用戶端 ID：%1$s</string>
     <string name="settings_update_client_id_unavailable">用戶端 ID 無法使用</string>
+    <string name="settings_analytics_title">使用統計與當機報告</string>
+    <string name="settings_analytics_summary">不上傳位置軌跡、個人身分資訊、車機編碼或車輛資訊；只傳送啟動、連線結果與當機堆疊。</string>
+    <string name="settings_analytics_show_details">查看傳送內容</string>
+    <string name="settings_analytics_hide_details">收起傳送內容</string>
+    <string name="settings_analytics_sent">會傳送：車機型號與系統版本、App 版本與頻道、CarPlay 連線方式與結果、當機/ANR 堆疊。</string>
+    <string name="settings_analytics_not_sent">不會上傳：位置與行車軌跡、個人身分資訊（帳號、手機號碼、通訊錄）、車輛資訊（VIN、車牌）、車機編碼/序號、已安裝應用程式清單、IMEI/IMSI/ICCID/WiFi MAC、廣告識別碼（OAID/AD_ID）。</string>
+    <string name="settings_analytics_disabled_note">關閉後不再傳送新的統計事件，重新啟動應用程式後完全停止。</string>
+    <string name="disclaimer_page4_title">資料與隱私</string>
+    <string name="disclaimer_page4_l1">繼續即表示同意傳送使用統計與當機資料。我們不會上傳位置軌跡、個人身分資訊、車機編碼或車輛資訊。</string>
+    <string name="disclaimer_page4_l2">可隨時在「設定 · 診斷」中關閉；重新啟動應用程式後完全停止。</string>
+    <string name="home_build_basis">（基於DiPlay%1$s版本構建）</string>
+    <string name="home_license_notice">開源免費 · 僅供學習交流 · 禁止轉售商用 · 請勿用於真實駕駛場景</string>
 </resources>
