@@ -17,8 +17,14 @@ zxing = "3.5.3"
 work = "2.11.2"
 desugarJdkLibs = "2.1.5"
 retrofuture = "1.7.4"
+umengCommon = "10.0.1"
+umengAsms = "1.8.7.2"
+umengApm = "2.1.0"
 
 [libraries]
+umeng-common = { group = "com.umeng.umsdk", name = "common", version.ref = "umengCommon" }
+umeng-asms = { group = "com.umeng.umsdk", name = "asms", version.ref = "umengAsms" }
+umeng-apm = { group = "com.umeng.umsdk", name = "apm", version.ref = "umengApm" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 android-retrofuture = { group = "net.sourceforge.streamsupport", name = "android-retrofuture", version.ref = "retrofuture" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

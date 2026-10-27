@@ -1,0 +1,67 @@
+// Analytics capability, resolved at compile time like the optional native cdc_ncm backend.
+// 'umeng' bundles the Umeng U-App / U-APM SDK; 'none' compiles the no-op tracker instead, so a
+// disabled package carries no com.umeng class, no SDK manifest entry and nothing to declare in the
+// third-party SDK list. Not a runtime preference: the choice is fixed when the module configures.
+def rawMode = providers.gradleProperty('diplay.analytics').orElse('umeng').get()
+if (!(rawMode in ['umeng', 'none'])) {
+    throw new GradleException("diplay.analytics must be exactly umeng or none, was '$rawMode'")
+}
+def sourceOnly = providers.gradleProperty('diplaySourceOnly').map { it.toBooleanStrict() }.getOrElse(false)
+def includeUmeng = rawMode == 'umeng' && !sourceOnly
+
+// The app key travels with the binary anyway, but it still stays out of Git: it sits next to the
+// signing identity. Precedence matches the shared signing config, file then -P then environment.
+def keyFromProperties = providers.fileContents(rootProject.layout.projectDirectory.file('.private/analytics.properties'))
+    .asText
+    .map { text ->
+        def parsed = new Properties()
+        parsed.load(new StringReader(text.toString()))
+        parsed.getProperty('umeng.appKey') ?: ''
+    }
+    .orElse('')
+def umengAppKey = [
+    keyFromProperties.get(),
+    providers.gradleProperty('diplay.umeng.appKey').orElse('').get(),
+    providers.environmentVariable('DIPLAY_UMENG_APPKEY').orElse('').get(),
+].find { !it.isBlank() } ?: ''
+def umengChannel = providers.gradleProperty('diplay.analytics.channel').orElse('default').get()
+
+if (includeUmeng && umengAppKey.isEmpty()) {
+    throw new GradleException(
+        'diplay.analytics=umeng needs an Umeng app key. Put umeng.appKey=<key> in ' +
+            '.private/analytics.properties, or pass -Pdiplay.umeng.appKey / DIPLAY_UMENG_APPKEY. ' +
+            'Build without the SDK using -Pdiplay.analytics=none.')
+}
+def placeholders = ['REPLACE', 'replace', 'your', 'changeme', '<', '>']
+if (includeUmeng && placeholders.any { umengAppKey.contains(it) }) {
+    throw new GradleException(
+        "umeng.appKey is still a placeholder ('$umengAppKey'). Copy the app key from the Umeng console " +
+            'into .private/analytics.properties, or build with -Pdiplay.analytics=none.')
+}
+
+android {
+    sourceSets {
+        main {
+            java.srcDir(includeUmeng ? 'src/umeng/java' : 'src/noUmeng/java')
+            kotlin.srcDir(includeUmeng ? 'src/umeng/java' : 'src/noUmeng/java')
+        }
+        test {
+            java.srcDir(includeUmeng ? 'src/umengTest/java' : 'src/noUmengTest/java')
+            kotlin.srcDir(includeUmeng ? 'src/umengTest/java' : 'src/noUmengTest/java')
+        }
+    }
+    buildFeatures { buildConfig = true }
+    defaultConfig {
+        // Read by the app to decide what the settings screen and diagnostic report may claim about
+        // analytics, and by the wiring tests to assert which build was produced.
+        buildConfigField 'boolean', 'ANALYTICS_UMENG_BUNDLED', includeUmeng.toString()
+        if (includeUmeng) {
+            buildConfigField 'String', 'UMENG_APP_KEY', "\"$umengAppKey\""
+            buildConfigField 'String', 'UMENG_CHANNEL', "\"$umengChannel\""
+        }
+    }
+}
+
+// The module build file adds the SDK dependencies from this flag, so the version catalog stays the
+// only place where Umeng coordinates are written down.
+project.ext.diplayAnalyticsUmeng = includeUmeng
