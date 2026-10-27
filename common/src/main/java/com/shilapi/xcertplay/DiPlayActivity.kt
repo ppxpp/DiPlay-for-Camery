@@ -172,6 +172,9 @@ internal object SettingsInformationArchitecture {
     )
 }
 
+/** Upstream DiPlay release this Camry fork is based on, named on the home footer. */
+private const val UPSTREAM_DIPLAY_VERSION = "0.2.21"
+
 /** DiAuto's visual language, with a connection flow for an independent CarPlay receiver. */
 class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val handler = Handler(Looper.getMainLooper())
@@ -241,6 +244,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var pendingRailScrollY: Int? = null
     private var pendingRailFocus = false
     private var bydVehicleAdvancedExpanded = false
+    private var analyticsDetailsExpanded = false
     private var adbAccessState: BydAdbAccess.State? = null
     private var adbCheckInProgress = false
     private var adbCheckMayAsk = false
@@ -401,6 +405,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             })
             return
         }
+        // Past the disclaimer gate now, which is the earliest the SDK may start collecting.
+        com.shilapi.xcertplay.analytics.Analytics.startIfAllowed(this)
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
         if (savedInstanceState == null && isLauncherIntent(intent) && (CarPlayBackgroundSession.hasSession() || CarPlayBackgroundSession.hasHost())) {
             forwardingToProjection = true
@@ -431,6 +437,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         pendingCarHotspotSetup = savedInstanceState?.getBoolean("pending_car_hotspot") ?: false
         bydVehicleAdvancedExpanded = savedInstanceState?.getBoolean("byd_vehicle_advanced") ?: false
+        analyticsDetailsExpanded = savedInstanceState?.getBoolean("analytics_details_expanded") ?: false
         settingsCategory = savedInstanceState?.getString("settings_category")
             ?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
             ?: SettingsCategory.OVERVIEW
@@ -537,6 +544,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         connectionSettingsReturnCategory?.let { outState.putString("connection_settings_return_category", it.name) }
         outState.putBoolean("pending_car_hotspot", pendingCarHotspotSetup)
         outState.putBoolean("byd_vehicle_advanced", bydVehicleAdvancedExpanded)
+        outState.putBoolean("analytics_details_expanded", analyticsDetailsExpanded)
         outState.putInt("setup_step", setupStep)
         outState.putBoolean("setup_from_settings", setupFromSettings)
         super.onSaveInstanceState(outState)
@@ -879,10 +887,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setImageResource(R.drawable.ic_carplay)
             contentDescription = getString(R.string.carplay)
         }, LinearLayout.LayoutParams(logoSize, logoSize))
-        addView(label(getString(if (page == "home") R.string.home_title else R.string.diplay), if (compact) 20 else 26, TEXT, true,
-            centreGlyphs = androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]!!.language != "zh").apply {
-            setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
-        }, LinearLayout.LayoutParams(0, if (compact) dp(44) else dp(52), 1f))
+        addView(column().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label(getString(if (page == "home") R.string.home_title else R.string.diplay), if (compact) 20 else 26, TEXT, true,
+                centreGlyphs = androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]!!.language != "zh").apply {
+                setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
+            })
+            if (page == "home") {
+                // The licence notice sits under the title, both centred against the logo on the left.
+                addView(label(getString(R.string.home_license_notice), if (compact) 11 else 12, WARNING).apply {
+                    setPadding(if (compact) dp(8) else dp(12), dp(2), 0, 0)
+                })
+            }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(appearanceButton(), LinearLayout.LayoutParams(dp(if (compact) 44 else 52), dp(if (compact) 44 else 52)).apply {
             marginEnd = dp(if (compact) 8 else 12)
         })
@@ -1086,7 +1103,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         right.addView(homeButton(getString(R.string.settings), false) { page = "settings"; render() }, matchButton(height = if (compact) 54 else 68))
         if (!compact) right.addView(label(getString(R.string.make_diplay_feel_right_for_your_car), 14, MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(24)) })
         else right.addView(space(12))
-        right.addView(label(getString(R.string.home_public_preview, version()), 12, MUTED).apply { letterSpacing = .08f })
+        right.addView(label(version(), 12, MUTED).apply { letterSpacing = .08f })
+        right.addView(label(getString(R.string.home_build_basis, UPSTREAM_DIPLAY_VERSION), 10, MUTED).apply {
+            setPadding(0, dp(2), 0, 0)
+        })
         availableUpdate?.let { release ->
             val message = getString(
                 if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_home_beta
@@ -1500,6 +1520,34 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
     }
 
+    // Only present when the SDK was compiled in: with -Pdiplay.analytics=none there is nothing to switch
+    // off, and offering a switch that cannot do anything would be a lie.
+    private fun analyticsSettings(card: LinearLayout) {
+        val analytics = com.shilapi.xcertplay.analytics.Analytics
+        if (!analytics.isBundled) return
+        val enabled = analytics.isAllowed(this)
+        toggle(card, getString(R.string.settings_analytics_title), getString(R.string.settings_analytics_summary), enabled) { on ->
+            analytics.setEnabled(this, on)
+            if (!on) Toast.makeText(this, R.string.settings_analytics_disabled_note, Toast.LENGTH_LONG).show()
+        }
+        if (!enabled) {
+            card.addView(label(getString(R.string.settings_analytics_disabled_note), 13, MUTED).apply { setPadding(0, dp(6), 0, 0) })
+        }
+        val detailsLabel = if (analyticsDetailsExpanded) {
+            R.string.settings_analytics_hide_details
+        } else {
+            R.string.settings_analytics_show_details
+        }
+        card.addView(button(getString(detailsLabel), false) {
+            analyticsDetailsExpanded = !analyticsDetailsExpanded
+            render()
+        }, matchButton(10, 52))
+        if (analyticsDetailsExpanded) {
+            card.addView(label(getString(R.string.settings_analytics_sent), 13, MUTED).apply { setPadding(0, dp(8), 0, 0) })
+            card.addView(label(getString(R.string.settings_analytics_not_sent), 13, MUTED).apply { setPadding(0, dp(4), 0, 0) })
+        }
+    }
+
     internal data class SettingsSearchResult(val title: String, val category: SettingsCategory)
 
     // Renders every category into a detached view and records what the builders label.
@@ -1894,6 +1942,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(label(destination + getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
             toggle(card, getString(R.string.settings_fps_counter), getString(R.string.settings_fps_counter_description),
                 AirPlayPersistence.loadFpsCounter(this)) { AirPlayPersistence.saveFpsCounter(this, it) }
+            analyticsSettings(card)
 
         }
         filteredSection(content, SettingsSection.AUTOMATIC_CONNECTION,
@@ -2625,7 +2674,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun about(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.about_diplay), getString(R.string.carplay_at_home_in_your_car))
-        section(content, getString(R.string.about_public_preview_prefix, version())) { card ->
+        section(content, version()) { card ->
             card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
             card.addView(updateRow())
             toggle(card, getString(R.string.settings_background_update_checks),

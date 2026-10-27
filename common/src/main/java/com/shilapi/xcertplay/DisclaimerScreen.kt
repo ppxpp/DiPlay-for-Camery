@@ -47,6 +47,9 @@ private fun actionLabel(context: Context, style: DisclaimerStyle, value: CharSeq
         textSize = 18f
         setTextColor(if (primary) style.onAccent else style.text)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        // The agree label carries a second swipe-hint line, and some locales wrap it further. Padded
+        // vertically so a wrapped label grows the button instead of being clipped by its height.
+        setPadding(0, dpOf(style, 10), 0, dpOf(style, 10))
         background = GradientDrawable().apply {
             setColor(if (primary) style.accent else style.button)
             cornerRadius = 26f * style.density
@@ -108,6 +111,15 @@ object DisclaimerScreen {
                 ),
                 activity.getText(R.string.disclaimer_page3_warn),
             ),
+            // Its own page rather than a fourth line on page 3: the consent sentence has to be visible
+            // without scrolling, and the agree button only unlocks on the last page.
+            DisclaimerPage(
+                activity.getText(R.string.disclaimer_page4_title),
+                listOf(
+                    activity.getText(R.string.disclaimer_page4_l1),
+                    activity.getText(R.string.disclaimer_page4_l2),
+                ),
+            ),
         )
 
         val pager = ViewPager2(activity).apply {
@@ -145,13 +157,32 @@ object DisclaimerScreen {
             setPadding(dpOf(style, 28), dpOf(style, 8), dpOf(style, 28), dpOf(style, 24))
         }
         val disagree = actionLabel(activity, style, activity.getText(R.string.disclaimer_disagree), false)
-        val agree = actionLabel(activity, style, activity.getText(R.string.disclaimer_agree_swipe_hint), true)
+        val agree = actionLabel(activity, style, activity.getText(R.string.disclaimer_agree), true)
         // Agree stays disabled until the last page is reached, so the user scrolls through it all.
         agree.isEnabled = false
         agree.alpha = 0.4f
         val buttonRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        buttonRow.addView(disagree, LinearLayout.LayoutParams(0, dpOf(style, 52), 1f).apply { marginEnd = dpOf(style, 12) })
-        buttonRow.addView(agree, LinearLayout.LayoutParams(0, dpOf(style, 52), 1f))
+        // Height follows the label: the agree button carries a second hint line until the last page is
+        // reached, and a fixed height clipped it (and would clip translated labels at large font scales).
+        val minButtonHeight = dpOf(style, 52)
+        disagree.minimumHeight = minButtonHeight
+        agree.minimumHeight = minButtonHeight
+        buttonRow.gravity = Gravity.CENTER_VERTICAL
+        buttonRow.addView(
+            disagree,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dpOf(style, 12) },
+        )
+        buttonRow.addView(agree, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        // The swipe hint used to live inside the agree button, where wrapping clipped it. As its own
+        // line it can vanish once the last page is reached, and both buttons stay one line tall.
+        val swipeHint = bodyLabel(
+            activity, style, activity.getText(R.string.disclaimer_swipe_hint), 14f, style.muted, false,
+        ).apply { gravity = Gravity.CENTER }
+        controls.addView(
+            swipeHint,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { bottomMargin = dpOf(style, 4) },
+        )
         controls.addView(
             buttonRow,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -164,8 +195,9 @@ object DisclaimerScreen {
                 dotViews.forEachIndexed { index, dot ->
                     dot.setBackgroundColor(if (index == position) style.accent else style.border)
                 }
-                if (position == pages.lastIndex) {
-                    agree.setText(R.string.disclaimer_agree)
+                val reachedLastPage = position == pages.lastIndex
+                swipeHint.visibility = if (reachedLastPage) View.GONE else View.VISIBLE
+                if (reachedLastPage) {
                     agree.isEnabled = true
                     agree.alpha = 1f
                 }
