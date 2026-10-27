@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_camry_section">Head-unit adaptation</string>
-    <string name="settings_camry_title">Camry A-navigation adaptation</string>
-    <string name="settings_camry_description">Use Camry A-navigation USB, VPN, audio, microphone and HUD integration. Reconnect CarPlay after changing this setting.</string>
+    <string name="settings_camry_section">Camry A-navigation head-unit adaptation</string>
+    <string name="settings_camry_title">Enable Camry A-navigation head-unit adaptation</string>
+    <string name="settings_camry_description">When enabled, DiPlay takes over USB, VPN, audio, microphone and HUD for the Camry A-navigation head unit. Automatic detection matches the head-unit model; choose Force on when detection misses, or Off on other vehicles. Reconnect CarPlay after changing this setting.</string>
     <string name="settings_camry_auto">Automatic detection (default)</string>
-    <string name="settings_camry_on">Enable</string>
-    <string name="settings_camry_off">Disable</string>
-    <string name="settings_camry_enabled">Selected policy: adaptation enabled</string>
-    <string name="settings_camry_disabled">Selected policy: adaptation disabled</string>
-    <string name="settings_camry_detected">Detected: Camry A-navigation; adaptation enabled</string>
-    <string name="settings_camry_not_detected">Not detected as Camry A-navigation; adaptation disabled</string>
+    <string name="settings_camry_on">Force on</string>
+    <string name="settings_camry_off">Off</string>
+    <string name="settings_camry_enabled">Adaptation forced on</string>
+    <string name="settings_camry_disabled">Adaptation off — connects as a standard head unit</string>
+    <string name="settings_camry_detected">Auto-detection: Camry A-navigation head unit detected; adaptation enabled</string>
+    <string name="settings_camry_not_detected">Auto-detection: not a Camry A-navigation head unit; adaptation disabled</string>
 </resources>

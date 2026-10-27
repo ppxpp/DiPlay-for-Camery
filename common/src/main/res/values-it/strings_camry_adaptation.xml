@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_camry_section">Integrazione del veicolo</string>
-    <string name="settings_camry_title">Integrazione Camry A Navigation</string>
-    <string name="settings_camry_description">Abilita USB, VPN, audio, microfono e HUD per questo modello. Riconnetti CarPlay dopo la modifica.</string>
+    <string name="settings_camry_section">Adattamento per il Camry A Navigation</string>
+    <string name="settings_camry_title">Abilitare l’adattamento per il Camry A Navigation</string>
+    <string name="settings_camry_description">Se abilitato, DiPlay gestisce USB, VPN, audio, microfono e HUD secondo l’integrazione richiesta dal Camry A Navigation. Il rilevamento automatico riconosce il modello; scegli «Forza» se non viene rilevato, «Disattiva» su altri veicoli. Riconnetti CarPlay dopo la modifica.</string>
     <string name="settings_camry_auto">Rilevamento automatico (predefinito)</string>
-    <string name="settings_camry_on">Abilita</string>
-    <string name="settings_camry_off">Disabilita</string>
-    <string name="settings_camry_enabled">Criterio selezionato: integrazione abilitata</string>
-    <string name="settings_camry_disabled">Criterio selezionato: integrazione disabilitata</string>
-    <string name="settings_camry_detected">Rilevato: Camry A Navigation; integrazione abilitata</string>
-    <string name="settings_camry_not_detected">Camry A Navigation non rilevato; integrazione disabilitata</string>
+    <string name="settings_camry_on">Forza</string>
+    <string name="settings_camry_off">Disattiva</string>
+    <string name="settings_camry_enabled">Adattamento forzato</string>
+    <string name="settings_camry_disabled">Adattamento disattivato: connessione come unità standard</string>
+    <string name="settings_camry_detected">Rilevamento automatico: Camry A Navigation rilevato; adattamento abilitato</string>
+    <string name="settings_camry_not_detected">Rilevamento automatico: Camry A Navigation non rilevato; adattamento disabilitato</string>
 </resources>

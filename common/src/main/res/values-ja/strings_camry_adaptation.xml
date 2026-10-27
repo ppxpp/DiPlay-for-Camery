@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_camry_section">車載機との連携</string>
-    <string name="settings_camry_title">カムリ A ナビ連携</string>
-    <string name="settings_camry_description">この機種の USB、VPN、音声、マイク、HUD 連携を使用します。変更後は CarPlay を再接続してください。</string>
+    <string name="settings_camry_section">カムリ A ナビ車載機連携</string>
+    <string name="settings_camry_title">カムリ A ナビ車載機連携を有効にする</string>
+    <string name="settings_camry_description">有効にすると、DiPlay はカムリ A ナビ車載機に合わせて USB、VPN、音声、マイク、HUD を制御します。自動判定は機種で識別します。判定されない場合は強制有効を選択し、その他の車両では無効にしてください。変更後は CarPlay を再接続してください。</string>
     <string name="settings_camry_auto">自動判定（既定）</string>
-    <string name="settings_camry_on">有効</string>
+    <string name="settings_camry_on">強制有効</string>
     <string name="settings_camry_off">無効</string>
-    <string name="settings_camry_enabled">選択した設定：連携有効</string>
-    <string name="settings_camry_disabled">選択した設定：連携無効</string>
-    <string name="settings_camry_detected">判定結果：カムリ A ナビ、連携有効</string>
-    <string name="settings_camry_not_detected">判定結果：カムリ A ナビに一致せず、連携無効</string>
+    <string name="settings_camry_enabled">連携を強制有効にしています</string>
+    <string name="settings_camry_disabled">連携は無効。通常の車載機として接続します</string>
+    <string name="settings_camry_detected">自動判定：カムリ A ナビと判定され、連携は有効です</string>
+    <string name="settings_camry_not_detected">自動判定：カムリ A ナビと判定されず、連携は無効です</string>
 </resources>

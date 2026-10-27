@@ -1588,7 +1588,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         openSettingsCategory(result.category)
         val scroll = rootScroll ?: return
         val match = descendants(scroll).filterIsInstance<TextView>().firstOrNull {
-            it.text.toString() == result.title || it.text.startsWith(result.title + VALUE_SEPARATOR)
+            val text = it.text.toString()
+            text == result.title || text.startsWith(result.title + VALUE_SEPARATOR) ||
+                it.contentDescription?.toString() == result.title
         } ?: return
         val target = generateSequence<View>(match) { it.parent as? View }.firstOrNull { it.isClickable } ?: match
         scroll.doOnLayout {
@@ -1878,7 +1880,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
             choice(card, getString(R.string.settings_camry_title), listOf(
                 getString(R.string.settings_camry_auto), getString(R.string.settings_camry_on),
-                getString(R.string.settings_camry_off)), policy.mode(this).ordinal, reconnects = false) {
+                getString(R.string.settings_camry_off)), policy.mode(this).ordinal, reconnects = false,
+                rowShowsTitle = false) {
                 policy.save(this, com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.entries[it])
                 updateStatus()
                 markReconnectNeeded()
@@ -6659,9 +6662,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     // [announcesReconnect] labels a choice whose [save] reconnects by itself.
     private fun choice(parent: LinearLayout, title: String, options: List<String>, current: Int, reconnects: Boolean = true,
-        announcesReconnect: Boolean = reconnects, enabled: Boolean = true, save: (Int) -> Unit) {
+        announcesReconnect: Boolean = reconnects, enabled: Boolean = true, rowShowsTitle: Boolean = true, save: (Int) -> Unit) {
         var selection = current
-        val button = button("$title · ${options[selection]}", false) {}.apply { isEnabled = enabled }
+        val rowLabel = { if (rowShowsTitle) "$title · ${options[selection]}" else options[selection] }
+        val button = button("$title · ${options[selection]}", false) {}.apply {
+            isEnabled = enabled
+            // The row hides the title but the search index and openSearchResult still need it.
+            if (!rowShowsTitle) { text = options[selection]; contentDescription = title }
+        }
         button.setOnClickListener {
             var pendingSelection = selection
             appDialogBuilder().setTitle(title)
@@ -6670,7 +6678,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     if (pendingSelection != selection) {
                         selection = pendingSelection
                         save(selection)
-                        button.text = "$title · ${options[selection]}"
+                        button.text = rowLabel()
                         if (reconnects && CarPlayBackgroundSession.hasSession()) {
                             connect(AirPlayPersistence.loadWirelessEnabled(this))
                         }
