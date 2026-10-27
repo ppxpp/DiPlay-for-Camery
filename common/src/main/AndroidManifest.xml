@@ -12,6 +12,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Pulled in by the Umeng AAR and withdrawn again. AD_ID and the MSA permission advertise an
+         advertising identifier this app never reads, and U-APM's leak monitor lives in a second
+         process, which is the last thing a Camry head unit has spare. Remove this block plus the
+         service below to take the memory-leak monitor back. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="freemme.permission.msa" tools:node="remove" />
     <!-- Optional: diagnostic reports in the visible Downloads/DiPlay folder on Android 9.
          Android 10+ needs no permission for this, so it is never requested there. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
@@ -36,6 +42,9 @@
         </intent>
     </queries>
     <application>
+        <service
+            android:name="com.efs.sdk.memleaksdk.monitor.UMonitorService"
+            tools:node="remove" />
         <provider
             android:name="com.shilapi.xcertplay.CrashRecordInstaller"
             android:authorities="${applicationId}.crash-record"

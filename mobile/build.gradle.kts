@@ -14,6 +14,10 @@ require(requestedUpdateChannel == null || requestedUpdateChannel in setOf("stabl
 fun updateChannelFor(buildType: String): String =
     requestedUpdateChannel ?: if (buildType == "debug") "beta" else "stable"
 
+// Beta artifacts carry it in the version name itself; an official release stays unsuffixed.
+fun versionSuffixFor(buildType: String): String? =
+    if (updateChannelFor(buildType) == "beta") "-beta" else null
+
 // Local builds bundle the project-local identity by default. Keep it outside Git.
 // DIPLAY_AUTH_ASSETS_DIR can explicitly select a different runtime identity directory.
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
@@ -32,7 +36,7 @@ android {
         minSdk = 23
         targetSdk = 37
         versionCode = 2001 // 0.2.1 -> 000 002 001
-        versionName = "0.2.21_凯美瑞A导航适配版_0.2.1"
+        versionName = "DiPlay凯美瑞A导航适配版_0.2.1"
 
     }
 
@@ -42,10 +46,11 @@ android {
     buildTypes {
         debug {
             manifestPlaceholders["updateChannel"] = updateChannelFor("debug")
-//            versionNameSuffix = "-hud-test"
+            versionNameSuffix = versionSuffixFor("debug")
         }
         release {
             manifestPlaceholders["updateChannel"] = updateChannelFor("release")
+            versionNameSuffix = versionSuffixFor("release")
             optimization {
                 enable = false
             }
