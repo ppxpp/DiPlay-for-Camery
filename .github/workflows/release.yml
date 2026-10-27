@@ -109,6 +109,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Run update tests and build signed release
+        env:
+          DIPLAY_UMENG_APPKEY: ${{ secrets.UMENG_APP_KEY }}
         run: >-
           ./gradlew
           :common:testDebugUnitTest
