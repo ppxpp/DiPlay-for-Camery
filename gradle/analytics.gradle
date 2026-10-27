@@ -6,7 +6,13 @@ def rawMode = providers.gradleProperty('diplay.analytics').orElse('umeng').get()
 if (!(rawMode in ['umeng', 'none'])) {
     throw new GradleException("diplay.analytics must be exactly umeng or none, was '$rawMode'")
 }
-def sourceOnly = providers.gradleProperty('diplaySourceOnly').map { it.toBooleanStrict() }.getOrElse(false)
+// Groovy, not Kotlin DSL: String.toBooleanStrict() does not exist here, and a lazy provider closure
+// would hide that until the property is actually set (which is exactly what broke the source-only CI).
+def rawSourceOnly = providers.gradleProperty('diplaySourceOnly').orElse('false').get()
+if (!(rawSourceOnly in ['true', 'false'])) {
+    throw new GradleException("diplaySourceOnly must be exactly true or false, was '$rawSourceOnly'")
+}
+def sourceOnly = rawSourceOnly == 'true'
 def includeUmeng = rawMode == 'umeng' && !sourceOnly
 
 // The app key travels with the binary anyway, but it still stays out of Git: it sits next to the

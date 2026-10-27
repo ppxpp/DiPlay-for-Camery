@@ -44,7 +44,8 @@
     <application>
         <service
             android:name="com.efs.sdk.memleaksdk.monitor.UMonitorService"
-            tools:node="remove" />
+            tools:node="remove"
+            tools:ignore="MissingClass" />
         <provider
             android:name="com.shilapi.xcertplay.CrashRecordInstaller"
             android:authorities="${applicationId}.crash-record"
