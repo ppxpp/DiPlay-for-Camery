@@ -1094,4 +1094,15 @@
     <string name="disclaimer_agree_swipe_hint">同意して続行\n左右にスワイプ</string>
     <string name="settings_update_client_id">クライアント ID: %1$s</string>
     <string name="settings_update_client_id_unavailable">クライアント ID を利用できません</string>
+    <string name="settings_pioneer_wireless_hotspot">車載5 GHzアクセスポイント（実験的機能）</string>
+    <string name="settings_pioneer_pair_original">車載の純正Bluetooth設定でiPhoneをペアリングしてから、再試行してください。</string>
+    <string name="connect_progress_vehicle_hotspot">車載ホットスポット</string>
+    <string name="connect_progress_vehicle_bluetooth">iPhone Bluetooth</string>
+    <string name="connect_progress_vehicle_auth">Bluetooth認証</string>
+    <string name="connect_progress_vehicle_bootstrap">ワイヤレス接続開始</string>
+    <string name="connect_progress_vehicle_join">iPhoneのネット接続</string>
+    <string name="connect_progress_vehicle_session">CarPlayセッション</string>
+    <string name="settings_pioneer_wireless_description">純正Bluetoothと車載権限を使用して5 GHzホットスポットを自動起動します。次回の接続から適用されます。</string>
+    <string name="connection_help_pioneer_hotspot">他のアプリが起動したホットスポットを停止して再接続してください。DiPlayが自動起動します。iPhoneのWi-Fiをオンにしてください。</string>
+    <string name="connection_help_bluetooth_not_connected">車載機の純正 Bluetooth 設定で選択した iPhone を接続してから、ワイヤレス CarPlay を再試行してください。</string>
 </resources>

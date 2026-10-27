@@ -19,6 +19,7 @@ enum class MfiTarget {
 }
 
 enum class WirelessHotspotMode {
+    PIONEER_VEHICLE,
     WIFI_P2P,
     LOCAL_ONLY_HOTSPOT,
     MANUAL,

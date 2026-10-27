@@ -3,7 +3,7 @@ package com.shilapi.xcertplay.orchestration.progress
 /** Display-only timing model. No Android, transport operations, disk I/O or view references. */
 enum class ConnectionStep(val key: String) {
     PREPARATION("preparation"), PERMISSIONS("permissions"), DEVICE("device"), CONTROL("control"),
-    NETWORK("network"), CHANNEL("channel"), SESSION("session"), VIDEO("video"),
+    NETWORK("network"), WIRELESS_BOOTSTRAP("wireless-bootstrap"), WIRELESS_JOIN("wireless-join"), CHANNEL("channel"), SESSION("session"), VIDEO("video"),
 }
 
 enum class ConnectionOutcome { CONNECTING, RETRYING, FAILED, COMPLETE, CANCELLED }
@@ -40,6 +40,7 @@ class ConnectionProgress(
     private data class TaskTiming(var state: ConnectionTaskState = ConnectionTaskState.PENDING,
         var start: Long? = null, var end: Long? = null, var detail: String = "", var eventAt: Long = -1)
     private val taskTimings = connectionTasks(channel).associateWith { TaskTiming() }
+    private val wirelessCompleted = mutableSetOf<ConnectionStep>()
     private val started = clock()
     private var entered = started
     private var ended: Long? = null
@@ -71,9 +72,33 @@ class ConnectionProgress(
         waiting = waitingForUser
         waitingSince = now
         if (next == current) return
+        if (channel == ConnectionChannel.PIONEER_WIRELESS && current !in wirelessCompleted) return
         accrue(now)
         current = next
         visited += next
+    }
+
+    /** Facts can arrive in parallel, but the vehicle UI only advances through completed predecessors. */
+    @Synchronized fun completeWirelessStep(completed: ConnectionStep) {
+        if (channel != ConnectionChannel.PIONEER_WIRELESS || outcome != ConnectionOutcome.CONNECTING) return
+        wirelessCompleted += completed
+        while (current != ConnectionStep.VIDEO && current in wirelessCompleted) {
+            val index = PIONEER_WIRELESS_STEPS.indexOf(current)
+            if(index < 0 || index+1 >= PIONEER_WIRELESS_STEPS.size)break
+            step(PIONEER_WIRELESS_STEPS[index+1])
+        }
+        if (hasRendered && current == ConnectionStep.VIDEO) firstFrame()
+    }
+
+    /** A prerequisite can fail before its displayed turn; never mark predecessors complete. */
+    @Synchronized fun failWirelessStep(failed: ConnectionStep) {
+        if(channel!=ConnectionChannel.PIONEER_WIRELESS || outcome!=ConnectionOutcome.CONNECTING) return
+        require(failed in PIONEER_WIRELESS_STEPS)
+        accrue(clock())
+        current=failed
+        visited+=failed
+        task(ConnectionTask.WIRELESS_LINK,ConnectionTaskState.FAILED)
+        stop(ConnectionOutcome.FAILED)
     }
 
     /** Failure freezes node timing; retry backoff remains visible in the overall wait. */
@@ -98,12 +123,12 @@ class ConnectionProgress(
     }
 
     fun firstFrame() {
-        if (outcome == ConnectionOutcome.CANCELLED) return
-        // Output is a fact even if a transient control failure already froze this sample. Never
-        // leave the waiting page covering working video just because the timing sample was rejected.
-        hasRendered = true
-        if (outcome != ConnectionOutcome.CONNECTING) return
         val timing = synchronized(this) {
+            if (outcome == ConnectionOutcome.CANCELLED) return
+            // Record the frame and check predecessor completion under the same monitor as
+            // completeWirelessStep: either callback can arrive first without losing completion.
+            hasRendered = true
+            if (channel == ConnectionChannel.PIONEER_WIRELESS && current != ConnectionStep.VIDEO) return
             if (outcome != ConnectionOutcome.CONNECTING) return
             val now = clock()
             if (waiting) userWaitMillis += (now - waitingSince).coerceAtLeast(0)
@@ -122,15 +147,13 @@ class ConnectionProgress(
 
     @Synchronized fun sessionRequested() {
         task(ConnectionTask.SESSION, ConnectionTaskState.RUNNING)
-        if (current != ConnectionStep.VIDEO) step(ConnectionStep.SESSION)
+        if (current != ConnectionStep.VIDEO && channel != ConnectionChannel.PIONEER_WIRELESS) step(ConnectionStep.SESSION)
     }
 
     @Synchronized fun snapshot(): ConnectionProgressSnapshot {
         val now = clock()
         val end = ended ?: now
-        val steps = if (wireless) listOf(ConnectionStep.PREPARATION, ConnectionStep.NETWORK,
-            ConnectionStep.DEVICE, ConnectionStep.CONTROL, ConnectionStep.SESSION, ConnectionStep.VIDEO)
-        else DEFAULT_STEPS
+        val steps = stepsFor(wireless, channel)
         val measured = ConnectionStep.entries.associateWith { step ->
             (durations[step] ?: 0) + if (step == current && ended == null) (now - entered).coerceAtLeast(0) else 0
         }
@@ -158,6 +181,16 @@ class ConnectionProgress(
     }
 
     companion object {
+        fun stepsFor(wireless: Boolean, channel: ConnectionChannel): List<ConnectionStep> = when {
+            channel == ConnectionChannel.PIONEER_WIRELESS -> PIONEER_WIRELESS_STEPS
+            wireless -> listOf(ConnectionStep.PREPARATION, ConnectionStep.NETWORK,
+                ConnectionStep.DEVICE, ConnectionStep.CONTROL, ConnectionStep.SESSION, ConnectionStep.VIDEO)
+            else -> DEFAULT_STEPS
+        }
+
+        private val PIONEER_WIRELESS_STEPS = listOf(ConnectionStep.PREPARATION,ConnectionStep.NETWORK,
+            ConnectionStep.DEVICE,ConnectionStep.CONTROL,ConnectionStep.WIRELESS_BOOTSTRAP,
+            ConnectionStep.WIRELESS_JOIN,ConnectionStep.SESSION,ConnectionStep.VIDEO)
         private val DEFAULT_STEPS = listOf(ConnectionStep.PREPARATION, ConnectionStep.DEVICE,
             ConnectionStep.CONTROL, ConnectionStep.NETWORK, ConnectionStep.SESSION, ConnectionStep.VIDEO)
 

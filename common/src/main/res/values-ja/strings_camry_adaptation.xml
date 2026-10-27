@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">車載機との連携</string>
     <string name="settings_camry_title">カムリ A ナビ連携</string>
-    <string name="settings_camry_description">この機種の USB、VPN、音声、マイク、HUD 連携を使用します。変更後は CarPlay を再接続してください。</string>
+    <string name="settings_camry_description">この機種の USB、VPN、ワイヤレス CarPlay、音声、マイク、HUD 対応を有効にします。有効時は車載機専用のワイヤレス接続方式を使用します。変更後は CarPlay を再接続してください。</string>
     <string name="settings_camry_auto">自動判定（既定）</string>
     <string name="settings_camry_on">有効</string>
     <string name="settings_camry_off">無効</string>

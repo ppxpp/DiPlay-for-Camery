@@ -5,6 +5,7 @@ import java.io.Closeable
 import java.net.InetAddress
 
 enum class WirelessHotspotBackend(val label: String) {
+    PIONEER_VEHICLE("Pioneer vehicle 5GHz AP"),
     WIFI_P2P("Wi-Fi P2P"),
     LOCAL_ONLY_HOTSPOT("LocalOnlyHotspot"),
     MANUAL_HOTSPOT("Manual hotspot"),

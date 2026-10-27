@@ -21,6 +21,8 @@ internal class ConnectionProgressHistory(context: Context) {
         val wireless = config.transport == CarPlayTransport.WIRELESS
         val proxy = wireless && config.wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI && config.remoteRfcommGateway != null
         val channel = when {
+            wireless && config.wirelessHotspotMode == WirelessHotspotMode.PIONEER_VEHICLE ->
+                com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS
             wireless -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.WIRELESS
             config.nativeNcmEnabled -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.NATIVE_NCM
             config.optimizedLwipEnabled || PioneerLwipRuntime.enabled(context) -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.LWIP
@@ -64,7 +66,7 @@ internal class ConnectionProgressHistory(context: Context) {
         (maxOf(0, json.length() - MAX_SAMPLES) until json.length()).mapNotNull { index ->
             val row = json.optJSONObject(index) ?: return@mapNotNull null
             val total = row.optLong("total", -1)
-            val durations = ConnectionStep.entries.associateWith { row.optLong(it.key, -1) }
+            val durations = ConnectionStep.entries.associateWith { row.optLong(it.key, if(it == ConnectionStep.WIRELESS_BOOTSTRAP || it == ConnectionStep.WIRELESS_JOIN) 0 else -1) }
             if (total !in 1..180_000 || durations.values.any { it < 0 || it > total } || durations.values.sum() != total) null
             else ConnectionTiming(durations, total)
         }

@@ -1029,4 +1029,15 @@
     <string name="disclaimer_agree_swipe_hint">同意並繼續\n左右滑動翻頁</string>
     <string name="settings_update_client_id">用戶端 ID：%1$s</string>
     <string name="settings_update_client_id_unavailable">用戶端 ID 無法使用</string>
+    <string name="settings_pioneer_wireless_hotspot">車機5 GHz熱點（實驗性）</string>
+    <string name="settings_pioneer_pair_original">請先在原車藍牙設定中配對iPhone，再重試。</string>
+    <string name="connect_progress_vehicle_hotspot">車機熱點</string>
+    <string name="connect_progress_vehicle_bluetooth">iPhone藍牙</string>
+    <string name="connect_progress_vehicle_auth">藍牙認證</string>
+    <string name="connect_progress_vehicle_bootstrap">無線引導</string>
+    <string name="connect_progress_vehicle_join">iPhone入網</string>
+    <string name="connect_progress_vehicle_session">CarPlay會話</string>
+    <string name="settings_pioneer_wireless_description">使用原車藍牙，透過車機權限自動建立5 GHz熱點。下次連線時生效。</string>
+    <string name="connection_help_pioneer_hotspot">請停止其他應用程式建立的熱點後重新連線。DiPlay會自動開啟車機熱點，請保持iPhone的Wi-Fi開啟。</string>
+    <string name="connection_help_bluetooth_not_connected">請先在車機原廠藍牙設定中連線已選 iPhone，再重試無線 CarPlay。</string>
 </resources>

@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">Integración del vehículo</string>
     <string name="settings_camry_title">Integración con Camry A Navigation</string>
-    <string name="settings_camry_description">Activa la integración USB, VPN, audio, micrófono y HUD de este modelo. Vuelve a conectar CarPlay tras cambiar esta opción.</string>
+    <string name="settings_camry_description">Activa las adaptaciones de USB, VPN, CarPlay inalámbrico, audio, micrófono y HUD. Al activarlas, las conexiones inalámbricas usan el método específico del vehículo. Vuelve a conectar CarPlay para aplicar los cambios.</string>
     <string name="settings_camry_auto">Detección automática (predeterminada)</string>
     <string name="settings_camry_on">Activar</string>
     <string name="settings_camry_off">Desactivar</string>

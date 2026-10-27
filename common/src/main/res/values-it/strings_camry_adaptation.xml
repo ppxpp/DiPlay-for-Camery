@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">Integrazione del veicolo</string>
     <string name="settings_camry_title">Integrazione Camry A Navigation</string>
-    <string name="settings_camry_description">Abilita USB, VPN, audio, microfono e HUD per questo modello. Riconnetti CarPlay dopo la modifica.</string>
+    <string name="settings_camry_description">Abilita gli adattamenti per USB, VPN, CarPlay wireless, audio, microfono e HUD. Quando attivi, le connessioni wireless usano il metodo specifico del veicolo. Riconnetti CarPlay per applicare le modifiche.</string>
     <string name="settings_camry_auto">Rilevamento automatico (predefinito)</string>
     <string name="settings_camry_on">Abilita</string>
     <string name="settings_camry_off">Disabilita</string>

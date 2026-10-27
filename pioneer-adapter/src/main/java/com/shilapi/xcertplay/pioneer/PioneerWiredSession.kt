@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Vehicle adaptation lifetime. Transport owners open it before advertising AirPlay. */
 object PioneerWiredSession {
-    enum class Backend { LWIP, NATIVE_NCM, LWIP_OPTIMIZED, VPN }
+    enum class Backend { LWIP, NATIVE_NCM, LWIP_OPTIMIZED, VPN, WIRELESS }
 
     class Session internal constructor(
         val id: Long,
@@ -28,7 +28,7 @@ object PioneerWiredSession {
     fun isCurrent(id: Long): Boolean = current?.let { it.id == id && it.verifiedDevice } == true
 
     @Synchronized fun begin(backend: Backend, verifiedDevice: Boolean = PioneerUsbPolicy.matchesDevice()): Session {
-        check(current == null) { "Previous Pioneer wired session is still active" }
+        check(current == null) { "Previous Pioneer vehicle session is still active" }
         PioneerDiagnostics.clear()
         return Session(ids.incrementAndGet(), backend, verifiedDevice).also { current = it }
     }

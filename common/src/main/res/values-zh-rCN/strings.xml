@@ -1007,4 +1007,15 @@
     <string name="disclaimer_agree_swipe_hint">同意并继续\n左右滑动翻页</string>
     <string name="settings_update_client_id">客户端 ID：%1$s</string>
     <string name="settings_update_client_id_unavailable">客户端 ID 不可用</string>
+    <string name="settings_pioneer_wireless_hotspot">车机 5GHz 热点（实验性）</string>
+    <string name="settings_pioneer_pair_original">请先在原车蓝牙设置中配对 iPhone，再到这里选择。此模式使用车机蓝牙并创建 5GHz 热点，仅适用于已支持的先锋固件。</string>
+    <string name="connect_progress_vehicle_hotspot">准备车机热点</string>
+    <string name="connect_progress_vehicle_bluetooth">连接 iPhone 蓝牙</string>
+    <string name="connect_progress_vehicle_auth">完成蓝牙认证</string>
+    <string name="connect_progress_vehicle_bootstrap">引导无线连接</string>
+    <string name="connect_progress_vehicle_join">等待 iPhone 入网</string>
+    <string name="connect_progress_vehicle_session">建立 CarPlay 会话</string>
+    <string name="settings_pioneer_wireless_description">使用原车蓝牙，通过车机权限自动创建5 GHz热点。下次连接时生效。</string>
+    <string name="connection_help_pioneer_hotspot">请停止其他应用创建的热点后重新连接。DiPlay会自动开启车机热点，请保持iPhone的Wi-Fi开启。</string>
+    <string name="connection_help_bluetooth_not_connected">请先在车机原厂蓝牙设置中连接已选 iPhone，再重试无线 CarPlay。</string>
 </resources>

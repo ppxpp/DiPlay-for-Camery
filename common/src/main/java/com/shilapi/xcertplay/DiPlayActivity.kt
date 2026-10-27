@@ -1035,6 +1035,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }, matchButton(CONTROL_GAP_DP, if (compact) 46 else 56))
         }
         val connectionHint = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
+            WirelessHotspotMode.PIONEER_VEHICLE -> getString(R.string.settings_pioneer_wireless_description)
             WirelessHotspotMode.EXISTING_WIFI -> getString(R.string.existing_wifi_hint)
             WirelessHotspotMode.MANUAL -> getString(R.string.hotspot_hint_manual)
             WirelessHotspotMode.LOCAL_ONLY_HOTSPOT -> getString(R.string.hotspot_hint_local)
@@ -1334,7 +1335,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         active = CarPlayBackgroundSession.active,
         running = CarPlayBackgroundSession.hasSession(),
         wireless = AirPlayPersistence.loadWirelessEnabled(this),
-        phoneChosen = RemoteGatewaySettings.loadSelected(this) != null || DiPlayPreferences.phoneAddress(this) != null,
+        phoneChosen = DiPlayPreferences.phoneAddress(this) != null ||
+            (AirPlayPersistence.loadWirelessHotspotMode(this) != WirelessHotspotMode.PIONEER_VEHICLE &&
+                RemoteGatewaySettings.loadSelected(this) != null),
         hotspotSetupNeeded = AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL &&
             carHotspotDetailsMissing(),
     )
@@ -2651,6 +2654,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun backup(content: LinearLayout) {
         val preferredPrefix = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
+            WirelessHotspotMode.PIONEER_VEHICLE -> "bcm1"
             WirelessHotspotMode.WIFI_P2P -> "p2p"
             WirelessHotspotMode.LOCAL_ONLY_HOTSPOT -> "ap"
             WirelessHotspotMode.MANUAL, WirelessHotspotMode.EXISTING_WIFI -> "wlan"
@@ -3743,13 +3747,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun wirelessLinkControls(parent: LinearLayout) {
         val mode = if (pendingCarHotspotSetup) WirelessHotspotMode.MANUAL else AirPlayPersistence.loadWirelessHotspotMode(this)
-        val modes = listOf(WirelessHotspotMode.MANUAL, WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.EXISTING_WIFI)
-        val titles = listOf(getString(R.string.settings_built_in_car_hotspot_recommended), getString(R.string.wifi_direct), getString(R.string.existing_wifi_title))
-        val descriptions = listOf(
-            getString(R.string.hotspot_mode_manual_desc),
-            getString(R.string.hotspot_mode_p2p_desc),
-            getString(R.string.existing_wifi_description)
-        )
+        val vehicleWireless = com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.supported()
+        val modes = if(vehicleWireless) listOf(WirelessHotspotMode.PIONEER_VEHICLE)
+            else listOf(WirelessHotspotMode.MANUAL, WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.EXISTING_WIFI)
+        val titles = if(vehicleWireless) listOf(getString(R.string.settings_pioneer_wireless_hotspot))
+            else listOf(getString(R.string.settings_built_in_car_hotspot_recommended), getString(R.string.wifi_direct), getString(R.string.existing_wifi_title))
+        val descriptions = if(vehicleWireless) listOf(getString(R.string.settings_pioneer_wireless_description))
+            else listOf(getString(R.string.hotspot_mode_manual_desc), getString(R.string.hotspot_mode_p2p_desc), getString(R.string.existing_wifi_description))
         val wide = resources.configuration.screenWidthDp >= 850
         val choices = if (wide) row().apply { gravity = Gravity.TOP } else column()
         parent.addView(choices)
@@ -5533,7 +5537,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun applyWirelessLink(mode: WirelessHotspotMode) {
         startupHotspotCancelled = true
+        val vehicleChange = mode == WirelessHotspotMode.PIONEER_VEHICLE ||
+            AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.PIONEER_VEHICLE
         AirPlayPersistence.saveWirelessHotspotMode(this, mode)
+        if (vehicleChange) markReconnectNeeded()
         render()
         toast(getString(R.string.saved_for_your_next_connection))
     }
@@ -5881,7 +5888,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
         if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
-        if (wireless && RemoteGatewaySettings.loadSelected(this) == null && DiPlayPreferences.phoneAddress(this) == null) {
+        if (wireless && (AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.PIONEER_VEHICLE ||
+                RemoteGatewaySettings.loadSelected(this) == null) && DiPlayPreferences.phoneAddress(this) == null) {
             pendingWireless = true; choosePhone(); return
         }
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
@@ -5893,7 +5901,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val open = {
             AirPlayPersistence.saveWirelessEnabled(this, wireless)
-            if (wireless && RemoteGatewaySettings.loadSelected(this) != null) {
+            if (wireless && AirPlayPersistence.loadWirelessHotspotMode(this) != WirelessHotspotMode.PIONEER_VEHICLE &&
+                RemoteGatewaySettings.loadSelected(this) != null) {
                 AirPlayPersistence.saveMfiTarget(this, com.shilapi.xcertplay.orchestration.MfiTarget.LOCAL)
             }
             openProjection()
@@ -5908,6 +5917,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (forwardingToProjection) overridePendingTransition(0, 0)
     }
     private fun choosePhone() {
+        if(AirPlayPersistence.loadWirelessHotspotMode(this)==WirelessHotspotMode.PIONEER_VEHICLE) {
+            choosePioneerPhone()
+            return
+        }
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT); return
         }
@@ -5950,6 +5963,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 if (start) connect(true)
             }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> openBluetoothSettings() }
             .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
+    }
+
+    private fun choosePioneerPhone() {
+        Thread({
+            val result=runCatching { com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.phones() }
+            runOnUiThread {
+                if(isFinishing || isDestroyed)return@runOnUiThread
+                val phones=result.getOrNull().orEmpty()
+                if(phones.isEmpty()) {
+                    pendingWireless=false
+                    appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
+                        .setMessage(getString(R.string.settings_pioneer_pair_original))
+                        .setPositiveButton(getString(R.string.got_it),null).show()
+                } else appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
+                    .setItems(phones.map { it.name.ifBlank { getString(R.string.paired_device) } }.toTypedArray()) { _,index ->
+                        val phone=phones[index]
+                        DiPlayPreferences.savePhone(this,phone.address,phone.name.ifBlank { "iPhone" })
+                        val start=pendingWireless;pendingWireless=false;render()
+                        if(start)connect(true)
+                    }.setNegativeButton(getString(R.string.cancel)) { _,_ -> pendingWireless=false }.show()
+            }
+        },"pioneer-paired-phones").apply { isDaemon=true;start() }
     }
 
     private fun wirelessHelp() {

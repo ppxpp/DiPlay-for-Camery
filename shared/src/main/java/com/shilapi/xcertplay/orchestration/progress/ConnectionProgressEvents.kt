@@ -4,6 +4,16 @@ import com.shilapi.xcertplay.orchestration.CarPlayStatus
 
 /** Maps typed lifecycle events rather than parsing translated status/log strings. */
 fun ConnectionProgress.status(status: CarPlayStatus) {
+    if(channel == ConnectionChannel.PIONEER_WIRELESS) {
+        when(status) {
+            CarPlayStatus.ConnectingBluetooth -> task(ConnectionTask.WIRELESS_LINK,ConnectionTaskState.RUNNING)
+            CarPlayStatus.StartingHotspot -> task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.RUNNING)
+            is CarPlayStatus.HotspotReady -> task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.COMPLETE)
+            is CarPlayStatus.Failed, CarPlayStatus.ControlEnded -> stop(ConnectionOutcome.FAILED)
+            else -> Unit
+        }
+        return
+    }
     transportTasks()
     when (status) {
         CarPlayStatus.DiscoveringIphone -> task(ConnectionTask.DETECT, ConnectionTaskState.RUNNING)
@@ -51,6 +61,7 @@ fun ConnectionProgress.status(status: CarPlayStatus) {
 }
 
 fun ConnectionProgress.transportTasks() {
+    if(channel == ConnectionChannel.PIONEER_WIRELESS)return
     com.shilapi.xcertplay.pioneer.PioneerConnectionTasks.snapshot().forEach { event ->
         val task = ConnectionTask.entries.firstOrNull { it.id == event.id } ?: return@forEach
         val value = runCatching { ConnectionTaskState.valueOf(event.state) }.getOrNull() ?: return@forEach

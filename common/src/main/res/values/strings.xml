@@ -1051,4 +1051,15 @@
     <string name="disclaimer_agree_swipe_hint">Agree and continue\nSwipe left or right</string>
     <string name="settings_update_client_id">Client ID: %1$s</string>
     <string name="settings_update_client_id_unavailable">Client ID unavailable</string>
+    <string name="settings_pioneer_wireless_hotspot">Vehicle 5 GHz hotspot (experimental)</string>
+    <string name="settings_pioneer_pair_original">Pair your iPhone in the original vehicle Bluetooth settings, then select it here. This mode uses the vehicle Bluetooth and creates a 5 GHz hotspot; it requires the supported Pioneer firmware.</string>
+    <string name="connect_progress_vehicle_hotspot">Prepare vehicle hotspot</string>
+    <string name="connect_progress_vehicle_bluetooth">Connect iPhone Bluetooth</string>
+    <string name="connect_progress_vehicle_auth">Authenticate Bluetooth</string>
+    <string name="connect_progress_vehicle_bootstrap">Guide wireless connection</string>
+    <string name="connect_progress_vehicle_join">Wait for iPhone network</string>
+    <string name="connect_progress_vehicle_session">Establish CarPlay session</string>
+    <string name="settings_pioneer_wireless_description">Uses the original vehicle Bluetooth and automatically starts its 5 GHz hotspot through vehicle privileges. Applies on the next connection.</string>
+    <string name="connection_help_pioneer_hotspot">Stop any hotspot started by another app, then reconnect. DiPlay starts the vehicle hotspot automatically; keep iPhone Wi-Fi enabled.</string>
+    <string name="connection_help_bluetooth_not_connected">Connect the selected iPhone in the vehicle’s original Bluetooth settings, then retry wireless CarPlay.</string>
 </resources>

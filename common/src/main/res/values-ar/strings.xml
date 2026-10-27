@@ -978,4 +978,15 @@
     <string name="disclaimer_agree_swipe_hint">موافقة ومتابعة\nاسحب يمينًا أو يسارًا</string>
     <string name="settings_update_client_id">معرّف العميل: %1$s</string>
     <string name="settings_update_client_id_unavailable">معرّف العميل غير متاح</string>
+    <string name="settings_pioneer_wireless_hotspot">نقطة اتصال السيارة 5 غيغاهرتز (تجريبي)</string>
+    <string name="settings_pioneer_pair_original">قم بإقران iPhone من إعدادات بلوتوث السيارة الأصلية، ثم أعد المحاولة.</string>
+    <string name="connect_progress_vehicle_hotspot">نقطة اتصال السيارة</string>
+    <string name="connect_progress_vehicle_bluetooth">بلوتوث iPhone</string>
+    <string name="connect_progress_vehicle_auth">مصادقة بلوتوث</string>
+    <string name="connect_progress_vehicle_bootstrap">بدء الاتصال اللاسلكي</string>
+    <string name="connect_progress_vehicle_join">اتصال iPhone بالشبكة</string>
+    <string name="connect_progress_vehicle_session">جلسة CarPlay</string>
+    <string name="settings_pioneer_wireless_description">يستخدم بلوتوث السيارة الأصلي ويشغّل نقطة اتصال 5 غيغاهرتز تلقائيًا بصلاحيات السيارة. يسري عند الاتصال التالي.</string>
+    <string name="connection_help_pioneer_hotspot">أوقف نقطة الاتصال التي شغّلها تطبيق آخر ثم أعد الاتصال. يشغّلها DiPlay تلقائيًا؛ أبقِ Wi-Fi في iPhone مفعّلًا.</string>
+    <string name="connection_help_bluetooth_not_connected">وصّل iPhone المحدد من إعدادات Bluetooth الأصلية للسيارة، ثم أعد محاولة CarPlay اللاسلكي.</string>
 </resources>

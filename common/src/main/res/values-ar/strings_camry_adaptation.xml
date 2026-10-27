@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">تكامل وحدة السيارة</string>
     <string name="settings_camry_title">تكامل Camry A Navigation</string>
-    <string name="settings_camry_description">تفعيل تكامل USB وVPN والصوت والميكروفون وHUD لهذا الطراز. أعد توصيل CarPlay بعد التغيير.</string>
+    <string name="settings_camry_description">تفعيل تكييف USB وVPN وCarPlay اللاسلكي والصوت والميكروفون وHUD. عند التفعيل تستخدم الاتصالات اللاسلكية الطريقة المخصصة لوحدة السيارة. أعد توصيل CarPlay لتطبيق التغييرات.</string>
     <string name="settings_camry_auto">الكشف التلقائي (الافتراضي)</string>
     <string name="settings_camry_on">تفعيل</string>
     <string name="settings_camry_off">تعطيل</string>

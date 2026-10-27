@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">Head-unit adaptation</string>
     <string name="settings_camry_title">Camry A-navigation adaptation</string>
-    <string name="settings_camry_description">Use Camry A-navigation USB, VPN, audio, microphone and HUD integration. Reconnect CarPlay after changing this setting.</string>
+    <string name="settings_camry_description">Enable Camry A-navigation adaptations for USB, VPN, wireless CarPlay, audio, microphone and HUD. While enabled, wireless connections use the vehicle-specific scheme. Reconnect CarPlay to apply changes.</string>
     <string name="settings_camry_auto">Automatic detection (default)</string>
     <string name="settings_camry_on">Enable</string>
     <string name="settings_camry_off">Disable</string>

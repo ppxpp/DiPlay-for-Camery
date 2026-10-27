@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">车机适配</string>
     <string name="settings_camry_title">凯美瑞 A 导航适配</string>
-    <string name="settings_camry_description">启用此机型的 USB、VPN、音频、麦克风及 HUD 等适配。修改后重新连接 CarPlay 生效。</string>
+    <string name="settings_camry_description">启用此机型的 USB、VPN、无线 CarPlay、音频、麦克风及 HUD 等适配。启用时无线连接使用车机专用方案；修改后重新连接 CarPlay 生效。</string>
     <string name="settings_camry_auto">自动识别（默认）</string>
     <string name="settings_camry_on">启用</string>
     <string name="settings_camry_off">不启用</string>

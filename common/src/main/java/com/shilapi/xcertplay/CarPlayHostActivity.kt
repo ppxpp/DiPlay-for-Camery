@@ -292,7 +292,7 @@ class CarPlayHostActivity : ComponentActivity() {
         nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM,
         optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED,
         wiredBackend = startupWiredBackend,
-        wirelessHotspotMode = wirelessHotspotMode,
+        wirelessHotspotMode = AirPlayPersistence.loadWirelessHotspotMode(this),
         wifiP2pPreferredChannel = AirPlayPersistence.loadWifiP2pPreferredChannel(this),
         manualHotspotSsid = manualHotspotSsid,
         manualHotspotPassphrase = manualHotspotPassphrase,
@@ -529,6 +529,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var externalActivityInProgress = false
     private var sink: AndroidMediaSink? = null
     private var controller: CarPlayController? = null
+    private var pendingVehicleTeardown: CarPlayController? = null
     private val videoSurfaceOwner = CarPlayVideoSurfaceOwner<Surface>(
         detach = { surface ->
             sink?.clearSurface(SCREEN_TYPE_MAIN, surface)
@@ -853,7 +854,8 @@ class CarPlayHostActivity : ComponentActivity() {
     private val pioneerSurfaceRetirement = PioneerSurfaceRetirement()
 
     private fun pioneerSurfaceToRetire(): Surface? =
-        if (!wirelessEnabled && com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() && fallbackVideoView != null)
+        if ((!wirelessEnabled || wirelessHotspotMode == WirelessHotspotMode.PIONEER_VEHICLE) &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice() && fallbackVideoView != null)
             currentSurface?.takeIf { it.isValid }
         else null
 
@@ -2195,6 +2197,8 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         panel.addView(stage)
         (connectionProgressPanel.parent as? android.view.ViewGroup)?.removeView(connectionProgressPanel)
+        connectionProgressPanel.pendingTransport(wirelessEnabled,
+            wirelessHotspotMode == WirelessHotspotMode.PIONEER_VEHICLE)
         panel.addView(connectionProgressPanel, LinearLayout.LayoutParams(-1, -2).apply {
             topMargin = dp(10); bottomMargin = dp(6)
         })
@@ -4670,12 +4674,18 @@ class CarPlayHostActivity : ComponentActivity() {
             setPadding(0, dp(8), 0, 0)
         }
         val modes = buildList {
-            add(WirelessHotspotMode.MANUAL to getString(R.string.settings_built_in_car_hotspot_recommended))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                add(WirelessHotspotMode.WIFI_P2P to getString(R.string.wi_fi_p2p_5_ghz))
+            if(com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.supported()) {
+                add(WirelessHotspotMode.PIONEER_VEHICLE to getString(R.string.settings_pioneer_wireless_hotspot))
+            } else {
+                add(WirelessHotspotMode.MANUAL to getString(R.string.settings_built_in_car_hotspot_recommended))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    add(WirelessHotspotMode.WIFI_P2P to getString(R.string.wi_fi_p2p_5_ghz))
+                }
+                add(WirelessHotspotMode.EXISTING_WIFI to getString(R.string.existing_wifi_title))
             }
-            add(WirelessHotspotMode.EXISTING_WIFI to getString(R.string.existing_wifi_title))
         }
+        val selectedMode=com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerWirelessSelection.resolve(
+            wirelessHotspotMode,com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled())
         var selectedId = View.NO_ID
         for ((mode, label) in modes) {
             val button = RadioButton(this).apply {
@@ -4688,9 +4698,9 @@ class CarPlayHostActivity : ComponentActivity() {
                     intArrayOf(MENU_ACCENT, MENU_SECONDARY),
                 )
                 tag = mode
-                isChecked = wirelessHotspotMode == mode
+                isChecked = selectedMode == mode
             }
-            if (wirelessHotspotMode == mode) selectedId = button.id
+            if (selectedMode == mode) selectedId = button.id
             group.addView(
                 button,
                 RadioGroup.LayoutParams(
@@ -4907,6 +4917,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun hotspotModeLabel(mode: WirelessHotspotMode): String = when (mode) {
+        WirelessHotspotMode.PIONEER_VEHICLE -> getString(R.string.settings_pioneer_wireless_hotspot)
         WirelessHotspotMode.WIFI_P2P -> getString(R.string.wi_fi_p2p_5_ghz)
         WirelessHotspotMode.LOCAL_ONLY_HOTSPOT -> getString(R.string.localonlyhotspot)
         WirelessHotspotMode.MANUAL -> getString(R.string.manual_hotspot)
@@ -6224,7 +6235,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun maybeStartCarPlay() {
-        if (shuttingDown.get()) return
+        if (shuttingDown.get() || pendingVehicleTeardown != null) return
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) {
             if (!adoptBackgroundSession()) mainHandler.postDelayed({ maybeStartCarPlay() }, 500)
             return
@@ -6390,7 +6401,8 @@ class CarPlayHostActivity : ComponentActivity() {
         handshakeResetInProgress = true
         callPopupSessionReady = false
         updateCallPopupGuard()
-        val oldController = controller
+        val oldController = controller ?: pendingVehicleTeardown
+        if (oldController?.requiresCompleteTeardownBeforeRestart == true) pendingVehicleTeardown = oldController
         val oldSink = sink
         CarPlayMediaKeys.detach(oldController)
         CarPlayBackgroundSession.clear(oldController, keepOwner = true)
@@ -6404,7 +6416,9 @@ class CarPlayHostActivity : ComponentActivity() {
         teardownExecutor.execute {
             val started = System.nanoTime()
             oldController?.close()
-            val completed = oldController?.awaitClosed(CONTROLLER_CLOSE_TIMEOUT_MILLIS) ?: true
+            val completed = oldController?.awaitClosedForRestart(CONTROLLER_CLOSE_TIMEOUT_MILLIS) {
+                shuttingDown.get() || generation != restartGeneration
+            } ?: true
             AsyncDiagnosticLog.append(
                 diagnosticLog,
                 "${CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX} generation=$generation " +
@@ -6413,8 +6427,17 @@ class CarPlayHostActivity : ComponentActivity() {
             )
             oldSink?.let(::closeRetiringSink)
             runOnUiThread {
+                if (completed && pendingVehicleTeardown === oldController) pendingVehicleTeardown = null
                 if (!shuttingDown.get() && generation == restartGeneration) {
                     handshakeResetInProgress = false
+                    if (!completed && oldController?.requiresCompleteTeardownBeforeRestart == true) {
+                        startupRetryStopped = true
+                        appendLog("Vehicle wireless teardown incomplete; keeping the previous lease protected instead of starting an overlapping session")
+                        connectionProgressPanel.failed()
+                        if (wirelessEnabled) startupRetryButton?.visibility = View.VISIBLE
+                        setConnectionStage(R.string.connect_progress_failed)
+                        return@runOnUiThread
+                    }
                     // The display can rotate again while the old stack is closing. Use the
                     // latest accepted size, and wait for any pending resize to settle first.
                     maybeStartCarPlay()
@@ -6657,7 +6680,7 @@ class CarPlayHostActivity : ComponentActivity() {
         startupRetryBudget.disconnected()
         restartGeneration += 1
         mainHandler.removeCallbacks(applyDisplaySize)
-        val oldController = controller
+        val oldController = controller ?: pendingVehicleTeardown
         val oldSink = sink
         CarPlayMediaKeys.detach(oldController)
         CarPlayBackgroundSession.clear(oldController)

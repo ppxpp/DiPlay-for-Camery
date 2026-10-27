@@ -17,6 +17,7 @@ internal object ConnectionFailureGuidance {
     ): Int {
         if (failure.wifiResetRequired) return R.string.connection_help_reset_wifi
         when (failure.startupFailure) {
+            WirelessStartupFailure.BLUETOOTH_NOT_CONNECTED -> return R.string.connection_help_bluetooth_not_connected
             WirelessStartupFailure.BLUETOOTH_UNUSABLE -> return R.string.connection_help_bluetooth_unusable
             WirelessStartupFailure.WIFI_DIRECT_BESIDE_HOTSPOT -> return R.string.connection_help_wifi_direct_beside_hotspot
             WirelessStartupFailure.HOTSPOT_NOT_READY,
@@ -51,6 +52,7 @@ internal object ConnectionFailureGuidance {
     /** The network the iPhone joins: the car hotspot, a Wi-Fi Direct group, or a shared Wi-Fi. */
     @StringRes
     private fun network(mode: WirelessHotspotMode): Int = when (mode) {
+        WirelessHotspotMode.PIONEER_VEHICLE -> R.string.connection_help_pioneer_hotspot
         WirelessHotspotMode.MANUAL -> R.string.connection_help_hotspot
         WirelessHotspotMode.EXISTING_WIFI -> R.string.connection_help_existing_wifi
         WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.LOCAL_ONLY_HOTSPOT -> R.string.connection_help_wifi_direct
@@ -59,5 +61,5 @@ internal object ConnectionFailureGuidance {
     /** Only the car hotspot is a network the driver joins on the iPhone. */
     @StringRes
     private fun iphoneWifi(mode: WirelessHotspotMode): Int =
-        if (mode == WirelessHotspotMode.MANUAL) R.string.connection_help_iphone_wifi else network(mode)
+        if (mode == WirelessHotspotMode.MANUAL || mode == WirelessHotspotMode.PIONEER_VEHICLE) R.string.connection_help_iphone_wifi else network(mode)
 }

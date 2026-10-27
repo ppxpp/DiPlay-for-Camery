@@ -2,7 +2,7 @@ package com.shilapi.xcertplay.orchestration.progress
 
 /** A task has its own lifecycle; phases do not pretend overlapping work is sequential. */
 enum class ConnectionTaskState { PENDING, RUNNING, COMPLETE, REUSED, RETRYING, FAILED, CANCELLED, SKIPPED }
-enum class ConnectionChannel { VPN, LWIP, NATIVE_NCM, WIRELESS, FRAMEWORK }
+enum class ConnectionChannel { VPN, LWIP, NATIVE_NCM, WIRELESS, PIONEER_WIRELESS, FRAMEWORK }
 enum class ConnectionTask(val id: String, val step: ConnectionStep) {
     ROOT("root", ConnectionStep.PREPARATION), CONFIG("config", ConnectionStep.PREPARATION),
     DETECT("device-detect", ConnectionStep.PREPARATION), COMPONENTS("components", ConnectionStep.PREPARATION),
@@ -31,15 +31,15 @@ data class ConnectionTaskSnapshot(val task: ConnectionTask, val state: Connectio
 fun connectionTasks(channel: ConnectionChannel): List<ConnectionTask> = ConnectionTask.entries.filter { task ->
     when (task) {
         ConnectionTask.SESSION_AUTH -> channel != ConnectionChannel.WIRELESS
-        ConnectionTask.ROOT -> channel == ConnectionChannel.VPN
+        ConnectionTask.ROOT -> channel in setOf(ConnectionChannel.VPN,ConnectionChannel.PIONEER_WIRELESS)
         ConnectionTask.VPN_PERMISSION, ConnectionTask.TUN, ConnectionTask.TUN_INFO -> channel in setOf(ConnectionChannel.VPN, ConnectionChannel.FRAMEWORK)
-        ConnectionTask.RULE_CHECK, ConnectionTask.NETWORK_READY, ConnectionTask.RULES -> channel == ConnectionChannel.VPN
+        ConnectionTask.RULE_CHECK, ConnectionTask.NETWORK_READY, ConnectionTask.RULES -> channel in setOf(ConnectionChannel.VPN,ConnectionChannel.PIONEER_WIRELESS)
         ConnectionTask.DRIVER, ConnectionTask.INTERFACE -> channel == ConnectionChannel.NATIVE_NCM
-        ConnectionTask.WIRELESS_NETWORK -> channel == ConnectionChannel.WIRELESS
+        ConnectionTask.WIRELESS_NETWORK -> channel in setOf(ConnectionChannel.WIRELESS,ConnectionChannel.PIONEER_WIRELESS)
         ConnectionTask.STACK -> channel == ConnectionChannel.LWIP
-        ConnectionTask.PERMISSION_CHECK, ConnectionTask.PERMISSION_REQUEST -> channel != ConnectionChannel.WIRELESS
-        ConnectionTask.WIRELESS_LINK -> channel == ConnectionChannel.WIRELESS
-        ConnectionTask.USB_PERMISSION, ConnectionTask.USB_OPEN, ConnectionTask.USB_INTERFACES -> channel != ConnectionChannel.WIRELESS
+        ConnectionTask.PERMISSION_CHECK, ConnectionTask.PERMISSION_REQUEST -> channel !in setOf(ConnectionChannel.WIRELESS,ConnectionChannel.PIONEER_WIRELESS)
+        ConnectionTask.WIRELESS_LINK -> channel in setOf(ConnectionChannel.WIRELESS,ConnectionChannel.PIONEER_WIRELESS)
+        ConnectionTask.USB_PERMISSION, ConnectionTask.USB_OPEN, ConnectionTask.USB_INTERFACES -> channel !in setOf(ConnectionChannel.WIRELESS,ConnectionChannel.PIONEER_WIRELESS)
         ConnectionTask.IO, ConnectionTask.BUFFERS, ConnectionTask.BRIDGE -> channel in setOf(ConnectionChannel.VPN, ConnectionChannel.FRAMEWORK, ConnectionChannel.LWIP)
         else -> true
     }

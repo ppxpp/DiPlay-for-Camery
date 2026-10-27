@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">Интеграция с головным устройством</string>
     <string name="settings_camry_title">Адаптация Camry A Navigation</string>
-    <string name="settings_camry_description">Включает USB, VPN, звук, микрофон и HUD для этой модели. После изменения переподключите CarPlay.</string>
+    <string name="settings_camry_description">Включает адаптацию USB, VPN, беспроводного CarPlay, звука, микрофона и HUD. Беспроводное подключение использует специальный режим головного устройства. Для применения изменений переподключите CarPlay.</string>
     <string name="settings_camry_auto">Автоопределение (по умолчанию)</string>
     <string name="settings_camry_on">Включить</string>
     <string name="settings_camry_off">Отключить</string>

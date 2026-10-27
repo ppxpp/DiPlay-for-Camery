@@ -499,11 +499,13 @@ internal class MicrophoneUplink(
     }
 
     private fun sendFrame(socket: DatagramSocket, counters: MicrophoneCounters, frame: ByteArray) {
+        val encodeStarted=System.nanoTime()
         val bodies = if (config.codec == AudioCodecKind.OPUS) {
             opusEncoder?.encode(frame).orEmpty()
         } else {
             listOf(MicrophonePacketizer.toWirePcm(frame))
         }
+        stats.encoding(System.nanoTime()-encodeStarted)
         stats.encoded(bodies.size, if (bodies.isEmpty()) 1 else bodies.count { it.isEmpty() })
         bodies.forEach { body ->
             sendPacket(

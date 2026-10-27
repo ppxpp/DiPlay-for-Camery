@@ -929,4 +929,15 @@
     <string name="disclaimer_agree_swipe_hint">Принять и продолжить\nЛистайте влево или вправо</string>
     <string name="settings_update_client_id">ID клиента: %1$s</string>
     <string name="settings_update_client_id_unavailable">ID клиента недоступен</string>
+    <string name="settings_pioneer_wireless_hotspot">Точка доступа автомобиля 5 ГГц (экспериментально)</string>
+    <string name="settings_pioneer_pair_original">Подключите iPhone в штатных настройках Bluetooth автомобиля и повторите попытку.</string>
+    <string name="connect_progress_vehicle_hotspot">Точка доступа</string>
+    <string name="connect_progress_vehicle_bluetooth">Bluetooth iPhone</string>
+    <string name="connect_progress_vehicle_auth">Проверка Bluetooth</string>
+    <string name="connect_progress_vehicle_bootstrap">Запуск беспроводной связи</string>
+    <string name="connect_progress_vehicle_join">iPhone в сети</string>
+    <string name="connect_progress_vehicle_session">Сеанс CarPlay</string>
+    <string name="settings_pioneer_wireless_description">Использует штатный Bluetooth и автоматически запускает точку доступа 5 ГГц с правами автомобиля. Применяется при следующем подключении.</string>
+    <string name="connection_help_pioneer_hotspot">Остановите точку доступа другого приложения и подключитесь снова. DiPlay запустит её автоматически; оставьте Wi-Fi iPhone включённым.</string>
+    <string name="connection_help_bluetooth_not_connected">Подключите выбранный iPhone в штатных настройках Bluetooth автомобиля и повторите беспроводное подключение CarPlay.</string>
 </resources>
