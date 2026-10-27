@@ -77,10 +77,8 @@
     <string name="status_attaching_ncm">Attaching NCM/AirPlay network</string>
     <string name="status_failed">Failed: %1$s</string>
     <string name="msg_car_hotspot_off">The car hotspot “%1$s” is off. Turn it on in the car settings before connecting.</string>
-    <string name="home_public_preview">PUBLIC PREVIEW\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">Choose iPhone ·\u0020</string>
     <string name="audio_saved_value">Saved: %1$d</string>
-    <string name="about_public_preview_prefix">Public preview\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">DiPlay connects through the car hotspot “%1$s”. Turn it on in the car settings, then connect.</string>
     <string name="edit_saved_hotspot_prefix">Edit saved hotspot ·\u0020</string>
     <string name="cluster_adb_multi_device">If ADB lists several devices, use adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow. Find the ID with adb devices.</string>
@@ -1048,7 +1046,7 @@
     <string name="settings_hotspot_interface">Hotspot interface (optional)</string>
     <string name="settings_hotspot_interface_description">Only for head units that run their hotspot on a network interface Android does not report as a Wi-Fi hotspot, for example eth0.3 on some Geely, Lynk &amp; Co and other Qualcomm units. Leave empty to find it automatically.</string>
     <string name="home_title">DiPlay凯美瑞A导航适配版</string>
-    <string name="disclaimer_agree_swipe_hint">Agree and continue\nSwipe left or right</string>
+    <string name="disclaimer_swipe_hint">Swipe left or right</string>
     <string name="settings_update_client_id">Client ID: %1$s</string>
     <string name="settings_update_client_id_unavailable">Client ID unavailable</string>
     <string name="settings_pioneer_wireless_hotspot">Vehicle 5 GHz hotspot (experimental)</string>
@@ -1062,4 +1060,17 @@
     <string name="settings_pioneer_wireless_description">Uses the original vehicle Bluetooth and automatically starts its 5 GHz hotspot through vehicle privileges. Applies on the next connection.</string>
     <string name="connection_help_pioneer_hotspot">Stop any hotspot started by another app, then reconnect. DiPlay starts the vehicle hotspot automatically; keep iPhone Wi-Fi enabled.</string>
     <string name="connection_help_bluetooth_not_connected">Connect the selected iPhone in the vehicle’s original Bluetooth settings, then retry wireless CarPlay.</string>
+    <!-- Settings · Diagnostics. Only rendered in builds that bundle the SDK (-Pdiplay.analytics=umeng). -->
+    <string name="settings_analytics_title">Usage and crash reports</string>
+    <string name="settings_analytics_summary">Never location or routes, personal identity, head-unit codes or vehicle information. Only launches, connection outcomes and crash stack traces are sent.</string>
+    <string name="settings_analytics_show_details">Show what is sent</string>
+    <string name="settings_analytics_hide_details">Hide what is sent</string>
+    <string name="settings_analytics_sent">Sent: head unit model and OS version, app version and channel, CarPlay connection type and outcome, crash and ANR stack traces.</string>
+    <string name="settings_analytics_not_sent">Never uploaded: location and routes, personal identity (account, phone number, contacts), vehicle information (VIN, plate), head-unit codes or serial numbers, installed apps, IMEI/IMSI/ICCID/Wi-Fi MAC, advertising identifiers (OAID/AD_ID).</string>
+    <string name="settings_analytics_disabled_note">No new analytics events are sent now; sessions and crash uploads stop after the app restarts.</string>
+    <string name="disclaimer_page4_title">Data and privacy</string>
+    <string name="disclaimer_page4_l1">Continuing agrees to send usage and crash data. We never upload location or routes, personal identity, head-unit codes or vehicle information.</string>
+    <string name="disclaimer_page4_l2">You can turn it off in Settings · Diagnostics; sessions and crash uploads stop after the app restarts.</string>
+    <string name="home_build_basis">(Built on DiPlay %1$s)</string>
+    <string name="home_license_notice">Open source and free · For learning only · No resale or commercial use · Do not use while driving</string>
 </resources>

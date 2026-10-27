@@ -77,10 +77,8 @@
     <string name="status_attaching_ncm">正在连接 NCM/AirPlay 网络</string>
     <string name="status_failed">失败：%1$s</string>
     <string name="msg_car_hotspot_off">车机热点“%1$s”未开启。请在车机设置中开启后再连接。</string>
-    <string name="home_public_preview">公开预览\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">选择 iPhone ·\u0020</string>
     <string name="audio_saved_value">已保存：%1$d</string>
-    <string name="about_public_preview_prefix">公开预览\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">DiPlay 通过车机热点“%1$s”连接。请在车机设置中开启热点后连接。</string>
     <string name="edit_saved_hotspot_prefix">编辑已保存的热点 ·\u0020</string>
     <string name="cluster_adb_multi_device">如果 ADB 列出多个设备，请使用 adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow。用 adb devices 查询 ID。</string>
@@ -1004,7 +1002,7 @@
 
     <string name="settings_hotspot_interface">热点网络接口（可选）</string>
     <string name="settings_hotspot_interface_description">仅用于把热点放在 Android 不认为是 Wi-Fi 热点的网络接口上的车机，例如部分吉利、领克及其它高通车机上的 eth0.3。留空则自动查找。</string>
-    <string name="disclaimer_agree_swipe_hint">同意并继续\n左右滑动翻页</string>
+    <string name="disclaimer_swipe_hint">左右滑动翻页</string>
     <string name="settings_update_client_id">客户端 ID：%1$s</string>
     <string name="settings_update_client_id_unavailable">客户端 ID 不可用</string>
     <string name="settings_pioneer_wireless_hotspot">车机 5GHz 热点（实验性）</string>
@@ -1018,4 +1016,16 @@
     <string name="settings_pioneer_wireless_description">使用原车蓝牙，通过车机权限自动创建5 GHz热点。下次连接时生效。</string>
     <string name="connection_help_pioneer_hotspot">请停止其他应用创建的热点后重新连接。DiPlay会自动开启车机热点，请保持iPhone的Wi-Fi开启。</string>
     <string name="connection_help_bluetooth_not_connected">请先在车机原厂蓝牙设置中连接已选 iPhone，再重试无线 CarPlay。</string>
+    <string name="settings_analytics_title">使用统计与崩溃报告</string>
+    <string name="settings_analytics_summary">不上传位置轨迹、个人身份信息、车机编码或车辆信息；只发送启动、连接结果与崩溃堆栈。</string>
+    <string name="settings_analytics_show_details">查看发送内容</string>
+    <string name="settings_analytics_hide_details">收起发送内容</string>
+    <string name="settings_analytics_sent">会发送：车机型号与系统版本、App 版本与渠道、CarPlay 连接方式与结果、崩溃/ANR 堆栈。</string>
+    <string name="settings_analytics_not_sent">不会上传：位置与行车轨迹、个人身份信息（账号、手机号、通讯录）、车辆信息（VIN、车牌）、车机编码/序列号、已安装应用列表、IMEI/IMSI/ICCID/WiFi MAC、广告标识（OAID/AD_ID）。</string>
+    <string name="settings_analytics_disabled_note">关闭后不再发送新的统计事件，重启应用后完全停止。</string>
+    <string name="disclaimer_page4_title">数据与隐私</string>
+    <string name="disclaimer_page4_l1">继续即表示同意发送使用统计与崩溃数据。我们不会上传位置轨迹、个人身份信息、车机编码或车辆信息。</string>
+    <string name="disclaimer_page4_l2">可随时在「设置 · 诊断」中关闭；重启应用后完全停止。</string>
+    <string name="home_build_basis">（基于DiPlay%1$s版本构建）</string>
+    <string name="home_license_notice">开源免费 · 仅供学习交流 · 禁止转售商用 · 请勿用于真实驾驶场景</string>
 </resources>

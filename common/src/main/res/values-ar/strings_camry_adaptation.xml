@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_camry_section">تكامل وحدة السيارة</string>
-    <string name="settings_camry_title">تكامل Camry A Navigation</string>
-    <string name="settings_camry_description">تفعيل تكييف USB وVPN وCarPlay اللاسلكي والصوت والميكروفون وHUD. عند التفعيل تستخدم الاتصالات اللاسلكية الطريقة المخصصة لوحدة السيارة. أعد توصيل CarPlay لتطبيق التغييرات.</string>
+    <string name="settings_camry_section">تكيّف وحدة سيارة Camry A Navigation</string>
+    <string name="settings_camry_title">تفعيل التكيّف مع وحدة سيارة Camry A Navigation</string>
+    <string name="settings_camry_description">عند التفعيل، تتعامل DiPlay مع USB وVPN والصوت والميكروفون وHUD وفق تكامل وحدة سيارة Camry A Navigation. يعتمد الكشف التلقائي على الطراز؛ اختر «فرض التفعيل» عند عدم التعرف، و«عدم التفعيل» في السيارات الأخرى. أعد توصيل CarPlay بعد التغيير. عند التفعيل تستخدم الاتصالات اللاسلكية الطريقة المخصصة لوحدة السيارة.</string>
     <string name="settings_camry_auto">الكشف التلقائي (الافتراضي)</string>
-    <string name="settings_camry_on">تفعيل</string>
-    <string name="settings_camry_off">تعطيل</string>
-    <string name="settings_camry_enabled">السياسة المحددة: التكامل مفعّل</string>
-    <string name="settings_camry_disabled">السياسة المحددة: التكامل معطّل</string>
-    <string name="settings_camry_detected">تم اكتشاف Camry A Navigation؛ التكامل مفعّل</string>
-    <string name="settings_camry_not_detected">لم يتم اكتشاف Camry A Navigation؛ التكامل معطّل</string>
+    <string name="settings_camry_on">فرض التفعيل</string>
+    <string name="settings_camry_off">عدم التفعيل</string>
+    <string name="settings_camry_enabled">تم فرض تفعيل التكيّف</string>
+    <string name="settings_camry_disabled">التكيّف معطّل؛ يتم الاتصال كوحدة قياسية</string>
+    <string name="settings_camry_detected">كشف تلقائي: تم التعرف على Camry A Navigation؛ التكيّف مفعّل</string>
+    <string name="settings_camry_not_detected">كشف تلقائي: لم يتم التعرف على Camry A Navigation؛ التكيّف معطّل</string>
 </resources>

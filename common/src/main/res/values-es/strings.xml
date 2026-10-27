@@ -77,10 +77,8 @@
     <string name="status_attaching_ncm">Conectando la red NCM/AirPlay</string>
     <string name="status_failed">Error: %1$s</string>
     <string name="msg_car_hotspot_off">El punto de acceso del coche «%1$s» está apagado. Actívalo en la configuración del coche antes de conectarte.</string>
-    <string name="home_public_preview">VISTA PREVIA PÚBLICA\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">Elegir iPhone ·\u0020</string>
     <string name="audio_saved_value">Guardado: %1$d</string>
-    <string name="about_public_preview_prefix">Vista previa\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">DiPlay se conecta a través del punto de acceso del coche «%1$s». Actívalo en la configuración del coche y luego conéctate.</string>
     <string name="edit_saved_hotspot_prefix">Editar punto de acceso guardado ·\u0020</string>
     <string name="cluster_adb_multi_device">Si ADB lista varios dispositivos, usa adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow. Encuentra el ID con adb devices.</string>
@@ -926,7 +924,6 @@
 
     <string name="settings_hotspot_interface">Interfaz del punto de acceso (opcional)</string>
     <string name="settings_hotspot_interface_description">Solo para unidades que ejecutan su punto de acceso en una interfaz de red que Android no informa como punto de acceso Wi-Fi, por ejemplo eth0.3 en algunas unidades Geely, Lynk &amp; Co y otros Qualcomm. Déjalo vacío para encontrarla automáticamente.</string>
-    <string name="disclaimer_agree_swipe_hint">Aceptar y continuar\nDesliza a los lados</string>
     <string name="settings_update_client_id">ID de cliente: %1$s</string>
     <string name="settings_update_client_id_unavailable">ID de cliente no disponible</string>
     <string name="settings_pioneer_wireless_hotspot">Punto de acceso del vehículo de 5 GHz (experimental)</string>
@@ -940,4 +937,17 @@
     <string name="settings_pioneer_wireless_description">Usa el Bluetooth original del vehículo e inicia automáticamente su punto de acceso de 5 GHz con permisos del vehículo. Se aplica en la próxima conexión.</string>
     <string name="connection_help_pioneer_hotspot">Detén el punto de acceso de otras apps y vuelve a conectar. DiPlay lo inicia automáticamente; mantén activado el Wi-Fi del iPhone.</string>
     <string name="connection_help_bluetooth_not_connected">Conecta el iPhone seleccionado en los ajustes Bluetooth originales del vehículo y vuelve a intentar CarPlay inalámbrico.</string>
+    <string name="settings_analytics_title">Uso y informes de fallos</string>
+    <string name="settings_analytics_summary">Nunca enviamos ubicación ni rutas, información que te identifique, códigos de la unidad o información del vehículo. Solo se envían inicios, resultados de conexión y trazas de fallos.</string>
+    <string name="settings_analytics_show_details">Mostrar qué se envía</string>
+    <string name="settings_analytics_hide_details">Ocultar qué se envía</string>
+    <string name="settings_analytics_sent">Se envía: modelo y versión del sistema de la unidad, versión y canal de la app, tipo y resultado de la conexión CarPlay, trazas de fallos/ANR.</string>
+    <string name="settings_analytics_not_sent">Nunca se envía: ubicación y rutas, información que te identifique (cuenta, teléfono, contactos), información del vehículo (VIN, matrícula), códigos/números de serie de la unidad, aplicaciones instaladas, IMEI/IMSI/ICCID/Wi-Fi MAC, identificadores publicitarios (OAID/AD_ID).</string>
+    <string name="settings_analytics_disabled_note">Ya no se envían nuevos eventos de analítica; las sesiones y los fallos se detienen tras reiniciar la app.</string>
+    <string name="disclaimer_swipe_hint">Desliza a izquierda o derecha</string>
+    <string name="disclaimer_page4_title">Datos y privacidad</string>
+    <string name="disclaimer_page4_l1">Al continuar aceptas enviar datos de uso y fallos. Nunca enviamos ubicación ni rutas, información que te identifique, códigos de la unidad o información del vehículo.</string>
+    <string name="disclaimer_page4_l2">Puedes desactivarlo en Ajustes · Diagnóstico; las sesiones y los fallos se detienen tras reiniciar la app.</string>
+    <string name="home_build_basis">(Basado en DiPlay %1$s)</string>
+    <string name="home_license_notice">Código abierto y gratuito · Solo para aprendizaje · Prohibida la reventa o el uso comercial · No usar durante la conducción</string>
 </resources>

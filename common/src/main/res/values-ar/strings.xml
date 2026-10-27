@@ -77,10 +77,8 @@
     <string name="status_attaching_ncm">جارٍ توصيل شبكة NCM/AirPlay</string>
     <string name="status_failed">فشل: %1$s</string>
     <string name="msg_car_hotspot_off">نقطة اتصال السيارة «%1$s» مُغلقة. شغّلها في إعدادات السيارة قبل الاتصال.</string>
-    <string name="home_public_preview">معاينة عامة\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">اختر iPhone ·\u0020</string>
     <string name="audio_saved_value">تم الحفظ: %1$d</string>
-    <string name="about_public_preview_prefix">معاينة عامة\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">يتصل DiPlay عبر نقطة اتصال السيارة «%1$s». شغّلها في إعدادات السيارة ثم اتصل.</string>
     <string name="edit_saved_hotspot_prefix">تعديل نقطة الاتصال المحفوظة ·\u0020</string>
     <string name="cluster_adb_multi_device">إذا عرض ADB عدة أجهزة، استخدم adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow. اعثر على المعرّف عبر adb devices.</string>
@@ -975,7 +973,6 @@
 
     <string name="settings_hotspot_interface">واجهة نقطة الاتصال (اختياري)</string>
     <string name="settings_hotspot_interface_description">لوحدات الرأس التي تشغّل نقطة الاتصال على واجهة شبكة لا يبلّغ عنها أندرويد كنقطة اتصال Wi-Fi، مثل eth0.3 في بعض وحدات Geely وLynk &amp; Co وغيرها من وحدات Qualcomm. اتركه فارغاً للعثور عليها تلقائياً.</string>
-    <string name="disclaimer_agree_swipe_hint">موافقة ومتابعة\nاسحب يمينًا أو يسارًا</string>
     <string name="settings_update_client_id">معرّف العميل: %1$s</string>
     <string name="settings_update_client_id_unavailable">معرّف العميل غير متاح</string>
     <string name="settings_pioneer_wireless_hotspot">نقطة اتصال السيارة 5 غيغاهرتز (تجريبي)</string>
@@ -989,4 +986,17 @@
     <string name="settings_pioneer_wireless_description">يستخدم بلوتوث السيارة الأصلي ويشغّل نقطة اتصال 5 غيغاهرتز تلقائيًا بصلاحيات السيارة. يسري عند الاتصال التالي.</string>
     <string name="connection_help_pioneer_hotspot">أوقف نقطة الاتصال التي شغّلها تطبيق آخر ثم أعد الاتصال. يشغّلها DiPlay تلقائيًا؛ أبقِ Wi-Fi في iPhone مفعّلًا.</string>
     <string name="connection_help_bluetooth_not_connected">وصّل iPhone المحدد من إعدادات Bluetooth الأصلية للسيارة، ثم أعد محاولة CarPlay اللاسلكي.</string>
+    <string name="settings_analytics_title">الاستخدام وتقارير الأعطال</string>
+    <string name="settings_analytics_summary">لا نرسل أبدًا الموقع أو المسارات، أو المعلومات التي تحدد هويتك، أو أكواد الوحدة، أو معلومات المركبة. نرسل فقط مرات التشغيل ونتائج الاتصال وتتبعات الأعطال.</string>
+    <string name="settings_analytics_show_details">عرض ما يُرسل</string>
+    <string name="settings_analytics_hide_details">إخفاء ما يُرسل</string>
+    <string name="settings_analytics_sent">ما يُرسل: طراز الوحدة وإصدار النظام، وإصدار التطبيق والقناة، ونوع اتصال CarPlay ونتيجته، وتتبعات الأعطال/ANR.</string>
+    <string name="settings_analytics_not_sent">ما لا يُرسل أبدًا: الموقع والمسارات، والمعلومات التي تحدد هويتك (الحساب، رقم الهاتف، جهات الاتصال)، ومعلومات المركبة (VIN، لوحة الترخيص)، وأكواد/أرقام تسلسلية للوحدة، والتطبيقات المثبّتة، وIMEI/IMSI/ICCID/Wi-Fi MAC، والمعرّفات الإعلانية (OAID/AD_ID).</string>
+    <string name="settings_analytics_disabled_note">لم تعد أحداث التحليلات الجديدة تُرسل؛ تتوقف الجلسات وتقارير الأعطال بعد إعادة تشغيل التطبيق.</string>
+    <string name="disclaimer_swipe_hint">اسحب لليسار أو لليمين</string>
+    <string name="disclaimer_page4_title">البيانات والخصوصية</string>
+    <string name="disclaimer_page4_l1">بالمتابعة فإنك توافق على إرسال بيانات الاستخدام والأعطال. لا نرسل أبدًا الموقع أو المسارات، أو المعلومات التي تحدد هويتك، أو أكواد الوحدة، أو معلومات المركبة.</string>
+    <string name="disclaimer_page4_l2">يمكنك إيقاف ذلك في «الإعدادات · التشخيص»؛ تتوقف الجلسات وتقارير الأعطال بعد إعادة تشغيل التطبيق.</string>
+    <string name="home_build_basis">(مبني على DiPlay %1$s)</string>
+    <string name="home_license_notice">مفتوح المصدر ومجاني · للتعلم فقط · يُحظر إعادة البيع أو الاستخدام التجاري · لا تستخدمه أثناء القيادة الفعلية</string>
 </resources>

@@ -77,10 +77,8 @@
     <string name="status_attaching_ncm">Подключение сети NCM/AirPlay</string>
     <string name="status_failed">Ошибка: %1$s</string>
     <string name="msg_car_hotspot_off">Точка доступа автомобиля «%1$s» выключена. Включите её в настройках автомобиля перед подключением.</string>
-    <string name="home_public_preview">ОТКРЫТАЯ ПРЕДВАРИТЕЛЬНАЯ ВЕРСИЯ\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">Выбрать iPhone ·\u0020</string>
     <string name="audio_saved_value">Сохранено: %1$d</string>
-    <string name="about_public_preview_prefix">Предварительная версия\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">DiPlay подключается через точку доступа автомобиля «%1$s». Включите её в настройках автомобиля и подключитесь.</string>
     <string name="edit_saved_hotspot_prefix">Изменить сохранённую точку доступа ·\u0020</string>
     <string name="cluster_adb_multi_device">Если ADB перечисляет несколько устройств, используйте adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow. Узнать ID можно командой adb devices.</string>
@@ -926,7 +924,6 @@
 
     <string name="settings_hotspot_interface">Интерфейс точки доступа (необязательно)</string>
     <string name="settings_hotspot_interface_description">Только для головных устройств, которые держат точку доступа на сетевом интерфейсе, не считающемся в Android точкой доступа Wi-Fi, например eth0.3 на некоторых устройствах Geely, Lynk &amp; Co и других Qualcomm. Оставьте пустым для автоматического поиска.</string>
-    <string name="disclaimer_agree_swipe_hint">Принять и продолжить\nЛистайте влево или вправо</string>
     <string name="settings_update_client_id">ID клиента: %1$s</string>
     <string name="settings_update_client_id_unavailable">ID клиента недоступен</string>
     <string name="settings_pioneer_wireless_hotspot">Точка доступа автомобиля 5 ГГц (экспериментально)</string>
@@ -940,4 +937,17 @@
     <string name="settings_pioneer_wireless_description">Использует штатный Bluetooth и автоматически запускает точку доступа 5 ГГц с правами автомобиля. Применяется при следующем подключении.</string>
     <string name="connection_help_pioneer_hotspot">Остановите точку доступа другого приложения и подключитесь снова. DiPlay запустит её автоматически; оставьте Wi-Fi iPhone включённым.</string>
     <string name="connection_help_bluetooth_not_connected">Подключите выбранный iPhone в штатных настройках Bluetooth автомобиля и повторите беспроводное подключение CarPlay.</string>
+    <string name="settings_analytics_title">Статистика и отчёты о сбоях</string>
+    <string name="settings_analytics_summary">Мы никогда не отправляем местоположение и маршруты, данные, позволяющие вас идентифицировать, коды устройства или сведения об автомобиле. Отправляются только запуски, результаты подключения и трассировки сбоев.</string>
+    <string name="settings_analytics_show_details">Показать, что отправляется</string>
+    <string name="settings_analytics_hide_details">Скрыть, что отправляется</string>
+    <string name="settings_analytics_sent">Отправляется: модель и версия системы устройства, версия и канал приложения, тип и результат подключения CarPlay, трассировки сбоев/ANR.</string>
+    <string name="settings_analytics_not_sent">Не отправляется: местоположение и маршруты, данные, позволяющие вас идентифицировать (аккаунт, номер телефона, контакты), сведения об автомобиле (VIN, номер), коды/серийные номера устройства, установленные приложения, IMEI/IMSI/ICCID/Wi-Fi MAC, рекламные идентификаторы (OAID/AD_ID).</string>
+    <string name="settings_analytics_disabled_note">Новые события статистики больше не отправляются; сеансы и отчёты о сбоях прекращаются после перезапуска приложения.</string>
+    <string name="disclaimer_swipe_hint">Смахните влево или вправо</string>
+    <string name="disclaimer_page4_title">Данные и конфиденциальность</string>
+    <string name="disclaimer_page4_l1">Продолжая, вы соглашаетесь отправлять данные об использовании и сбоях. Мы никогда не отправляем местоположение и маршруты, данные, позволяющие вас идентифицировать, коды устройства или сведения об автомобиле.</string>
+    <string name="disclaimer_page4_l2">Отключить можно в «Настройки · Диагностика»; сеансы и отчёты о сбоях прекращаются после перезапуска приложения.</string>
+    <string name="home_build_basis">(Собрано на основе DiPlay %1$s)</string>
+    <string name="home_license_notice">Открытый исходный код, бесплатно · Только для обучения · Перепродажа и коммерческое использование запрещены · Не использовать в реальном движении</string>
 </resources>
