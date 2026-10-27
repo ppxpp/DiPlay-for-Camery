@@ -82,10 +82,8 @@
     <string name="status_attaching_ncm">NCM/AirPlayネットワークに接続しています</string>
     <string name="status_failed">失敗：%1$s</string>
     <string name="msg_car_hotspot_off">車載ホットスポット「%1$s」がオフです。接続前に車の設定でオンにしてください。</string>
-    <string name="home_public_preview">公開プレビュー\u0020·\u0020%1$s</string>
     <string name="choose_iphone_prefix">iPhoneを選択 ·\u0020</string>
     <string name="audio_saved_value">保存済み：%1$d</string>
-    <string name="about_public_preview_prefix">公開プレビュー\u0020·\u0020%1$s</string>
     <string name="msg_car_hotspot_connect">DiPlayは車載ホットスポット「%1$s」を使って接続します。車の設定でオンにしてから接続してください。</string>
     <string name="edit_saved_hotspot_prefix">保存済みのホットスポットを編集 ·\u0020</string>
     <string name="cluster_adb_multi_device">ADBに複数の端末が表示される場合は、adb -s &lt;car-device-ID&gt; shell appops set %1$s GET_USAGE_STATS allow を実行してください。端末IDは adb devices で確認できます。</string>
@@ -1091,7 +1089,19 @@
 
     <string name="settings_hotspot_interface">ホットスポットのインターフェース（任意）</string>
     <string name="settings_hotspot_interface_description">Android が Wi-Fi ホットスポットとして報告しないネットワークインターフェースでホットスポットを動かすヘッドユニット専用です。一部の Geely、Lynk &amp; Co、その他の Qualcomm ユニットでは eth0.3 です。空欄のままにすると自動で検出します。</string>
-    <string name="disclaimer_agree_swipe_hint">同意して続行\n左右にスワイプ</string>
     <string name="settings_update_client_id">クライアント ID: %1$s</string>
     <string name="settings_update_client_id_unavailable">クライアント ID を利用できません</string>
+    <string name="settings_analytics_title">利用状況とクラッシュレポート</string>
+    <string name="settings_analytics_summary">位置情報や走行履歴、個人を特定できる情報、車載機のコード、車両情報は送信しません。送信するのは起動、接続結果、クラッシュのスタックトレースのみです。</string>
+    <string name="settings_analytics_show_details">送信内容を表示</string>
+    <string name="settings_analytics_hide_details">送信内容を隠す</string>
+    <string name="settings_analytics_sent">送信内容：車載機の機種と OS バージョン、アプリのバージョンとチャンネル、CarPlay の接続方式と結果、クラッシュ/ANR のスタックトレース。</string>
+    <string name="settings_analytics_not_sent">送信しません：位置情報と走行履歴、個人を特定できる情報（アカウント、電話番号、連絡先）、車両情報（VIN、ナンバー）、車載機のコード/シリアル番号、インストール済みアプリ一覧、IMEI/IMSI/ICCID/Wi-Fi MAC、広告識別子（OAID/AD_ID）。</string>
+    <string name="settings_analytics_disabled_note">新しい統計イベントの送信は停止しました。セッションとクラッシュの送信はアプリの再起動後に完全に停止します。</string>
+    <string name="disclaimer_page4_title">データとプライバシー</string>
+    <string name="disclaimer_page4_l1">続行すると、利用状況とクラッシュデータの送信に同意したものとみなされます。位置情報や走行履歴、個人を特定できる情報、車載機のコード、車両情報は送信しません。</string>
+    <string name="disclaimer_page4_l2">「設定 · 診断」でいつでもオフにできます。再起動後は完全に停止します。</string>
+    <string name="home_build_basis">（DiPlay %1$s をベースにビルド）</string>
+    <string name="home_license_notice">オープンソース・無料 · 学習目的のみ · 転売・商用利用禁止 · 実走行では使用しないでください</string>
+    <string name="disclaimer_swipe_hint">左右にスワイプ</string>
 </resources>
