@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_camry_section">车机适配</string>
-    <string name="settings_camry_title">凯美瑞 A 导航适配</string>
-    <string name="settings_camry_description">启用此机型的 USB、VPN、音频、麦克风及 HUD 等适配。修改后重新连接 CarPlay 生效。</string>
+    <string name="settings_camry_section">凯美瑞 A 导航车机适配</string>
+    <string name="settings_camry_title">是否启用凯美瑞 A 导航车机适配</string>
+    <string name="settings_camry_description">开启后，DiPlay 将按凯美瑞 A 导航车机的方式接管 USB、VPN、音频、麦克风及 HUD。自动识别依据机型判断；识别不到时可选强制启用；其他车型请选不启用。修改后重新连接 CarPlay 生效。</string>
     <string name="settings_camry_auto">自动识别（默认）</string>
-    <string name="settings_camry_on">启用</string>
+    <string name="settings_camry_on">强制启用</string>
     <string name="settings_camry_off">不启用</string>
-    <string name="settings_camry_enabled">当前选择：启用适配</string>
-    <string name="settings_camry_disabled">当前选择：不启用适配</string>
-    <string name="settings_camry_detected">识别结果：凯美瑞 A 导航，适配已启用</string>
-    <string name="settings_camry_not_detected">识别结果：未匹配凯美瑞 A 导航，适配未启用</string>
+    <string name="settings_camry_enabled">已强制启用适配</string>
+    <string name="settings_camry_disabled">未启用适配，按普通车机连接</string>
+    <string name="settings_camry_detected">自动识别：当前车机为凯美瑞 A 导航，适配已启用</string>
+    <string name="settings_camry_not_detected">自动识别：当前车机不是凯美瑞 A 导航，适配未启用</string>
 </resources>

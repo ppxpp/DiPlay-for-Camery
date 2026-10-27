@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_camry_section">Інтеграція з головним пристроєм</string>
-    <string name="settings_camry_title">Адаптація Camry A Navigation</string>
-    <string name="settings_camry_description">Увімкнення USB, VPN, звуку, мікрофона та HUD для цієї моделі. Після зміни повторно підключіть CarPlay.</string>
+    <string name="settings_camry_section">Адаптація під Camry A Navigation</string>
+    <string name="settings_camry_title">Увімкнути адаптацію під Camry A Navigation</string>
+    <string name="settings_camry_description">Якщо ввімкнено, DiPlay використовує USB, VPN, звук, мікрофон та HUD відповідно до інтеграції головного пристрою Camry A Navigation. Автовизначення перевіряє модель; оберіть «Примусово», якщо пристрій не розпізнано, і «Вимкнути» для інших авто. Після зміни повторно підключіть CarPlay.</string>
     <string name="settings_camry_auto">Автовизначення (типово)</string>
-    <string name="settings_camry_on">Увімкнути</string>
+    <string name="settings_camry_on">Примусово</string>
     <string name="settings_camry_off">Вимкнути</string>
-    <string name="settings_camry_enabled">Вибрано: адаптацію ввімкнено</string>
-    <string name="settings_camry_disabled">Вибрано: адаптацію вимкнено</string>
-    <string name="settings_camry_detected">Виявлено Camry A Navigation: адаптацію ввімкнено</string>
-    <string name="settings_camry_not_detected">Camry A Navigation не виявлено: адаптацію вимкнено</string>
+    <string name="settings_camry_enabled">Адаптацію ввімкнено примусово</string>
+    <string name="settings_camry_disabled">Адаптацію вимкнено: підключення як до звичайного пристрою</string>
+    <string name="settings_camry_detected">Автовизначення: Camry A Navigation розпізнано; адаптацію ввімкнено</string>
+    <string name="settings_camry_not_detected">Автовизначення: Camry A Navigation не розпізнано; адаптацію вимкнено</string>
 </resources>
