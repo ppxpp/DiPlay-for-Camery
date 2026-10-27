@@ -43,6 +43,7 @@ internal object UpdateChannelStore {
      * explicit stable marker is treated as beta so only the stable channel opts into stable.
      */
     private fun buildDefault(context: Context): UpdateChannel =
+
         UpdateChannel.fromApiName(
             runCatching {
                 context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
