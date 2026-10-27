@@ -1,3 +1,7 @@
+User-agent: Baiduspider
+Allow: /
+Disallow: /admin
+
 User-agent: *
 Allow: /
 Disallow: /admin
