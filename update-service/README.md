@@ -191,6 +191,7 @@ Repository secrets:
 | `R2_ACCESS_KEY_ID` | R2 write access key |
 | `R2_SECRET_ACCESS_KEY` | R2 write secret |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Pages deployment (Pages Edit) |
+| `BAIDU_PUSH_TOKEN` | Optional; Baidu 普通收录 API token for automatic URL push |
 
 Repository variables:
 
