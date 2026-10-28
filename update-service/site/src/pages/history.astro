@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import Analytics from '../components/Analytics.astro';
 import ReleaseHistory from '../components/ReleaseHistory.vue';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
@@ -45,6 +46,7 @@ const structuredData = {
     <meta name="twitter:description" content={description} />
     <link rel="canonical" href="https://diplay.mgulu.com/history/" />
     <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <Analytics />
   </head>
   <body>
     <SiteHeader current="history" />

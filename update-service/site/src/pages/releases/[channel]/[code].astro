@@ -1,5 +1,6 @@
 ---
 import '../../../styles/global.css';
+import Analytics from '../../../components/Analytics.astro';
 import SiteFooter from '../../../components/SiteFooter.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
 import { site } from '../../../data/site.ts';
@@ -96,6 +97,7 @@ const structuredData = {
     <meta name="twitter:description" content={description} />
     <link rel="canonical" href={canonical} />
     <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <Analytics />
   </head>
   <body>
     <SiteHeader current="history" />

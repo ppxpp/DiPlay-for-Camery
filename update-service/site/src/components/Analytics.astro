@@ -1,0 +1,9 @@
+---
+import { site } from '../data/site.ts';
+
+const siteId = site.analytics.baiduTongjiId;
+const valid = /^[0-9a-f]{32}$/.test(siteId);
+---
+{valid && (
+  <script is:inline set:html={`var _hmt=_hmt||[];(function(){var hm=document.createElement("script");hm.src="https://hm.baidu.com/hm.js?${siteId}";var s=document.getElementsByTagName("script")[0];s.parentNode.insertBefore(hm,s);})();`} />
+)}
