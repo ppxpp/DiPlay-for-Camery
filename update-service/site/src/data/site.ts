@@ -26,7 +26,7 @@ export const site = {
   device: {
     model: '八代凯美瑞 A 导航',
     verifiedFirmware: '152 版本',
-    connection: 'Wi-Fi 热点 + 外接蓝牙 / USB'
+    connection: '无线 + 有线'
   },
 
   scope:
