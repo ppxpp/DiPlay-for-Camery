@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import Analytics from '../components/Analytics.astro';
 import DocsLinks from '../components/DocsLinks.astro';
 import Hero from '../components/Hero.astro';
 import SiteFooter from '../components/SiteFooter.astro';
@@ -57,6 +58,7 @@ const structuredData = {
     <meta name="twitter:description" content={site.intro} />
     <link rel="canonical" href="https://diplay.mgulu.com/" />
     <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <Analytics />
   </head>
   <body>
     <SiteHeader current="home" />

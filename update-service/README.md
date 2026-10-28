@@ -192,6 +192,7 @@ Repository secrets:
 | `R2_SECRET_ACCESS_KEY` | R2 write secret |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Pages deployment (Pages Edit) |
 | `BAIDU_PUSH_TOKEN` | Optional; Baidu 普通收录 API token for automatic URL push |
+| `PUBLIC_UMENG_SITE_ID` | Optional; Umeng U-Web site id. When set at site build time, public pages embed the U-Web tracking script |
 
 Repository variables:
 

@@ -1,0 +1,9 @@
+---
+// Umeng U-Web (cnzz) site analytics. Renders nothing until PUBLIC_UMENG_SITE_ID
+// is set at build time, so source-only builds carry no third-party beacon.
+const siteId = (import.meta.env.PUBLIC_UMENG_SITE_ID ?? '').trim();
+const valid = /^[A-Za-z0-9]+$/.test(siteId);
+---
+{valid && (
+  <script is:inline set:html={`var _hmt=_hmt||[];(function(){var hm=document.createElement("script");hm.src="https://s9.cnzz.com/z.js?id=${siteId}&async=1";var s=document.getElementsByTagName("script")[0];s.parentNode.insertBefore(hm,s);})();`} />
+)}
