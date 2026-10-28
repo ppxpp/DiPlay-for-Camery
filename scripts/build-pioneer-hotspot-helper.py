@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as tmp:
         count = 0
         for p in classes.rglob("*.class"):
             name = p.relative_to(classes).as_posix()
-            if name.startswith(prefix) and p.stem.split("$")[0] in {"HotspotProbeHelper", "HotspotProbeAction", "PioneerBinder", "PioneerLocalOnlyPolicy", "HotspotPrewarmAuthorization"}:
+            if name.startswith(prefix) and p.stem.split("$")[0] in {"HotspotProbeHelper", "HotspotProbeAction", "PioneerBinder", "PioneerVendorCalls", "PioneerLocalOnlyPolicy", "HotspotPrewarmAuthorization"}:
                 z.write(p, name); count += 1
         assert count >= 3, "Missing compiled hotspot helper"
     rules = tmp / "helper.pro"

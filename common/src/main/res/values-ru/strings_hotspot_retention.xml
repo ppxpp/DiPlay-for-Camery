@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">Сохранять точку доступа после отключения CarPlay</string>
+    <string name="settings_camry_hotspot_retention_description">Только для Camry A Navigation. После отключения CarPlay точка доступа выключится через заданное время. Повторное подключение в этот период использует ту же точку доступа и сокращает ожидание.</string>
+    <string name="settings_camry_hotspot_retention_immediate">Выключить сразу</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d сек.</string>
+</resources>

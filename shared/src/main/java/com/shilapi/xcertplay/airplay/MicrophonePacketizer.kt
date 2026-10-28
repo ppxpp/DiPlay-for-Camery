@@ -22,7 +22,6 @@ data class MicrophoneConfig(
      */
     val opusClockRate: Int = OPUS_CAPTURE_RATE,
     val bindAddress: InetAddress? = null,
-    val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
 ) {
     val samplesPerPacket: Int
         get() = if (codec == AudioCodecKind.OPUS) {

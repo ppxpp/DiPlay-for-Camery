@@ -126,7 +126,9 @@ internal class PioneerSerialConnection(
             if(owned) {
                 var port=cleanupRepair.audit().ports.single { it.index==0 }
                 if(port.connected || port.lowerStatus!=0) {
-                    check(PioneerBlueforceNative.sameAddress(port.address,device.address)) { "Pioneer port owner changed; not disconnecting" }
+                    check(PioneerSerialOwnership.matchesPort(device.address,port.address,port.uuid,port.index)) {
+                        "Pioneer port identity changed; not disconnecting"
+                    }
                     check(binder.stopCandidate()==listOf(0)) { "Pioneer disconnect rejected" }
                     waitFor("Pioneer native disconnect",8000,true) {
                         port=cleanupRepair.audit().ports.single { it.index==0 }

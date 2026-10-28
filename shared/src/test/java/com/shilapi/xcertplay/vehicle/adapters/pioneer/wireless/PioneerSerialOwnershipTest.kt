@@ -14,4 +14,10 @@ class PioneerSerialOwnershipTest {
     @Test fun refusesOldBootOrMissingIdentity() { assertFalse(allowed(recordedBoot=null));assertFalse(allowed(recordedBoot="old"));assertFalse(allowed(boot="",recordedBoot="")) }
     @Test fun refusesOtherServiceOrPort() { assertFalse(allowed(id="unknown"));assertFalse(allowed(index=1)) }
     @Test fun refusesPendingOrDisconnectedPort() { assertFalse(allowed(status=1));assertFalse(allowed(connected=false)) }
+    @Test fun cleanupNeverDisconnectsAnotherServiceOnTheSamePhone() {
+        assertTrue(PioneerSerialOwnership.matchesPort(phone, phone.lowercase(), uuid, 0))
+        assertFalse(PioneerSerialOwnership.matchesPort(phone, phone, "00001101-0000-1000-8000-00805F9B34FB", 0))
+        assertFalse(PioneerSerialOwnership.matchesPort(phone, phone, uuid, 1))
+        assertFalse(PioneerSerialOwnership.matchesPort(phone, "other", uuid, 0))
+    }
 }

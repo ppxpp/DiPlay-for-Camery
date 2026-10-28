@@ -287,9 +287,7 @@ class CarPlayHostActivity : ComponentActivity() {
         hostName = "diplay-" + DiPlayBootstrap.deviceId(airPlayIdentity).replace(":", "").lowercase(),
         hostMac = DiPlayBootstrap.deviceId(airPlayIdentity).split(":").map { it.toInt(16).toByte() }.toByteArray(),
         wirelessBluetoothDeviceAddress = DiPlayPreferences.phoneAddress(this),
-        remoteRfcommGateway = if (wirelessEnabled) RemoteGatewaySettings.loadSelected(this, wirelessHotspotMode) else null,
         transport = if (wirelessEnabled) CarPlayTransport.WIRELESS else CarPlayTransport.WIRED,
-        nativeNcmEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM,
         optimizedLwipEnabled = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.usesVehicleAdaptation(this) && (startupWiredBackend ?: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)) == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED,
         wiredBackend = startupWiredBackend,
         wirelessHotspotMode = AirPlayPersistence.loadWirelessHotspotMode(this),
@@ -932,10 +930,6 @@ class CarPlayHostActivity : ComponentActivity() {
         if (isIphoneUsbAttachment(intent)) {
             AirPlayPersistence.saveWirelessEnabled(this, false)
         }
-        com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
-            wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
-            hasSession = { CarPlayBackgroundSession.hasSession() },
-            log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
         if (runCatching { DiPlayBootstrap.ensure(this, AirPlayPersistence.loadMfiTarget(this)) }.isFailure) {
             OwnScreenStart.start(this, Intent(this, DiPlayActivity::class.java), ::appendLog)
             finish(); return
@@ -1175,8 +1169,7 @@ class CarPlayHostActivity : ComponentActivity() {
             vpnRootFailureDialog?.dismiss()
         }
         if (selected != null && selected != com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN &&
-            (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.nativeEnabled(this) ||
-                com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this))) {
+            com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.enabled(this)) {
             vpnReady = true
             appendLog("Selected wired backend requires no system VPN consent")
             maybeStartCarPlay()

@@ -24,9 +24,9 @@ class PioneerLocalOnlyPolicyTest {
         val truncated=snapshot.mapValues { it.value+"\n[OUTPUT_TRUNCATED]" }
         assertThrows(IllegalStateException::class.java) { PioneerLocalOnlyPolicy.initialRulesAtFront(truncated,tag) }
     }
-    @Test fun onlyOwnedDebugHotspotEnablesExperiment() {
-        for(created in listOf(false,true)) for(debug in listOf(false,true)) for(disabled in listOf(false,true)) {
-            assertEquals(created && debug && !disabled,PioneerLocalOnlyPolicy.enabled(created,debug,disabled))
+    @Test fun onlyOwnedHotspotEnablesIsolationInAllBuilds() {
+        for(created in listOf(false,true)) for(disabled in listOf(false,true)) {
+            assertEquals(created && !disabled,PioneerLocalOnlyPolicy.enabled(created,disabled))
         }
     }
     @Test fun deniesBothForwardingDirectionsForBothAddressFamilies() {

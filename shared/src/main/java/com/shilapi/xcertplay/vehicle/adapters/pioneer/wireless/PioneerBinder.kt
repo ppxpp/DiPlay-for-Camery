@@ -3,10 +3,6 @@ package com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless
 import android.os.Process
 import android.os.IBinder
 import android.os.Parcel
-import java.util.concurrent.FutureTask
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
-import java.util.concurrent.ExecutionException
 
 /** 编号仅适用于已分析的先锋固件。回复是原生状态码与输出，没有 Java AIDL 异常头。 */
 internal class PioneerBinder(private val log: (String) -> Unit) {
@@ -24,15 +20,8 @@ internal class PioneerBinder(private val log: (String) -> Unit) {
     }
     fun startCandidate() = transact(133, 0)
     fun stopCandidate() = transact(135, 0)
-    @Volatile private var timedOut = false
-    private fun transact(code: Int, vararg args: Int): List<Int> {
-        check(!timedOut) { "本轮 Binder 已超时，不再向可能阻塞的蓝牙服务排队" }
-        val pending = FutureTask { transactDirect(code,*args) }
-        Thread(pending,"blueforce-binder-$code").apply { isDaemon=true;start() }
-        return try { pending.get(3000,TimeUnit.MILLISECONDS) }
-        catch (failure: TimeoutException) { timedOut=true;error("蓝牙 Binder code=$code 超时；停止后续调用，请检查服务") }
-        catch (failure: ExecutionException) { throw (failure.cause ?: failure) }
-    }
+    private fun transact(code: Int, vararg args: Int): List<Int> =
+        PioneerVendorCalls.shared.call("binder-$code") { transactDirect(code, *args) }
     private fun transactDirect(code: Int, vararg args: Int): List<Int> {
         check(!Process.is64Bit()) { "先锋蓝牙接口需要32位进程" }
         val target = binder()

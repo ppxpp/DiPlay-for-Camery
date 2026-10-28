@@ -44,7 +44,7 @@ internal class PioneerMicrophoneLease private constructor(
         private var users = 0
         fun acquire(token: String?, report: (String) -> Unit): PioneerMicrophoneLease? = synchronized(PioneerMicrophoneLease::class.java) {
             // The vehicle microphone gate belongs to the adaptation session, not its transport.
-            // Native NCM has no lwIP activity but needs the same requestMicOn/MIC path.
+            // Vehicle microphone ownership also applies to transports without lwIP activity.
             if (!PioneerWiredSession.adaptationActive) return@synchronized null
             val settings = com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current()
             val ownToken = if (settings.micIdentity == "WECHAT") "com.tencent.mm" else

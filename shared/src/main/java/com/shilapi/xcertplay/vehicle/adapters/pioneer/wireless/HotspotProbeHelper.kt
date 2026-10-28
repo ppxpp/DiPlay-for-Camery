@@ -23,6 +23,8 @@ object HotspotProbeHelper {
     private var ruleTag = ""
     private var leaseToken = ""
     private var cancellation: File? = null
+    private lateinit var commandRunner: File
+    private lateinit var commandGuard: File
     private fun checkCancelled() { check(cancellation?.exists()!=true) { "Vehicle hotspot cancelled" } }
 
     @JvmStatic
@@ -46,6 +48,15 @@ object HotspotProbeHelper {
             check(args.getOrNull(6)=="camry-enabled" && !Process.is64Bit()) { "Camry ARM32 request authorization required" }
             val token = args.getOrNull(3).orEmpty()
             check(token.matches(Regex("[0-9a-f]{32}"))) { "Invalid hotspot lease" }
+            commandRunner=File(checkNotNull(args.getOrNull(7)) { "Missing hotspot command runner" })
+            val runnerInfo=Os.lstat(commandRunner.path)
+            check(commandRunner.canonicalFile.parentFile==File(output.parentFile!!.parentFile,"code_cache").canonicalFile &&
+                commandRunner.name=="pioneer-command-runner" &&
+                runnerInfo.st_uid==Os.stat(output.parentFile!!.path).st_uid &&
+                android.system.OsConstants.S_ISREG(runnerInfo.st_mode) && runnerInfo.st_nlink==1L) {
+                "Invalid hotspot command runner identity"
+            }
+            commandGuard=File(output.parentFile,"pioneer-hotspot-command.lock")
             val requestHeader=output.readText()
             val requestedAt=requestHeader.lineSequence().firstOrNull { it.startsWith("REQUESTED_AT=") }
                 ?.substringAfter('=')?.toLongOrNull()
@@ -83,6 +94,9 @@ object HotspotProbeHelper {
             // new mutation. Lock ownership is released by process death as well.
             operationChannel=FileOutputStream(File(output.parentFile,"pioneer-hotspot-helper.lock"),true).channel
             timed("operation_lock_wait",log) { checkNotNull(operationChannel).lock() }
+            // A previous Java helper may have died while its native supervisor still owns
+            // descendants. Do not mutate anything until their shared command lock is free.
+            FileOutputStream(commandGuard,true).channel.use { channel -> channel.lock().release() }
             checkCancelled()
             if(action==HotspotProbeAction.PREPARE || action==HotspotProbeAction.PREPARE_LOCAL_ONLY) {
                 verifyCreation(output,token,requestStart=false)
@@ -102,6 +116,10 @@ object HotspotProbeHelper {
                     prepare(packageName,output,args.getOrNull(4)?.takeUnless { it=="-" },log)
                     fiveGhz(log,verifyRoute=false)
                     firewall(log)
+                }
+                HotspotProbeAction.RESUME_LOCAL_ONLY -> {
+                    firewall(log)
+                    localOnly(log,refresh=true)
                 }
                 HotspotProbeAction.START -> start(packageName, log)
                 HotspotProbeAction.FIVE_GHZ -> fiveGhz(log)
@@ -548,22 +566,26 @@ object HotspotProbeHelper {
     }
 
     private fun sh(command: String, timeoutSeconds: Long = 12): String {
-        val process = ProcessBuilder("/system/bin/sh", "-c", command)
-            .redirectErrorStream(true)
-            .start()
-        val reader = java.util.concurrent.Executors.newSingleThreadExecutor()
-        val result = reader.submit<String> { process.inputStream.bufferedReader().use { it.readText() }.let {
-            if(it.length>MAX_OUTPUT) it.take(MAX_OUTPUT)+"\n[OUTPUT_TRUNCATED]" else it
-        } }
-        return try {
-            val text = result.get(timeoutSeconds, TimeUnit.SECONDS)
-            process.waitFor()
-            "$text\n[exit=${process.exitValue()}]"
-        } catch (_: java.util.concurrent.TimeoutException) {
-            process.destroy()
-            result.cancel(true)
-            "[TIMEOUT]"
-        } finally { reader.shutdownNow() }
+        // The supervisor kills and reaps the entire process group on timeout/cancellation.
+        // Keep the operation lock until it exits, including when a killed kernel task takes
+        // time to unwind. The app's outer request deadline remains bounded and keeps its journal.
+        val process = ProcessBuilder(commandRunner.path, (timeoutSeconds * 1000).toString(),
+            cancellation?.path ?: "-", "/system/bin/sh", command, commandGuard.path, Process.myPid().toString())
+            .redirectErrorStream(true).start()
+        val text = StringBuilder()
+        var truncated = false
+        process.inputStream.bufferedReader().use { reader ->
+            val chunk = CharArray(2048)
+            while (true) {
+                val count = reader.read(chunk)
+                if (count < 0) break
+                val keep = minOf(count, MAX_OUTPUT - text.length)
+                if (keep > 0) text.append(chunk, 0, keep)
+                if (keep < count) truncated = true
+            }
+        }
+        val exit = process.waitFor()
+        return text.toString() + (if (truncated) "\n[OUTPUT_TRUNCATED]" else "") + "\n[exit=$exit]"
     }
 
     private fun write(output: File, lines: List<String>, result: String) {

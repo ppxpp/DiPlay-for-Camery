@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">CarPlay 断开后保留热点</string>
+    <string name="settings_camry_hotspot_retention_description">仅对凯美瑞 A 导航生效。CarPlay 断开后，热点将在设定时间后关闭，期间重新连接可复用热点，缩短等待时间。</string>
+    <string name="settings_camry_hotspot_retention_immediate">立即关闭</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d 秒</string>
+</resources>

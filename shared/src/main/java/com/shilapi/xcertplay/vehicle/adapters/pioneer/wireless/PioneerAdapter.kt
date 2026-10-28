@@ -1,9 +1,5 @@
 package com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless
 
-import java.util.concurrent.FutureTask
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
-import java.util.concurrent.ExecutionException
 
 internal data class PairedDevice(val native: Any, val name: String, val address: String, val handle: Int) {
     override fun toString() = "$name · $address"
@@ -11,15 +7,8 @@ internal data class PairedDevice(val native: Any, val name: String, val address:
 
 /** 使用车机启动类路径中的 SDK；查询及显式实验用 profile 连接；后者会改变厂商连接状态机。 */
 internal class PioneerAdapter {
-    @Volatile private var timedOut = false
-    private fun <T> bounded(name: String, action: () -> T): T {
-        check(!timedOut) { "先锋 SDK 本轮已超时，请检查服务并重启测试应用" }
-        val task=FutureTask(action)
-        Thread(task,"pioneer-sdk-$name").apply { isDaemon=true;start() }
-        return try { task.get(3000,TimeUnit.MILLISECONDS) }
-        catch (failure: TimeoutException) { timedOut=true;error("先锋 SDK $name 超时，停止后续调用") }
-        catch (failure: ExecutionException) { throw (failure.cause ?: failure) }
-    }
+    private fun <T> bounded(name: String, action: () -> T): T =
+        PioneerVendorCalls.shared.call("sdk-$name", action)
     private var type: Class<*>? = null
     private var adapter: Any? = null
     fun initialize() {

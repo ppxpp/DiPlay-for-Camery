@@ -1,10 +1,10 @@
 package com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless
 
-/** Interface-scoped experiment. This blocks Internet sharing; iPhone cellular selection is unverified. */
+/** Interface-scoped isolation. This blocks Internet sharing; iPhone cellular selection is unverified. */
 internal object PioneerLocalOnlyPolicy {
     const val DISABLE_FILE = "pioneer-wireless-local-only.disabled"
 
-    fun enabled(created: Boolean, debuggable: Boolean, disabled: Boolean) = created && debuggable && !disabled
+    fun enabled(created: Boolean, disabled: Boolean) = created && !disabled
 
     data class Rule(val binary: String, val chain: String, val match: String, val target: String, val id: String) {
         fun command(operation: String, tag: String): String {

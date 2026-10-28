@@ -450,7 +450,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val requestedPage = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
             ?: intent.getStringExtra("page")
         page = requestedPage
-            ?: if (RemoteGatewaySettings.loadSelected(this) == null && setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
+            ?: if (setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
         if (requestedPage == "update") {
             page = "settings"
@@ -604,12 +604,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     override fun onResume() {
         super.onResume()
         if (forwardingToProjection) return
-        if (setupError == null) {
-            com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
-                wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
-                hasSession = { CarPlayBackgroundSession.hasSession() },
-                log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
-        }
         WheelKeyService.restoreIfNeeded(this)
         applyFullscreenMode()
         // Returning from another activity can bring the head unit's own density back.
@@ -1046,11 +1040,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             else connect(true)
         }
         card.addView(connectButton, matchButton(height = if (compact) 54 else 68))
-        if (RemoteGatewaySettings.isAvailable(this)) {
-            card.addView(homeButton(getString(R.string.gateway_title), false) {
-                startActivity(Intent(this, GatewayDeviceActivity::class.java))
-            }, matchButton(CONTROL_GAP_DP, if (compact) 46 else 56))
-        }
         val connectionHint = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
             WirelessHotspotMode.PIONEER_VEHICLE -> getString(R.string.settings_pioneer_wireless_description)
             WirelessHotspotMode.EXISTING_WIFI -> getString(R.string.existing_wifi_hint)
@@ -1355,9 +1344,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         active = CarPlayBackgroundSession.active,
         running = CarPlayBackgroundSession.hasSession(),
         wireless = AirPlayPersistence.loadWirelessEnabled(this),
-        phoneChosen = DiPlayPreferences.phoneAddress(this) != null ||
-            (AirPlayPersistence.loadWirelessHotspotMode(this) != WirelessHotspotMode.PIONEER_VEHICLE &&
-                RemoteGatewaySettings.loadSelected(this) != null),
+        phoneChosen = DiPlayPreferences.phoneAddress(this) != null,
         hotspotSetupNeeded = AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL &&
             carHotspotDetailsMissing(),
     )
@@ -1887,6 +1874,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 rowShowsTitle = false) {
                 policy.save(this, com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.entries[it])
                 updateStatus()
+                if(!policy.enabled()) com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention.clearAsync()
                 markReconnectNeeded()
             }
             card.addView(label(getString(R.string.settings_camry_description), 14, MUTED))
@@ -1913,6 +1901,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
             card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
             card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
+            val retention=com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention
+            searchIndexSink?.add(getString(R.string.settings_camry_hotspot_retention_title))
+            var retentionSeconds=retention.seconds(this)
+            card.addView(OverlaySliderRow(this,getString(R.string.settings_camry_hotspot_retention_title),
+                (0..60).toList(),retentionSeconds,{ seconds ->
+                    if(seconds==0) getString(R.string.settings_camry_hotspot_retention_immediate)
+                    else getString(R.string.settings_camry_hotspot_retention_seconds,seconds)
+                }).apply {
+                onSave = { retentionSeconds=it }
+                onCommit = { retention.setSeconds(this@DiPlayActivity,retentionSeconds) }
+            })
+            card.addView(label(getString(R.string.settings_camry_hotspot_retention_description),14,MUTED))
             card.addView(space(12))
             // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
             // so that menu could not be reached to switch back (#696).
@@ -2018,7 +2018,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
                 val labels = modes.map { mode -> when (mode) {
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM -> NativeNcmSettingsLabel.label(this)
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
                 } }
@@ -3597,11 +3596,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }, LinearLayout.LayoutParams(0, dp(6), 1f).apply { if (index > 0) marginStart = dp(8) })
         }
         content.addView(progress)
-        if (RemoteGatewaySettings.isAvailable(this)) {
-            content.addView(button(getString(R.string.gateway_title), false) {
-                startActivity(Intent(this, GatewayDeviceActivity::class.java))
-            }, matchButton(CONTROL_GAP_DP, 56))
-        }
         when (step) {
             SetupGuide.STEP_CAR -> setupCarStep(content)
             SetupGuide.STEP_CONNECTION -> setupConnectionStep(content)
@@ -5592,6 +5586,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val vehicleChange = mode == WirelessHotspotMode.PIONEER_VEHICLE ||
             AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.PIONEER_VEHICLE
         AirPlayPersistence.saveWirelessHotspotMode(this, mode)
+        if(mode!=WirelessHotspotMode.PIONEER_VEHICLE) com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention.clearAsync()
         if (vehicleChange) markReconnectNeeded()
         render()
         toast(getString(R.string.saved_for_your_next_connection))
@@ -5940,8 +5935,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
         if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
-        if (wireless && (AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.PIONEER_VEHICLE ||
-                RemoteGatewaySettings.loadSelected(this) == null) && DiPlayPreferences.phoneAddress(this) == null) {
+        if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
             pendingWireless = true; choosePhone(); return
         }
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
@@ -5953,10 +5947,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val open = {
             AirPlayPersistence.saveWirelessEnabled(this, wireless)
-            if (wireless && AirPlayPersistence.loadWirelessHotspotMode(this) != WirelessHotspotMode.PIONEER_VEHICLE &&
-                RemoteGatewaySettings.loadSelected(this) != null) {
-                AirPlayPersistence.saveMfiTarget(this, com.shilapi.xcertplay.orchestration.MfiTarget.LOCAL)
-            }
             openProjection()
         }
         if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop { runOnUiThread { open() } }
@@ -6103,7 +6093,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setupError != null -> getString(R.string.setup_needs_attention)
             CarPlayBackgroundSession.active -> getString(R.string.carplay_connected)
             running -> getString(R.string.connecting_to_your_iphone)
-            RemoteGatewaySettings.loadSelected(this) != null -> getString(R.string.gateway_ready)
             DiPlayPreferences.phoneAddress(this) != null -> "${getString(R.string.status_ready_for_prefix)}${DiPlayPreferences.phoneName(this)}"
             else -> getString(R.string.ready_when_you_are)
         }

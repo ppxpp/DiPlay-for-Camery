@@ -19,18 +19,16 @@ internal class ConnectionProgressHistory(context: Context) {
 
     fun create(config: CarPlayRuntimeConfig, previous: ConnectionProgress?): ConnectionProgress {
         val wireless = config.transport == CarPlayTransport.WIRELESS
-        val proxy = wireless && config.wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI && config.remoteRfcommGateway != null
         val channel = when {
             wireless && config.wirelessHotspotMode == WirelessHotspotMode.PIONEER_VEHICLE ->
                 com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS
             wireless -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.WIRELESS
-            config.nativeNcmEnabled -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.NATIVE_NCM
             config.optimizedLwipEnabled || PioneerLwipRuntime.enabled(context) -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.LWIP
             config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.VPN
             else -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.FRAMEWORK
         }
-        val link = if (wireless) "wireless-${config.wirelessHotspotMode.name}-${if (proxy) "proxy" else "native"}"
-            else "usb-${if (config.nativeNcmEnabled) "native-ncm" else if (config.optimizedLwipEnabled) "lwip-optimized" else if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
+        val link = if (wireless) "wireless-${config.wirelessHotspotMode.name}-native"
+            else "usb-${if (config.optimizedLwipEnabled) "lwip-optimized" else if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
         val profile = "$link-${channel.name}-${config.mfiTarget.name}"
         val samples = read(profile)
         val baseline = if (samples.isEmpty()) null else ConnectionTiming(

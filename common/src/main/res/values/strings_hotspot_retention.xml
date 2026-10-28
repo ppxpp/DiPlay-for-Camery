@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">Keep hotspot after CarPlay disconnects</string>
+    <string name="settings_camry_hotspot_retention_description">Only applies to Camry A Navigation. After CarPlay disconnects, the hotspot turns off after the selected delay. Reconnecting during this time reuses the hotspot to reduce waiting.</string>
+    <string name="settings_camry_hotspot_retention_immediate">Turn off immediately</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d seconds</string>
+</resources>

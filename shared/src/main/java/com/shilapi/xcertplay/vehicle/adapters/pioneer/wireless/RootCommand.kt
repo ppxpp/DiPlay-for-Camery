@@ -8,7 +8,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import com.shilapi.xcertplay.pioneer.PioneerWirelessRootLauncher
 
-internal enum class HotspotProbeAction { PREPARE, PREPARE_LOCAL_ONLY, START, FIVE_GHZ, FIREWALL, STATUS, STOP, STOP_OWNED, RELEASE }
+internal enum class HotspotProbeAction { PREPARE, PREPARE_LOCAL_ONLY, RESUME_LOCAL_ONLY, START, FIVE_GHZ, FIREWALL, STATUS, STOP, STOP_OWNED, RELEASE }
 
 /** Fixed commands; prewarming cannot authorize any network mutation. */
 internal class RootCommand(private val context: Context, private val token: String,
@@ -96,8 +96,7 @@ internal class RootCommand(private val context: Context, private val token: Stri
     private fun create(action: HotspotProbeAction, deferred: Boolean): Request {
         val started=SystemClock.elapsedRealtime()
         val classpath=rootClasspath()
-        val gate=if(action in setOf(HotspotProbeAction.PREPARE,HotspotProbeAction.PREPARE_LOCAL_ONLY) &&
-            context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+        val gate=if(action in setOf(HotspotProbeAction.PREPARE,HotspotProbeAction.PREPARE_LOCAL_ONLY)) {
             val file=File(context.codeCacheDir,"pioneer-ap-frequency-gate")
             val temp=File(context.codeCacheDir,"ap-gate-${UUID.randomUUID()}")
             try {
@@ -107,13 +106,22 @@ internal class RootCommand(private val context: Context, private val token: Stri
             } finally { temp.delete() }
             file
         } else null
+        val commandRunner=File(context.codeCacheDir,"pioneer-command-runner")
+        synchronized(RootCommand::class.java) {
+            val temp=File(context.codeCacheDir,"command-runner-${UUID.randomUUID()}")
+            try {
+                context.assets.open("pioneer-command-runner").use { source -> temp.outputStream().use { source.copyTo(it) } }
+                Os.chmod(temp.path,448)
+                check(temp.renameTo(commandRunner)) { "Cannot publish hotspot command runner" }
+            } finally { temp.delete() }
+        }
         val output=File(context.filesDir,"pioneer-hotspot-$token-${UUID.randomUUID()}.txt").apply {
             writeText("REQUESTED_AT=$started\n");Os.chmod(path,384)
         }
         val request=Request(action,output,started,deferred)
         Thread({ runCatching {
             output.writeText("REQUESTED_AT=$started\nDISPATCHED_AT=${SystemClock.elapsedRealtime()}\n")
-            PioneerWirelessRootLauncher.launchHotspot(context,classpath,output,action.name,token,gate,deferred,adaptationAuthorized)
+            PioneerWirelessRootLauncher.launchHotspot(context,classpath,output,action.name,token,gate,commandRunner,deferred,adaptationAuthorized)
         }.onFailure { request.failure.set(it) } },"pioneer-hotspot-dispatch").apply { isDaemon=true;start() }
         return request
     }

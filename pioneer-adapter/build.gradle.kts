@@ -1,7 +1,7 @@
 plugins { id("com.android.library") }
-apply(from = rootProject.file("gradle/native-ncm.gradle"))
 
 android {
+    buildFeatures { buildConfig = true }
     namespace = "com.shilapi.xcertplay.pioneer"
     compileSdk = 37
     defaultConfig { minSdk = 23; consumerProguardFiles("consumer-rules.pro") }

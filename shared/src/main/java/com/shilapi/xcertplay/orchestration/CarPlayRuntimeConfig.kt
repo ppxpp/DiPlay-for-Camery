@@ -39,19 +39,6 @@ enum class ManualHotspotSecurity {
     WPA3,
 }
 
-/** Deployment-provisioned transport secret; never include it in status or diagnostic output. */
-class RemoteRfcommGateway(
-    val gatewayBluetoothMac: String, val token: String,
-    val observedHotspotChannel: Int? = null,
-    val observedHotspotAddress: String? = null,
-) {
-    init {
-        require(gatewayBluetoothMac.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")) && com.shilapi.xcertplay.transport.RemoteRfcommProtocol.validToken(token))
-        require(observedHotspotChannel == null || observedHotspotChannel in 1..196)
-        require((observedHotspotChannel == null) == (observedHotspotAddress == null))
-    }
-}
-
 /**
  * Deployment-owned constants for one head unit. There are deliberately no built-in Apple or
  * CH341 product IDs: the physical devices attached to the target must be identified first.
@@ -72,7 +59,6 @@ class CarPlayRuntimeConfig(
     val hostName: String = "xcertplay",
     val transport: CarPlayTransport = CarPlayTransport.WIRED,
     /** Snapshot of the manual wired selection; never changed by connection recovery. */
-    val nativeNcmEnabled: Boolean = false,
     val optimizedLwipEnabled: Boolean = false,
     val wiredBackend: com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode? = null,
     val wirelessHotspotMode: WirelessHotspotMode = WirelessHotspotMode.WIFI_P2P,
@@ -84,7 +70,6 @@ class CarPlayRuntimeConfig(
     /** Interface override for head units that keep their hotspot off the Wi-Fi tether list (#573). */
     val manualHotspotInterface: String? = null,
     val wirelessBluetoothDeviceAddress: String? = null,
-    val remoteRfcommGateway: RemoteRfcommGateway? = null,
     val locationReportingEnabled: Boolean = false,
     val wifiP2pPreferredChannel: Int = WifiP2pChannels.AUTO,
     val existingWifiSsid: String = "",

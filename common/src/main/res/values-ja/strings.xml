@@ -1033,7 +1033,7 @@
     <string name="disclaimer_checkbox">再度表示しない（アップデート後に再表示されます）</string>
     <string name="disclaimer_agree">同意して続行</string>
     <string name="disclaimer_disagree">同意せずに終了</string>
-    <!-- Connection progress, Camry day/night, proxy gateway, and pioneer LAN debug (translation gaps) -->
+    <!-- Connection progress, Camry day/night, and pioneer LAN debug (translation gaps) -->
     <string name="carplay_night_camry">カムリ車機に追従</string>
     <string name="carplay_night_camry_hint">カムリ車機の昼/夜状態を使用します。DiPlay 起動時に一度読み取り、変更を監視します。CarPlay 接続時に最新の状態が送信されます。他のデバイスや利用不可のインターフェースは Android に従います。保存して CarPlay に戻ると適用され、再接続は不要です。</string>
     <string name="connect_progress_cancelled">接続を停止しました</string>
@@ -1055,29 +1055,6 @@
     <string name="connect_progress_user_wait">デバイスまたは権限を待っています。残り時間はまだ推定できません。</string>
     <string name="connect_progress_video">最初のフレーム表示</string>
     <string name="connect_progress_waiting">接続開始を待っています</string>
-    <string name="gateway_connect">プロキシ経由で CarPlay に接続</string>
-    <string name="gateway_description">プロキシは Bluetooth で iPhone に接続します。DiPlay は Wi-Fi 上でそれを検出します。IP アドレスやペアリングコードは不要です。</string>
-    <string name="gateway_forget">別のプロキシを選択</string>
-    <string name="gateway_forget_confirm">選択したプロキシを解除して再検索しますか？</string>
-    <string name="gateway_found_paired">プロキシを検出 · %1$s\n下をタップして CarPlay に接続してください。</string>
-    <string name="gateway_found_unpaired">A を検出 · %1$s\nまだペアリングされていません。A のペアリング情報を一度入力して保存してください。</string>
-    <string name="gateway_invalid_pairing">ペアリング情報が無効か、デバイスが一致しません</string>
-    <string name="gateway_not_found">プロキシが見つかりませんでした。プロキシが動作しており、両方のデバイスが同じ LAN にあることを確認して再検索してください。</string>
-    <string name="gateway_pair">この A をペアリング</string>
-    <string name="gateway_pairing_help">A の「ペアリング情報」を開いてください。ペアリングコードを入力するか、完全なペアリング情報をここに貼り付けてください。初回のみ必要です。</string>
-    <string name="gateway_pairing_input">ペアリング情報またはペアリングコード</string>
-    <string name="gateway_pairing_rejected">ペアリングに失敗しました。ペアリング情報と A が利用可能かを確認してください。</string>
-    <string name="gateway_ports_broadcast">ポート · 検出元 %1$d → プロキシ UDP %2$d\nデータ接続 → プロキシ TCP %3$s:%4$d</string>
-    <string name="gateway_ports_nsd">ポート · 検出元 NSD\nデータ接続 → プロキシ TCP %1$s:%2$d</string>
-    <string name="gateway_ready">選択したプロキシ · 接続可能</string>
-    <string name="gateway_save_pairing">検証して保存</string>
-    <string name="gateway_search">プロキシを再検索</string>
-    <string name="gateway_searching">プロキシを検索中…</string>
-    <string name="gateway_title">プロキシデバイス · 検出と接続</string>
-    <string name="gateway_transport_local">選択中: 内蔵 Bluetooth。Wi-Fi モードは接続設定で選択します。変更は次回の接続に適用されます。</string>
-    <string name="gateway_transport_proxy">選択中: 既存 Wi-Fi 上の Bluetooth プロキシ。変更は次回の接続に適用されます。</string>
-    <string name="gateway_use_local_bluetooth">次回も内蔵 Bluetooth を使用</string>
-    <string name="gateway_wifi_required">まず DiPlay の接続設定で現在の Wi-Fi 名とパスワードを保存してください。</string>
     <string name="settings_pioneer_lan_debug">ローカルネットワークのデバッグ</string>
     <string name="settings_launcher_bubble">ホーム画面のバブル（実験的機能）</string>
     <string name="settings_launcher_bubble_description">車載機のホーム画面に DiPlay のアイコンをバブルとして表示します。タップすると CarPlay に戻り、ドラッグでどこへでも移動できます。DiPlay の画面を開くと隠れ、離れると再び表示されます。長押しで位置をロックし、もう一度長押しで解除します。「他のアプリの上に重ねて表示」が必要です。</string>
