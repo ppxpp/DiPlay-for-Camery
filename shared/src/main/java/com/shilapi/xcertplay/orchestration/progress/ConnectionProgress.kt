@@ -24,6 +24,11 @@ data class ConnectionProgressSnapshot(
     val expectedMillis: Long?,
     val remainingMillis: Long?,
     val tasks: List<ConnectionTaskSnapshot> = emptyList(),
+    val userWaitMillis: Long = 0,
+    val failure: ConnectionFailure? = null,
+    val facts: Map<String, String> = emptyMap(),
+    val measuredTasks: List<ConnectionMeasuredTask> = emptyList(),
+    val renderedConnectionReady: Boolean = false,
 )
 
 class ConnectionProgress(
@@ -37,8 +42,45 @@ class ConnectionProgress(
     private val onCompleted: (ConnectionTiming) -> Unit = {},
     val channel: ConnectionChannel = if (wireless) ConnectionChannel.WIRELESS else ConnectionChannel.FRAMEWORK,
 ) {
+    @Volatile private var telemetryObserver: ((ConnectionProgressSnapshot) -> Unit)? = null
+    private var renderedReady = false
+    /** Real frame + transport readiness, independently of a provisional UI failure/retry state. */
+    @Synchronized fun renderedConnectionReady() {
+        if (!hasRendered || outcome == ConnectionOutcome.CANCELLED || renderedReady) return
+        renderedReady = true
+        changed()
+    }
+    private var failure: ConnectionFailure? = null
+    private val facts = linkedMapOf<String, String>()
+    private val measuredTasks = linkedMapOf<String, ConnectionMeasuredTask>()
+    /** Initial capture and registration share the same lock as every state mutation. */
+    @Synchronized fun observeTelemetry(observer: (ConnectionProgressSnapshot) -> Unit) {
+        telemetryObserver = observer
+        changed()
+    }
+    private fun changed() { runCatching { telemetryObserver?.invoke(snapshot()) } }
+    @Synchronized fun recordFailure(value: ConnectionFailure) {
+        if (outcome != ConnectionOutcome.CONNECTING) return
+        if (failure == null) failure = value
+        changed()
+    }
+    @Synchronized fun fact(key: String, value: String) {
+        if (outcome != ConnectionOutcome.CONNECTING) return
+        facts[key] = value
+        changed()
+    }
+    @Synchronized fun initialFact(key: String, value: String) {
+        if (outcome != ConnectionOutcome.CONNECTING || key in facts) return
+        facts[key] = value
+        changed()
+    }
+    @Synchronized fun measuredTask(id: String, durationMillis: Long, result: String) {
+        if (outcome != ConnectionOutcome.CONNECTING) return
+        measuredTasks[id] = ConnectionMeasuredTask(id, durationMillis.coerceAtLeast(0), result)
+        changed()
+    }
     private data class TaskTiming(var state: ConnectionTaskState = ConnectionTaskState.PENDING,
-        var start: Long? = null, var end: Long? = null, var detail: String = "", var eventAt: Long = -1)
+        var start: Long? = null, var end: Long? = null, var detail: String = "", var eventAt: Long = -1, var observedStart: Boolean = false)
     private val taskTimings = connectionTasks(channel).associateWith { TaskTiming() }
     private val wirelessCompleted = mutableSetOf<ConnectionStep>()
     private val started = clock()
@@ -58,11 +100,13 @@ class ConnectionProgress(
         if (outcome != ConnectionOutcome.CONNECTING && at > (ended ?: Long.MIN_VALUE)) return
         val timing = taskTimings[task] ?: return
         if (at < timing.eventAt || (at == timing.eventAt && timing.state == state)) return
+        if (state in setOf(ConnectionTaskState.RUNNING, ConnectionTaskState.RETRYING) || startedAt < at) timing.observedStart = true
         timing.eventAt = at
         timing.state = state
         timing.detail = detail
         if (state != ConnectionTaskState.PENDING && timing.start == null) timing.start = startedAt
         timing.end = if (state in setOf(ConnectionTaskState.RUNNING, ConnectionTaskState.RETRYING)) null else at
+        changed()
     }
 
     @Synchronized fun step(next: ConnectionStep, waitingForUser: Boolean = false) {
@@ -71,11 +115,12 @@ class ConnectionProgress(
         if (waiting) userWaitMillis += (now - waitingSince).coerceAtLeast(0)
         waiting = waitingForUser
         waitingSince = now
-        if (next == current) return
+        if (next == current) { changed(); return }
         if (channel == ConnectionChannel.PIONEER_WIRELESS && current !in wirelessCompleted) return
         accrue(now)
         current = next
         visited += next
+        changed()
     }
 
     /** Facts can arrive in parallel, but the vehicle UI only advances through completed predecessors. */
@@ -107,6 +152,7 @@ class ConnectionProgress(
         if (outcome == ConnectionOutcome.COMPLETE && result != ConnectionOutcome.RETRYING && result != ConnectionOutcome.CANCELLED) return
         if (outcome == ConnectionOutcome.CONNECTING) {
             val now = clock()
+            if (waiting) userWaitMillis += (now - waitingSince).coerceAtLeast(0)
             accrue(now)
             ended = now
         }
@@ -120,6 +166,7 @@ class ConnectionProgress(
         }
         waiting = false
         outcome = result
+        changed()
     }
 
     fun firstFrame() {
@@ -137,6 +184,7 @@ class ConnectionProgress(
             waiting = false
             task(ConnectionTask.VIDEO_RENDER, ConnectionTaskState.COMPLETE)
             outcome = ConnectionOutcome.COMPLETE
+            changed()
             val total = (now - started).coerceAtLeast(0)
             // Long unplugged/permission waits are not representative automatic connection samples.
             if (userWaitMillis > 15_000 || total !in 1..180_000) null
@@ -171,7 +219,9 @@ class ConnectionProgress(
             attempt, ((if (outcome == ConnectionOutcome.RETRYING && !hasRendered) now else end) - overallStartedMillis).coerceAtLeast(0),
             historySamples, expected, remaining,
             taskTimings.map { (task, timing) -> ConnectionTaskSnapshot(task, timing.state,
-                if (timing.start == null) 0 else ((timing.end ?: end) - timing.start!!).coerceAtLeast(0), timing.detail) },
+                if (timing.start == null) 0 else ((timing.end ?: end) - timing.start!!).coerceAtLeast(0), timing.detail, timing.observedStart) },
+            userWaitMillis + if (waiting && ended == null) (now - waitingSince).coerceAtLeast(0) else 0,
+            failure, facts.toMap(), measuredTasks.values.toList(), renderedReady,
         )
     }
 

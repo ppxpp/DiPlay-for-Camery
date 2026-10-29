@@ -25,7 +25,7 @@ enum class ConnectionTask(val id: String, val step: ConnectionStep) {
 }
 
 data class ConnectionTaskSnapshot(val task: ConnectionTask, val state: ConnectionTaskState,
-    val elapsedMillis: Long, val detail: String)
+    val elapsedMillis: Long, val detail: String, val observedStart: Boolean = true)
 
 fun connectionTasks(channel: ConnectionChannel): List<ConnectionTask> = ConnectionTask.entries.filter { task ->
     when (task) {

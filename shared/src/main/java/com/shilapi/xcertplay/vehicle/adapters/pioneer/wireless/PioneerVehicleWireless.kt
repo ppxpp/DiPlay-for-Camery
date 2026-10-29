@@ -15,7 +15,7 @@ object PioneerVehicleWireless {
         check(supported()) { "Camry A-navigation adaptation is disabled" }
         return PioneerBluetoothSnapshot().phones()
     }
-    fun preflight(context: Context, target: String?, cancelled: AtomicBoolean, log: (String) -> Unit, waiting: () -> Unit = {}) {
+    fun preflight(context: Context, target: String?, cancelled: AtomicBoolean, log: (String) -> Unit, waiting: () -> Unit = {}, initialState: (Boolean) -> Unit = {}) {
         check(supported()) { "Camry A-navigation adaptation is disabled" }
         com.shilapi.xcertplay.media.PioneerNativeOpusEncoder.configure(context)
         PioneerBlueforceNative.verifyRuntime()
@@ -26,9 +26,11 @@ object PioneerVehicleWireless {
         // the selected phone. Broadcasts only wake the read-only snapshot query.
         val snapshot=PioneerBluetoothSnapshot(log)
         var selectedAddress: String?=null
+        var firstRead=true
         fun awaitOemConnection() {
             PioneerBluetoothWait.await(context,{
                 selectedAddress=snapshot.connectedAddress(target)
+                if(firstRead) { firstRead=false;runCatching { initialState(selectedAddress!=null) } }
                 selectedAddress!=null
             },cancelled::get,waiting,log)
         }
