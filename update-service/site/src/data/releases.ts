@@ -16,6 +16,16 @@ export type Release = {
   artifacts: ReleaseArtifact[];
 };
 
+/** Prefer the APK file name (without extension) so the UI matches the downloaded file. */
+export function releaseDisplayName(release: {
+  versionName?: string;
+  version: string;
+  artifacts?: Array<{ name?: string }>;
+}): string {
+  const apk = release.artifacts?.find((item) => item.name?.toLowerCase().endsWith('.apk'));
+  return apk?.name?.replace(/\.apk$/i, '') || release.versionName?.trim() || release.version;
+}
+
 export async function fetchReleases(channel: ChannelKey, base = ''): Promise<Release[]> {
   const response = await fetch(`${base}/api/v1/apps/diplay/android/${channel}/releases`, {
     cache: 'no-store',

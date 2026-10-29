@@ -1,5 +1,5 @@
 import type { Env } from "../../../../../../_shared/management";
-import { allReleaseManifests, assetUrl, json, releasePrefix } from "../../../../../../_shared/management";
+import { allReleaseManifests, assetUrl, isPublishedRelease, json, releasePrefix } from "../../../../../../_shared/management";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
@@ -11,7 +11,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   if (!appId || !platform || !channel || ![appId, platform, channel].every((value) => SLUG.test(value))) return json({ error: "invalid_path" }, 400);
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return json({ error: "asset_base_url_not_configured" }, 500);
-  const releases = await allReleaseManifests(env.META, releasePrefix(appId, platform, channel));
+  // Unpublished candidates stay out of the public history; published versions keep their entry.
+  const releases = (await allReleaseManifests(env.META, releasePrefix(appId, platform, channel)))
+    .filter(({ manifest }) => isPublishedRelease(manifest));
   return json({ releases: releases.map(({ manifest }) => ({
     version: manifest.version,
     versionName: manifest.versionName ?? manifest.version,

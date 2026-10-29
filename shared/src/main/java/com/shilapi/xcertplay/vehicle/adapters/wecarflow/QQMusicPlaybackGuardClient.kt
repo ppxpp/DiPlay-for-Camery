@@ -10,6 +10,7 @@ import android.os.Parcel
 import com.shilapi.xcertplay.vehicle.api.LocalPlaybackGuardClient
 import com.shilapi.xcertplay.vehicle.api.MediaCommand
 import com.shilapi.xcertplay.vehicle.api.NowPlayingSnapshot
+import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -22,7 +23,10 @@ internal class QQMusicPlaybackGuardClient(
     private val onAvailable: () -> Unit,
 ) : LocalPlaybackGuardClient {
     private val context = context.applicationContext
-    private val callback = object : Binder() {
+    // A remote Binder can outlive unbind/release. It must not retain the old host callbacks.
+    private class Callback(client: QQMusicPlaybackGuardClient) : Binder() {
+        private val owner = WeakReference(client)
+        fun clear() = owner.clear()
         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
             if (code == INTERFACE_TRANSACTION) { reply?.writeString(DESCRIPTOR); return true }
             if (code != 1 && code != 2) return super.onTransact(code, data, reply, flags)
@@ -36,15 +40,18 @@ internal class QQMusicPlaybackGuardClient(
                 val signature = data.readString().orEmpty()
                 !com.shilapi.xcertplay.vehicle.adapters.pioneer.PalSteeringWheelInputAdapter.acceptBridgeEvent(signature)
             } else false
-            if (!closed && command != null) {
-                report("Audio playback: companion command=$command bridgeCode=$code duplicate=$duplicate")
+            val client = owner.get()
+            if (client != null && !client.closed && command != null) {
+                client.report("Audio playback: companion command=$command bridgeCode=$code duplicate=$duplicate")
             }
-            val accepted = !closed && command != null && (duplicate || onCommand(command))
+            val accepted = client != null && !client.closed && command != null &&
+                (duplicate || client.onCommand(command))
             reply?.writeNoException()
             reply?.writeInt(if (accepted) 1 else 0)
             return true
         }
     }
+    private val callback = Callback(this)
     private val connected = CountDownLatch(1)
     @Volatile private var peer: IBinder? = null
     @Volatile private var closed = false
@@ -144,6 +151,7 @@ internal class QQMusicPlaybackGuardClient(
         synchronized(this) {
             if (closed) return
             closed = true
+            callback.clear()
             runCatching { transact(2) }
                 .onFailure { report("Vehicle: protection release failed ${it.javaClass.simpleName}") }
             peer = null

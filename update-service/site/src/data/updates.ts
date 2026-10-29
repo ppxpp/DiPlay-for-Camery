@@ -52,7 +52,8 @@ export async function fetchUpdateChannel(key: ChannelKey): Promise<UpdateChannel
 }
 
 export function displayVersion(manifest: UpdateManifest): string {
-  return manifest.versionName?.trim() || manifest.version;
+  const apk = manifest.artifacts?.find((item) => item.name?.toLowerCase().endsWith('.apk'));
+  return apk?.name?.replace(/\.apk$/i, '') || manifest.versionName?.trim() || manifest.version;
 }
 
 export function displayShortVersion(manifest: UpdateManifest): string {

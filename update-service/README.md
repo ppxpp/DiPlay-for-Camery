@@ -24,7 +24,10 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
 GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
+DELETE /api/v1/admin/releases?channel={channel}&releaseKey={versionName}  (admin)
 ```
+
+`DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
 
 A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
 
@@ -74,7 +77,7 @@ Set the public asset base URL in `wrangler.toml` or in the Pages project environ
 ASSET_BASE_URL = "https://dl.example.com"
 ```
 
-Bind the metadata bucket `gtmc-app-updates-meta-prod` as `META`. The assets bucket is read directly through its custom domain and is not bound to the Function.
+Bind the metadata bucket `gtmc-app-updates-meta-prod` as `META`. Bind the assets bucket as `RELEASE_ASSETS` so admin deletes can remove release files; the download site still reads it directly through its custom domain. `ASSETS` is reserved by Pages.
 
 Deploy the Pages project (builds the Astro site into `dist/`, then uploads it with the Functions):
 
@@ -88,7 +91,7 @@ Use custom domains such as `upd.example.com` and `dl.example.com`. Do not use `*
 
 The site fetches the public stable/beta manifests at build time and bakes the version data into the HTML, so the first paint has no loading state. After hydration it refreshes both channels silently; a failed refresh leaves the baked data in place. A build therefore needs network access to the update API.
 
-Publishing a release writes R2 objects and then `.github/workflows/release.yml` rebuilds and deploys the Pages project, so the download page and the API move together. Function or site code changes also require a deployment; `npm run deploy` is the manual path.
+Publishing a release uploads the APK, checksums and release snapshot, then `.github/workflows/release.yml` rebuilds and deploys the Pages project. CI never updates `latest.json`: the delivered version changes only when an admin selects it in `/admin/`. Function or site code changes also require a deployment; `npm run deploy` is the manual path.
 
 ## Publish a release
 
@@ -148,7 +151,7 @@ The DiPlay repository uses `.github/workflows/release.yml`:
 - The workflow builds `:mobile:assembleRelease`, verifies the APK version matches the tag, rejects a `versionCode` that is not greater than the currently published one, uploads to R2 and checks the public endpoint.
 - It then installs `update-service` dependencies, rebuilds the Astro site with the newly published manifests baked in, and deploys the Pages project. A site deploy failure fails the workflow after the R2 release is already live.
 
-Manually published releases start with automatic delivery disabled. Sign in to `/admin/` and enable delivery after reviewing the release. Release APKs and APK-derived identity fields are immutable; the console edits only release notes and delivery settings.
+CI uploads every release as a disabled candidate and never moves the delivered version. Sign in to `/admin/`, review it, and use “设为当前下发版本”; that also enables delivery. Release APKs and APK-derived identity fields are immutable; the console edits only release notes and delivery settings.
 
 ### Deploy only the site
 

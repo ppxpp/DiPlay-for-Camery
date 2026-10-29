@@ -6,6 +6,7 @@ import SiteHeader from '../../../components/SiteHeader.astro';
 import { site } from '../../../data/site.ts';
 import {
   fetchReleasesForBuild,
+  releaseDisplayName,
   type ChannelKey,
   type Release,
 } from '../../../data/releases.ts';
@@ -35,7 +36,7 @@ export async function getStaticPaths() {
 type Props = { channel: ChannelKey; release: Release };
 const { channel, release } = Astro.props as Props;
 
-const versionLabel = release.versionName || release.version;
+const versionLabel = releaseDisplayName(release);
 const channelLabel = channel === 'stable' ? '正式版' : '内测版';
 const publishedAt = release.publishedAt
   ? new Date(release.publishedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
