@@ -24,7 +24,10 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
 GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
+GET /api/v1/install-kits/{kitId}/{channel}/latest
 ```
+
+The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (installer) app. Its static parts — the device profile, the uninstall notice, and the 爱趣听 / 微信 replacement packages (fixed R2 asset URLs, sizes and SHA-256) — are authored in `functions/_shared/install-kits.ts`. The DiPlay entry is resolved at request time from the app update interface: the Function reads `apps/diplay/android/stable/latest.json` and `apps/diplay/android/beta/latest.json`, skips disabled channels, and uses whichever carries the higher `versionCode` (preferring stable on a tie), so the installer always gets the newest DiPlay build without republishing the kit. If no DiPlay release is available it returns `503 {"error":"diplay_release_unavailable"}`; an unknown `kitId` returns `404`. Responses use `Cache-Control: no-store`.
 
 A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
 
