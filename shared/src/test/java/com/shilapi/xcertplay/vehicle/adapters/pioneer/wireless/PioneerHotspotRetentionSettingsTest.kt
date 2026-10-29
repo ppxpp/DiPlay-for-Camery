@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 class PioneerHotspotRetentionSettingsTest {
     private val app get()=RuntimeEnvironment.getApplication()
     @Before fun reset() { app.getSharedPreferences("diplay_car_hotspot",Context.MODE_PRIVATE).edit().clear().commit() }
-    @Test fun defaultIsThirtySeconds() { assertEquals(30,PioneerHotspotRetention.seconds(app)) }
+    @Test fun defaultIsTwentySeconds() { assertEquals(20,PioneerHotspotRetention.seconds(app)) }
     @Test fun savedDelaySurvivesAnotherReadAndClampsToRange() {
         PioneerHotspotRetention.setSeconds(app,12)
         assertEquals(12,PioneerHotspotRetention.seconds(app))

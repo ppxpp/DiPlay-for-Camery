@@ -39,7 +39,7 @@ object PioneerHotspotRetention {
         } else stopIdleService()
     }
     fun seconds(context: Context) = context.getSharedPreferences("diplay_car_hotspot",Context.MODE_PRIVATE)
-        .getInt("camry_disconnect_retention_seconds",30).coerceIn(0,60)
+        .getInt("camry_disconnect_retention_seconds",20).coerceIn(0,60)
     fun setSeconds(context: Context, seconds: Int) {
         initialize(context)
         context.getSharedPreferences("diplay_car_hotspot",Context.MODE_PRIVATE).edit()
