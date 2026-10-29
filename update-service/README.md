@@ -225,6 +225,23 @@ The workflow uses the `release` GitHub Environment, so secrets can be scoped the
 
 No Function changes or Pages deployment are needed. Keys are isolated by `appId/platform/channel`, so concurrent releases from different apps are safe. Serialize publishes of the same app and channel with a CI concurrency group.
 
+### The installer app (DiPlay 装车助手)
+
+The installer app self-updates through the same generic endpoint. It is published under `--app installer --platform android --channel stable` (universal APK):
+
+```sh
+node scripts/publish-update.mjs \
+  --app installer \
+  --platform android \
+  --channel stable \
+  --version 0.1.1 \
+  --version-code 2 \
+  --artifact ./installer-0.1.1.apk \
+  --arch universal
+```
+
+The client checks `GET /api/v1/apps/installer/android/stable/latest?id=<ANDROID_ID>` on every home screen visit, compares the manifest `versionCode` with its own `longVersionCode`, and offers to download and install the APK. `latest` (not `public-latest`) is used so release rollout stays under admin delivery control. A release must be manually enabled in `/admin/` after publishing, same as DiPlay releases.
+
 ## Notes
 
 - Assets and checksums are immutable per version; `latest.json` is `no-store`.

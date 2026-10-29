@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -30,17 +31,31 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shilapi.xcertplay.installer.ui.components.BulletLine
 import com.shilapi.xcertplay.installer.ui.components.InfoCard
+import com.shilapi.xcertplay.installer.ui.components.LineProgressBar
 import com.shilapi.xcertplay.installer.ui.components.RiskBanner
 import com.shilapi.xcertplay.installer.ui.model.RiskLevel
 import com.shilapi.xcertplay.installer.ui.theme.DiPlayInstallerTheme
+import com.shilapi.xcertplay.installer.update.AppUpdate
+import com.shilapi.xcertplay.installer.update.AppUpdateRepository
+import com.shilapi.xcertplay.installer.update.installUpdateApk
+import kotlinx.coroutines.launch
+import java.io.File
 
 @Composable
 fun HomeScreen(
@@ -48,6 +63,18 @@ fun HomeScreen(
     onRestore: () -> Unit,
     onAdbTest: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var update by remember { mutableStateOf<AppUpdate?>(null) }
+    var updateFile by remember { mutableStateOf<File?>(null) }
+    var updatePercent by remember { mutableStateOf<Int?>(null) }
+    var updateFailed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        update = AppUpdateRepository.check(context)
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -66,6 +93,30 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            update?.let { found ->
+                item {
+                    AppUpdateCard(
+                        update = found,
+                        file = updateFile,
+                        percent = updatePercent,
+                        failed = updateFailed,
+                        onUpdate = {
+                            updateFailed = false
+                            updatePercent = 0
+                            scope.launch {
+                                updateFile = AppUpdateRepository.download(context, found) { percent ->
+                                    updatePercent = percent
+                                }
+                                updatePercent = null
+                                if (updateFile == null) updateFailed = true
+                            }
+                        },
+                        onInstall = { file ->
+                            installUpdateApk(context, file)
+                        },
+                    )
+                }
             }
             item { PreparationCard() }
             item {
@@ -154,6 +205,57 @@ private fun PreparationCard() {
         BulletLine("OTG 转接头和连接数据线")
         BulletLine("车机通电，手机电量充足")
         BulletLine("可用的网络，用于下载安装包")
+    }
+}
+
+@Composable
+private fun AppUpdateCard(
+    update: AppUpdate,
+    file: File?,
+    percent: Int?,
+    failed: Boolean,
+    onUpdate: () -> Unit,
+    onInstall: (File) -> Unit,
+) {
+    InfoCard(title = "发现新版本 ${update.versionName}") {
+        when {
+            file != null -> {
+                Text(
+                    text = "更新包已下载，点击安装。安装时会询问是否允许，请选择允许。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = { onInstall(file) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("安装")
+                }
+            }
+            percent != null -> {
+                LineProgressBar(progress = percent / 100f)
+                Text(
+                    text = "正在下载更新… $percent%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> {
+                if (failed) {
+                    Text(
+                        text = "下载失败，请重试。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Button(
+                    onClick = onUpdate,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("立即更新")
+                }
+            }
+        }
     }
 }
 
