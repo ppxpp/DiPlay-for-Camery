@@ -24,8 +24,11 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
 GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
+GET /api/v1/install-kits/{kitId}/{channel}/latest
 DELETE /api/v1/admin/releases?channel={channel}&releaseKey={versionName}  (admin)
 ```
+
+The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (installer) app. Its static parts — the device profile, the uninstall notice, and the 爱趣听 / 微信 replacement packages (fixed R2 asset URLs, sizes and SHA-256) — are authored in `functions/_shared/install-kits.ts`. The DiPlay entry is resolved at request time from the app update interface: the Function reads `apps/diplay/android/stable/latest.json` and `apps/diplay/android/beta/latest.json`, skips disabled channels, and uses whichever carries the higher `versionCode` (preferring stable on a tie), so the installer always gets the newest DiPlay build without republishing the kit. If no DiPlay release is available it returns `503 {"error":"diplay_release_unavailable"}`; an unknown `kitId` returns `404`. Responses use `Cache-Control: no-store`.
 
 `DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
 
@@ -221,6 +224,23 @@ The workflow uses the `release` GitHub Environment, so secrets can be scoped the
 3. Point the app's update client at the same API path.
 
 No Function changes or Pages deployment are needed. Keys are isolated by `appId/platform/channel`, so concurrent releases from different apps are safe. Serialize publishes of the same app and channel with a CI concurrency group.
+
+### The installer app (DiPlay 装车助手)
+
+The installer app self-updates through the same generic endpoint. It is published under `--app installer --platform android --channel stable` (universal APK):
+
+```sh
+node scripts/publish-update.mjs \
+  --app installer \
+  --platform android \
+  --channel stable \
+  --version 0.1.1 \
+  --version-code 2 \
+  --artifact ./installer-0.1.1.apk \
+  --arch universal
+```
+
+The client checks `GET /api/v1/apps/installer/android/stable/latest?id=<ANDROID_ID>` on every home screen visit, compares the manifest `versionCode` with its own `longVersionCode`, and offers to download and install the APK. `latest` (not `public-latest`) is used so release rollout stays under admin delivery control. A release must be manually enabled in `/admin/` after publishing, same as DiPlay releases.
 
 ## Notes
 
