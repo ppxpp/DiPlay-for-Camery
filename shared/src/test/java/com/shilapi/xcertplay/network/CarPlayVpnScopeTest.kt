@@ -142,7 +142,8 @@ class CarPlayVpnScopeTest {
         val constructor = attemptType.declaredConstructors.first { it.parameterCount == 3 }
             as java.lang.reflect.Constructor<Any>
         constructor.isAccessible = true
-        val attempt = constructor.newInstance(owner, java.util.concurrent.CountDownLatch(0), null)
+        val attempt = constructor.newInstance(
+            java.lang.ref.WeakReference(owner), java.util.concurrent.CountDownLatch(0), null)
         runtime.getDeclaredField("attempt").apply { isAccessible = true }
             .set(runtime.getField("INSTANCE").get(null), attempt)
     }

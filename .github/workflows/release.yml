@@ -148,7 +148,7 @@ jobs:
             echo "::error::APK update channel '$BUILD_CHANNEL' does not match publishing channel '$CHANNEL'"
             exit 1
           }
-          # The release version comes from versionCode (0.MM.PPP); versionName stays a human-readable label.
+          # The release version comes from versionCode (0.MMM.PPP); versionName stays a human-readable label.
           APP_VERSION="0.$((VERSION_CODE / 1000)).$((VERSION_CODE % 1000))"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             case "${GITHUB_REF_NAME}" in
