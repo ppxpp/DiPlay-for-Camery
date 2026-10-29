@@ -69,7 +69,12 @@ class CarHotspotOffConnectTest {
         // Robolectric has no MFi setup; a real head unit gets this far.
         ReflectionHelpers.setField(home, "setupError", null)
         assertTrue(carHotspotOff(home))
-        ReflectionHelpers.callInstanceMethod<Unit>(home, "connect", ReflectionHelpers.ClassParameter.from(Boolean::class.java, true))
+        ReflectionHelpers.callInstanceMethod<Unit>(
+            home,
+            "connect",
+            ReflectionHelpers.ClassParameter.from(Boolean::class.java, true),
+            ReflectionHelpers.ClassParameter.from(String::class.java, "manual"),
+        )
         val dialog = ShadowAlertDialog.getLatestAlertDialog()
         assertEquals(home.getString(R.string.car_hotspot_is_off), shadowOf(dialog).title)
 
