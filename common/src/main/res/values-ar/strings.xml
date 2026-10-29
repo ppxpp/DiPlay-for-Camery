@@ -622,8 +622,8 @@
     <string name="settings_usb_charging">شحن iPhone</string>
     <string name="settings_usb_charging_normal">عادي (2.4 A)</string>
     <string name="settings_usb_charging_reduced">مخفّض (1.5 A)</string>
-    <string name="settings_usb_charging_low">منخفض (0.5 A، افتراضي)</string>
-    <string name="settings_usb_charging_description">تيار الشحن الذي يقدّمه DiPlay لجهاز iPhone عبر USB. القيمة الافتراضية 0.5 A؛ ويمكن اختيار 1.5 A أو 2.4 A حسب قدرة مصدر طاقة USB. يُطبَّق عند اتصال USB التالي.</string>
+    <string name="settings_usb_charging_low">منخفض (0.5 A)</string>
+    <string name="settings_usb_charging_description">تيار الشحن الذي يقدّمه DiPlay لجهاز iPhone عبر USB. القيمة الافتراضية 1.5 A؛ ويمكن اختيار 0.5 A أو 2.4 A حسب قدرة مصدر طاقة USB. يُطبَّق عند اتصال USB التالي.</string>
     <string name="wheel_joystick_auto_off">عصا التحكم تتوقف تلقائيًا</string>
     <string name="wheel_joystick_auto_off_description">بعد 15 ثانية دون ضغط، وعند بدء مسار، تعود الأزرار إلى التحكم في الموسيقى والصوت.</string>
     <string name="wheel_joystick_on">عصا التحكم مفعّلة</string>

@@ -622,8 +622,8 @@
     <string name="settings_usb_charging">Зарядка iPhone</string>
     <string name="settings_usb_charging_normal">Обычная (2,4 А)</string>
     <string name="settings_usb_charging_reduced">Пониженная (1,5 А)</string>
-    <string name="settings_usb_charging_low">Низкая (0,5 А, по умолчанию)</string>
-    <string name="settings_usb_charging_description">Ток зарядки, предлагаемый DiPlay устройству iPhone по USB. По умолчанию — 0,5 А; также можно выбрать 1,5 А или 2,4 А в зависимости от питания USB. Применяется при следующем USB-подключении.</string>
+    <string name="settings_usb_charging_low">Низкая (0,5 А)</string>
+    <string name="settings_usb_charging_description">Ток зарядки, предлагаемый DiPlay устройству iPhone по USB. По умолчанию — 1,5 А; также можно выбрать 0,5 А или 2,4 А в зависимости от питания USB. Применяется при следующем USB-подключении.</string>
     <string name="wheel_joystick_auto_off">Джойстик выключается сам</string>
     <string name="wheel_joystick_auto_off_description">Через 15 секунд без нажатий и когда начинается маршрут кнопки снова управляют музыкой и громкостью.</string>
     <string name="wheel_joystick_on">Джойстик включён</string>

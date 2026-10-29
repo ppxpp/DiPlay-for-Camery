@@ -18,15 +18,15 @@ class UsbChargingCurrentTest {
         assertEquals(listOf(2400, 1500, 500), UsbChargingCurrent.entries.map { it.milliAmps })
     }
 
-    @Test fun storedValuesAreStableKeysAndUnknownOnesFallBackToLow() {
+    @Test fun storedValuesAreStableKeysAndUnknownOnesFallBackToReduced() {
         assertEquals(listOf("normal", "reduced", "low"), UsbChargingCurrent.entries.map { it.key })
-        assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey(null))
-        assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey("2"))
-        assertEquals(UsbChargingCurrent.LOW, UsbChargingCurrent.fromKey("one_amp"))
+        assertEquals(UsbChargingCurrent.REDUCED, UsbChargingCurrent.fromKey(null))
+        assertEquals(UsbChargingCurrent.REDUCED, UsbChargingCurrent.fromKey("2"))
+        assertEquals(UsbChargingCurrent.REDUCED, UsbChargingCurrent.fromKey("one_amp"))
     }
 
-    @Test fun theChoiceIsSavedAndDefaultsToLow() {
-        assertEquals(UsbChargingCurrent.LOW, AirPlayPersistence.loadUsbChargingCurrent(context))
+    @Test fun theChoiceIsSavedAndDefaultsToReduced() {
+        assertEquals(UsbChargingCurrent.REDUCED, AirPlayPersistence.loadUsbChargingCurrent(context))
         AirPlayPersistence.saveUsbChargingCurrent(context, UsbChargingCurrent.NORMAL)
         assertEquals(UsbChargingCurrent.NORMAL, AirPlayPersistence.loadUsbChargingCurrent(context))
     }

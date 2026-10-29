@@ -634,8 +634,8 @@
     <string name="settings_usb_charging">Заряджання iPhone</string>
     <string name="settings_usb_charging_normal">Звичайне (2,4 А)</string>
     <string name="settings_usb_charging_reduced">Знижене (1,5 А)</string>
-    <string name="settings_usb_charging_low">Низьке (0,5 А, типово)</string>
-    <string name="settings_usb_charging_description">Струм заряджання, який DiPlay пропонує iPhone через USB. Типове значення — 0,5 А; також можна вибрати 1,5 А або 2,4 А залежно від живлення USB. Застосовується під час наступного USB-підключення.</string>
+    <string name="settings_usb_charging_low">Низьке (0,5 А)</string>
+    <string name="settings_usb_charging_description">Струм заряджання, який DiPlay пропонує iPhone через USB. Типове значення — 1,5 А; також можна вибрати 0,5 А або 2,4 А залежно від живлення USB. Застосовується під час наступного USB-підключення.</string>
     <string name="wheel_joystick_auto_off">Джойстик вимикається сам</string>
     <string name="wheel_joystick_auto_off_description">Через 15 секунд без натискань і коли стартує маршрут кнопки знову керують музикою й гучністю.</string>
     <string name="wheel_joystick_on">Джойстик увімкнено</string>

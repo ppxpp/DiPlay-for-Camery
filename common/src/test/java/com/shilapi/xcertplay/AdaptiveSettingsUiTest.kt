@@ -822,7 +822,7 @@ class AdaptiveSettingsUiTest {
             ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.CONNECTION)
             ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
             val row = texts(screen).single { it.text.startsWith(screen.getString(R.string.settings_usb_charging)) }
-            assertEquals("${screen.getString(R.string.settings_usb_charging)} · ${screen.getString(R.string.settings_usb_charging_low)}", row.text.toString())
+            assertEquals("${screen.getString(R.string.settings_usb_charging)} · ${screen.getString(R.string.settings_usb_charging_reduced)}", row.text.toString())
             row.performClick()
             val dialog = ShadowAlertDialog.getLatestAlertDialog()
             assertEquals(screen.getString(R.string.save), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text.toString())

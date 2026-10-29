@@ -666,8 +666,8 @@
     <string name="settings_usb_charging">iPhone 充电</string>
     <string name="settings_usb_charging_normal">标准（2.4 A）</string>
     <string name="settings_usb_charging_reduced">降低（1.5 A）</string>
-    <string name="settings_usb_charging_low">低（0.5 A，默认）</string>
-    <string name="settings_usb_charging_description">DiPlay 通过 USB 向 iPhone 声明可用的充电电流，默认 0.5 A。也可根据 USB 口供电能力选择 1.5 A 或 2.4 A。下次 USB 连接时生效。</string>
+    <string name="settings_usb_charging_low">低（0.5 A）</string>
+    <string name="settings_usb_charging_description">DiPlay 通过 USB 向 iPhone 声明可用的充电电流，默认 1.5 A。也可根据 USB 口供电能力选择 0.5 A 或 2.4 A。下次 USB 连接时生效。</string>
     <string name="wheel_joystick_auto_off">摇杆自动关闭</string>
     <string name="wheel_joystick_auto_off_description">15 秒内无按键操作或开始导航时，按键恢复控制音乐和音量。</string>
     <string name="wheel_joystick_on">摇杆已开启</string>

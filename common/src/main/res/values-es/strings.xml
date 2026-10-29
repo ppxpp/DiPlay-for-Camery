@@ -622,8 +622,8 @@
     <string name="settings_usb_charging">Carga del iPhone</string>
     <string name="settings_usb_charging_normal">Normal (2,4 A)</string>
     <string name="settings_usb_charging_reduced">Reducida (1,5 A)</string>
-    <string name="settings_usb_charging_low">Baja (0,5 A, predeterminada)</string>
-    <string name="settings_usb_charging_description">Corriente de carga que DiPlay ofrece al iPhone por USB. El valor predeterminado es 0,5 A; también se puede elegir 1,5 A o 2,4 A según la alimentación USB. Se aplica en la próxima conexión USB.</string>
+    <string name="settings_usb_charging_low">Baja (0,5 A)</string>
+    <string name="settings_usb_charging_description">Corriente de carga que DiPlay ofrece al iPhone por USB. El valor predeterminado es 1,5 A; también se puede elegir 0,5 A o 2,4 A según la alimentación USB. Se aplica en la próxima conexión USB.</string>
     <string name="wheel_joystick_auto_off">El joystick se desactiva solo</string>
     <string name="wheel_joystick_auto_off_description">Tras 15 segundos sin pulsar nada y al iniciar una ruta, los botones vuelven a controlar la música y el volumen.</string>
     <string name="wheel_joystick_on">Joystick activado</string>
