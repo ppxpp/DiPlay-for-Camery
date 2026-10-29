@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">تصحيح USB ADB · %1$s</string>
+    <string name="settings_camry_usb_adb_on">مفعّل</string>
+    <string name="settings_camry_usb_adb_off">متوقف</string>
+    <string name="settings_camry_usb_adb_unknown">غير معروف / جارٍ التبديل</string>
+    <string name="settings_camry_usb_adb_changing">جارٍ التبديل…</string>
+    <string name="settings_camry_usb_adb_description">خاص بنظام ملاحة Camry A. اضغط لتبديل تصحيح USB ADB.</string>
+    <string name="settings_camry_usb_adb_failed">تعذر تأكيد حالة ADB. حاول لاحقًا.</string>
+</resources>

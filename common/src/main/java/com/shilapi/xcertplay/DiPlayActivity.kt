@@ -1935,6 +1935,54 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            if (com.shilapi.xcertplay.pioneer.PioneerAdbDebug.supported()) {
+                card.addView(label(getString(R.string.settings_camry_usb_adb_description), 14, MUTED))
+                lateinit var adbButton: SettingButton
+                var adbBusy = false
+                fun refreshAdb() {
+                    val state = com.shilapi.xcertplay.pioneer.PioneerAdbDebug.enabled()
+                    val status = if (adbBusy) R.string.settings_camry_usb_adb_changing else when (state) {
+                        true -> R.string.settings_camry_usb_adb_on
+                        false -> R.string.settings_camry_usb_adb_off
+                        null -> R.string.settings_camry_usb_adb_unknown
+                    }
+                    adbButton.text = getString(R.string.settings_camry_usb_adb, getString(status))
+                }
+                adbButton = button(getString(R.string.settings_camry_usb_adb,
+                    getString(R.string.settings_camry_usb_adb_unknown)), false) {
+                    if (!adbBusy) {
+                        val desired = com.shilapi.xcertplay.pioneer.PioneerAdbDebug.enabled() != true
+                        adbBusy = true
+                        adbButton.isEnabled = false
+                        refreshAdb()
+                        Thread({
+                            val result = runCatching {
+                                com.shilapi.xcertplay.pioneer.PioneerAdbDebug.setEnabled(applicationContext, desired)
+                            }
+                            runOnUiThread {
+                                adbBusy = false
+                                adbButton.isEnabled = true
+                                refreshAdb()
+                                if (result.isFailure && !isDestroyed)
+                                    toast(getString(R.string.settings_camry_usb_adb_failed))
+                            }
+                        }, "pioneer-settings-adb").start()
+                    }
+                }
+                card.addView(adbButton, matchButton(10, 60))
+                val updater = object : Runnable {
+                    override fun run() {
+                        if (!adbButton.isAttachedToWindow) return
+                        refreshAdb()
+                        adbButton.postDelayed(this, 1_000)
+                    }
+                }
+                adbButton.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(view: View) { view.post(updater) }
+                    override fun onViewDetachedFromWindow(view: View) { view.removeCallbacks(updater) }
+                })
+                refreshAdb()
+            }
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }

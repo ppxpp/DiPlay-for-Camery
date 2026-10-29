@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">Отладка USB ADB · %1$s</string>
+    <string name="settings_camry_usb_adb_on">Включена</string>
+    <string name="settings_camry_usb_adb_off">Выключена</string>
+    <string name="settings_camry_usb_adb_unknown">Неизвестно / переключение</string>
+    <string name="settings_camry_usb_adb_changing">Переключение…</string>
+    <string name="settings_camry_usb_adb_description">Только для Camry A. Нажмите для переключения отладки USB ADB.</string>
+    <string name="settings_camry_usb_adb_failed">Не удалось подтвердить состояние ADB. Повторите позже.</string>
+</resources>
