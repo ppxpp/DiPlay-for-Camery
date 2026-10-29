@@ -49,7 +49,7 @@ function memoryBucket(initial: Record<string, unknown>) {
 async function context(bucket: ReturnType<typeof memoryBucket>, assets = memoryBucket({})) {
   const env = {
     META: bucket as never,
-    ASSETS: assets as never,
+    RELEASE_ASSETS: assets as never,
     ASSET_BASE_URL: "https://dl.example.com",
     ADMIN_USERNAME,
     ADMIN_PASSWORD_HASH: "unused",
@@ -178,6 +178,8 @@ describe("admin release management", () => {
     const body = (await response.json()) as any;
     expect(body.currentVersion).toBe(OLD_NAME);
     expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
+    expect(stored(bucket, LATEST_KEY).management).toMatchObject({ enabled: true, published: true });
+    expect(stored(bucket, `${PREFIX}${OLD_NAME}.json`).management).toMatchObject({ enabled: true, published: true });
     expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management.enabled).toBe(false);
   });
 

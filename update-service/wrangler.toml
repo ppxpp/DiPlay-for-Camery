@@ -11,5 +11,5 @@ binding = "META"
 bucket_name = "gtmc-app-updates-meta-prod"
 
 [[r2_buckets]]
-binding = "ASSETS"
+binding = "RELEASE_ASSETS"
 bucket_name = "gtmc-app-updates-assets-prod"

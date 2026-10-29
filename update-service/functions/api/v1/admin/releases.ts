@@ -103,7 +103,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const previousSnapshot: StoredManifest = { ...previous, management: { ...(previous.management ?? { enabled: false, mode: "all", notes: "" }), enabled: false } };
     await writeManifest(env.META, await snapshotKeyFor(env.META, prefix, previous), previousSnapshot);
   }
-  await writeManifest(env.META, latestKey, target);
+  const delivered: StoredManifest = {
+    ...target,
+    management: {
+      ...(target.management ?? { enabled: false, mode: "all", notes: "" }),
+      enabled: true,
+      published: true,
+    },
+  };
+  await writeManifest(env.META, targetKey, delivered);
+  await writeManifest(env.META, latestKey, delivered);
   return json({ ok: true, currentVersion: releaseKey, previousVersion: previous ? releaseKeyOf(previous) : null });
 };
 
@@ -149,7 +158,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   }
   let assetsRemoved = true;
   try {
-    for (const key of assetKeys) await env.ASSETS.delete(key);
+    for (const key of assetKeys) await env.RELEASE_ASSETS.delete(key);
   } catch {
     assetsRemoved = false;
   }

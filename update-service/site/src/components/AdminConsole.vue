@@ -148,7 +148,7 @@ async function save(release: Release) {
 }
 
 async function rollback(release: Release) {
-  if (!window.confirm(`将自动更新推荐版本设为 ${release.versionName ?? release.version}？原推荐版本会停止下发。`)) return;
+  if (!window.confirm(`将自动更新推荐版本设为 ${release.versionName ?? release.version}？原推荐版本会停止下发，该版本会立即开启下发。`)) return;
   try {
     await request('/api/v1/admin/releases', {
       method: 'POST',

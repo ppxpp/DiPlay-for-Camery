@@ -194,7 +194,7 @@ jobs:
               ;;
           esac
 
-      - name: Prepare release manifest
+      - name: Prepare release snapshot
         run: |
           RELEASE_DIR="$RUNNER_TEMP/release"
           mkdir -p "$RELEASE_DIR"
@@ -235,12 +235,13 @@ jobs:
                 sha256: $sha256,
                 size: $size
               }]
-            }' > "$RELEASE_DIR/latest.json"
+            }' > "$RELEASE_DIR/${VERSION_NAME}.json"
           echo "RELEASE_DIR=$RELEASE_DIR" >> "$GITHUB_ENV"
+          echo "RELEASE_MANIFEST=${VERSION_NAME}.json" >> "$GITHUB_ENV"
           echo "APK_NAME=$APK_NAME" >> "$GITHUB_ENV"
           echo "ASSET_PREFIX=$ASSET_PREFIX" >> "$GITHUB_ENV"
 
-      - name: Upload assets and update latest pointer
+      - name: Upload release snapshot
         if: github.event_name == 'workflow_dispatch'
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -267,19 +268,13 @@ jobs:
             --content-type "text/plain; charset=utf-8" \
             --cache-control "public, max-age=31536000, immutable" \
             --only-show-errors
-          aws s3 cp "$RELEASE_DIR/latest.json" \
-            "s3://${R2_META_BUCKET}/${META_PREFIX}/releases/${VERSION_NAME}.json" \
+          aws s3 cp "$RELEASE_DIR/$RELEASE_MANIFEST" \
+            "s3://${R2_META_BUCKET}/${META_PREFIX}/releases/$RELEASE_MANIFEST" \
             --endpoint-url "$ENDPOINT" \
             --content-type "application/json; charset=utf-8" \
             --cache-control "no-store" \
             --only-show-errors
-          # The pointer is written last so clients never see a manifest before its files exist.
-          aws s3 cp "$RELEASE_DIR/latest.json" \
-            "s3://${R2_META_BUCKET}/${META_PREFIX}/latest.json" \
-            --endpoint-url "$ENDPOINT" \
-            --content-type "application/json; charset=utf-8" \
-            --cache-control "no-store" \
-            --only-show-errors
+          # CI never moves the delivered version; an admin selects and enables it in /admin/.
 
       - name: Verify the uploaded release manifest
         if: github.event_name == 'workflow_dispatch'
@@ -293,12 +288,12 @@ jobs:
           AWS_EC2_METADATA_DISABLED: "true"
         run: |
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          MANIFEST_KEY="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/latest.json"
+          MANIFEST_KEY="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/releases/${RELEASE_MANIFEST}"
           for attempt in 1 2 3 4 5; do
             if BODY="$(aws s3 cp "s3://${R2_META_BUCKET}/${MANIFEST_KEY}" - --endpoint-url "$ENDPOINT" --only-show-errors)" \
               && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" --arg versionName "$VERSION_NAME" \
                 '.version == $version and .versionName == $versionName and .management.enabled == false' > /dev/null; then
-              echo "Verified ${MANIFEST_KEY} -> ${APP_VERSION} (${VERSION_NAME}); delivery stays disabled until enabled in admin"
+              echo "Verified ${MANIFEST_KEY} -> ${APP_VERSION} (${VERSION_NAME}); waiting for an admin to publish it"
               exit 0
             fi
             echo "Waiting for ${MANIFEST_KEY} to report ${APP_VERSION} (attempt ${attempt})"
@@ -314,7 +309,7 @@ jobs:
           path: |
             ${{ env.RELEASE_DIR }}/${{ env.APK_NAME }}
             ${{ env.RELEASE_DIR }}/SHA256SUMS.txt
-            ${{ env.RELEASE_DIR }}/latest.json
+            ${{ env.RELEASE_DIR }}/${{ env.RELEASE_MANIFEST }}
           if-no-files-found: error
           retention-days: 14
 
