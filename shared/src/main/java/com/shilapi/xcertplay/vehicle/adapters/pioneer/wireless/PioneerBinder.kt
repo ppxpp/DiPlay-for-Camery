@@ -15,7 +15,7 @@ internal class PioneerBinder(private val log: (String) -> Unit) {
         check(it.interfaceDescriptor == SERVICE) { "先锋服务描述符不匹配" }
     } ?: error("先锋蓝牙服务不存在")
     fun query(code: Int, vararg args: Int): List<Int> {
-        check(code in setOf(67, 78, 79, 80, 81, 134, 141)) { "不是已确认的查询接口" }
+        check(code in setOf(44, 55, 67, 78, 79, 80, 81, 134, 141)) { "不是已确认的查询接口" }
         return transact(code, *args)
     }
     fun startCandidate() = transact(133, 0)

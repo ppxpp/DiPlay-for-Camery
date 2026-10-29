@@ -19,20 +19,13 @@ internal class PioneerAdapter {
     fun query(name: String): Any? = bounded(name) { type!!.getMethod(name).invoke(adapter) }
     fun query(name: String, device: PairedDevice): Any? =
         bounded(name) { type!!.getMethod(name, device.native.javaClass).invoke(adapter, device.native) }
-    fun requireConnected(device: PairedDevice) {
-        try {
-            val connected=checkNotNull(type).getField("STATE_CONNECTED").getInt(null)
-            val state=(query("getConnectionState",device) as? Number)?.toInt()
-                ?: error("先锋蓝牙连接状态不可用")
-            PioneerBluetoothReadiness.requireConnected(state,connected)
-        } catch(failure: com.shilapi.xcertplay.network.WirelessStartupException) {
-            throw failure
-        } catch(failure: Exception) {
-            throw com.shilapi.xcertplay.network.WirelessStartupException(
-                com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_NOT_CONNECTED,
-                "无法确认已选 iPhone 的蓝牙连接；请在原厂蓝牙界面连接后重试").apply { initCause(failure) }
-        }
+    fun isConnected(device: PairedDevice): Boolean {
+        val connected=checkNotNull(type).getField("STATE_CONNECTED").getInt(null)
+        val state=(query("getConnectionState",device) as? Number)?.toInt()
+            ?: error("先锋蓝牙连接状态不可用")
+        return state==connected
     }
+    fun requireConnected(device: PairedDevice) = PioneerBluetoothLink.requireConnected(this,device)
     fun connectProfiles(device: PairedDevice, mask: Int): Boolean {
         check(mask and 0xff.inv() == 0) { "未知 profile 位，不能无损回写" }
         val mapping = listOf(107 to 1, 108 to 2, 109 to 4, 113 to 8,

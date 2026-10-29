@@ -6,7 +6,7 @@ import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import com.shilapi.xcertplay.transport.BlockingDuplexByteStream
 
-/** One lease owns the original profile until the entire CarPlay session is torn down. */
+/** The temporary profile belongs to Bluetooth bootstrap, not the Wi-Fi CarPlay session. */
 internal class PioneerSerialConnection(
     private val context: Context,
     private val adapter: PioneerAdapter,
@@ -18,6 +18,7 @@ internal class PioneerSerialConnection(
     private val binder=PioneerBinder(log)
     private val repair=PioneerCallbackRepair(context,cancelled,log)
     private val journal=context.getSharedPreferences("pioneer-wireless-profile-rollback",Context.MODE_PRIVATE)
+    private val profileBootKey="boot:"+device.address
     private val serialJournal=context.getSharedPreferences("pioneer-wireless-serial-lease",Context.MODE_PRIVATE)
     private var owned=false
     private var changedProfile=false
@@ -42,15 +43,22 @@ internal class PioneerSerialConnection(
             original = binder.output(81, device.handle) ?: error("无法读取目标配置")
             if(journal.contains(device.address)) {
                 val saved=journal.getInt(device.address,-1)
-                check(saved in 0..255 && paired.size==1 && (original==saved || original==(saved or 128))) {
-                    "Previous Pioneer profile restoration is unconfirmed"
+                when(PioneerProfileRecovery.decide(saved,checkNotNull(original),
+                    journal.getString(profileBootKey,null),PioneerCallbackRepair.boot(),paired.size)) {
+                    PioneerProfileRecovery.Action.RESTORE_SAVED -> {
+                        if(original!=saved) {
+                            check(adapter.connectProfiles(device,saved)) { "Previous Pioneer profile restore rejected" }
+                            waitFor("Previous Pioneer profile recovery",10000) { binder.output(81,device.handle)==saved }
+                            original=saved
+                        }
+                    }
+                    PioneerProfileRecovery.Action.ADOPT_CURRENT ->
+                        log("Retired stale profile rollback: saved=$saved current=$original; idle ports verified, current OEM profile preserved")
+                    PioneerProfileRecovery.Action.BLOCK -> throw com.shilapi.xcertplay.network.WirelessStartupException(
+                        com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_CONFIGURATION_CONFLICT,
+                        "车机蓝牙配置发生变化，无法安全恢复；请检查原厂蓝牙设置后重试")
                 }
-                if(original!=saved) {
-                    check(adapter.connectProfiles(device,saved)) { "Previous Pioneer profile restore rejected" }
-                    waitFor("Previous Pioneer profile recovery",10000) { binder.output(81,device.handle)==saved }
-                    original=saved
-                }
-                check(journal.edit().remove(device.address).commit())
+                check(journal.edit().remove(device.address).remove(profileBootKey).commit())
             }
             if (original!! and 128 == 0) {
                 // Firmware connectProfile updates other devices' overlapping settings.
@@ -61,7 +69,7 @@ internal class PioneerSerialConnection(
                 temporary = original!! or 128
                 if (temporary != original) {
                     // Record before the mutation: even a rejected IPC may have changed state.
-                    check(journal.edit().putInt(device.address,checkNotNull(original)).commit()) { "无法保存原配置，未执行变更" }
+                    check(journal.edit().putInt(device.address,checkNotNull(original)).putString(profileBootKey,PioneerCallbackRepair.boot()).commit()) { "无法保存原配置，未执行变更" }
                     changedProfile = true
                     log("临时 connectProfile mask=$temporary；原配置=$original。此操作会触发连接状态机")
                     owned = true
@@ -118,7 +126,7 @@ internal class PioneerSerialConnection(
         }
     }
     @Synchronized fun closeBootstrap() {
-        if(bootstrapReleased)return
+        if(bootstrapReleased) { restoreProfile();return }
         stream?.close()
         val cleanupRepair=PioneerCallbackRepair(context,AtomicBoolean(false),log,cleanupAuthorized=adaptationAuthorized)
         released=!owned
@@ -143,21 +151,29 @@ internal class PioneerSerialConnection(
             check(serialJournal.edit().remove("phone").commit()) { "Cannot retire serial ownership" }
             bootstrapReleased=true
         } finally { PioneerBlueforceNative.close() }
+        // Wi-Fi no longer needs the serial profile. Do not leave it enabled throughout
+        // CarPlay: an ignition-off would bypass full-session close and retain the setting.
+        restoreProfile()
+    }
+    private fun restoreProfile() {
+        if(!changedProfile)return
+        check(released) { "Pioneer release unconfirmed; profile rollback retained" }
+        val now=binder.output(81,device.handle)
+        if(now!=temporary && now!=original) throw com.shilapi.xcertplay.network.WirelessStartupException(
+            com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_CONFIGURATION_CONFLICT,
+            "车机蓝牙配置发生变化，已保留恢复记录；请检查原厂蓝牙设置后重试")
+        if(now!=original) {
+            check(adapter.connectProfiles(device,checkNotNull(original)))
+            waitFor("Pioneer profile restore",10000,true) { binder.output(81,device.handle)==original && adapter.query("isConnecting")==false }
+        }
+        check(journal.edit().remove(device.address).remove(profileBootKey).commit())
+        changedProfile=false
+        log("Pioneer Bluetooth bootstrap profile restored; Wi-Fi session independent")
     }
     @Synchronized override fun close() {
         if(closed)return
         try {
             closeBootstrap()
-            if(changedProfile) {
-                check(released) { "Pioneer release unconfirmed; profile rollback retained" }
-                val now=binder.output(81,device.handle)
-                check(now==temporary || now==original) { "Pioneer profile externally changed; rollback retained" }
-                if(now!=original) {
-                    check(adapter.connectProfiles(device,checkNotNull(original)))
-                    waitFor("Pioneer profile restore",10000,true) { binder.output(81,device.handle)==original && adapter.query("isConnecting")==false }
-                }
-                check(journal.edit().remove(device.address).commit())
-            }
             closed=true
         } finally { PioneerBlueforceNative.close() }
     }

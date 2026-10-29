@@ -4941,6 +4941,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 channel = status.channel,
                 backend = status.backend,
             )
+            CarPlayStatus.WaitingVehicleBluetooth -> hotspotStatus.copy(state=getString(R.string.waiting_vehicle_bluetooth))
             CarPlayStatus.WaitingForPairedIphone ->
                 hotspotStatus.copy(state = getString(R.string.waiting_for_paired_iphone))
             CarPlayStatus.ConnectingBluetooth ->
@@ -7214,6 +7215,7 @@ class CarPlayHostActivity : ComponentActivity() {
         englishMessage.contains("unsupported", true) || englishMessage.contains("not supported", true) -> getString(R.string.this_head_unit_may_not_support_wireless_carplay_try_a_usb)
         englishMessage.contains("denied", true) || englishMessage.contains("permission", true) -> getString(R.string.allow_the_connection_permission_to_continue)
         englishMessage.contains("Failed", true) || englishMessage.contains("error", true) -> getString(R.string.connection_interrupted_retrying)
+        wirelessEnabled && englishMessage.contains("Waiting for iPhone", true) && englishMessage.contains("Bluetooth", true) -> getString(R.string.waiting_vehicle_bluetooth)
         englishMessage.contains("Waiting for iPhone", true) || englishMessage.contains("Discovering iPhone", true) -> getString(R.string.connect_your_iphone_with_a_usb_cable)
         englishMessage.contains("paired", true) -> getString(R.string.looking_for_your_paired_iphone)
         englishMessage.contains("Bluetooth", true) -> getString(R.string.connecting_to_your_iphone)
@@ -7335,6 +7337,7 @@ class CarPlayHostActivity : ComponentActivity() {
             if (wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) {
                 res.getString(R.string.existing_wifi_ready, ssid, band, channel, address)
             } else res.getString(R.string.status_hotspot_ready, backend, ssid, band, if (channel == 0) res.getString(R.string.auto_value) else channel.toString())
+        CarPlayStatus.WaitingVehicleBluetooth -> res.getString(R.string.waiting_vehicle_bluetooth)
         CarPlayStatus.WaitingForPairedIphone -> res.getString(R.string.waiting_for_paired_iphone)
         CarPlayStatus.ConnectingBluetooth -> res.getString(R.string.connecting_bluetooth)
         CarPlayStatus.RunningWireless -> res.getString(R.string.wireless_carplay_control_running)

@@ -132,6 +132,7 @@ sealed class CarPlayStatus {
         val backend: String,
     ) : CarPlayStatus()
     data object WaitingForPairedIphone : CarPlayStatus()
+    data object WaitingVehicleBluetooth : CarPlayStatus()
     data object ConnectingBluetooth : CarPlayStatus()
     data object RunningWireless : CarPlayStatus()
     data object WirelessActive : CarPlayStatus()
@@ -245,6 +246,7 @@ class CarPlayController(
     @Volatile private var pioneerBluetoothPreparation: ParallelWirelessPreparation<PioneerBluetoothBootstrap>? = null
     @Volatile private var pioneerWirelessAdaptation: com.shilapi.xcertplay.pioneer.PioneerWiredSession.Session? = null
     @Volatile private var pioneerWirelessCancelled = AtomicBoolean(false)
+    private val pioneerBluetoothWaiting=AtomicBoolean(false)
     private fun vehicleWirelessStep(step: ConnectionStep, generation: Int) {
         if (pioneerVehicleWireless && !isStaleWirelessRun(generation)) {
             val progress=connectionProgress
@@ -1494,16 +1496,17 @@ class CarPlayController(
                     pioneerWirelessAdaptation=com.shilapi.xcertplay.pioneer.PioneerWiredSession.begin(
                         com.shilapi.xcertplay.pioneer.PioneerWiredSession.Backend.WIRELESS)
                 }
-                com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.preflight(
-                    appContext,config.wirelessBluetoothDeviceAddress,pioneerWirelessCancelled,::connectionDiagnostic)
                 vehicleWirelessStep(ConnectionStep.PREPARATION,generation)
                 if(!java.io.File(appContext.filesDir,"pioneer-wireless-parallel.disabled").exists()) {
                     val ssid=com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleHotspot.configuredSsid(appContext)
                     val cancelled=pioneerWirelessCancelled
-                    val preparation=ParallelWirelessPreparation("pioneer-bluetooth-auth-$generation") {
-                        try { preparePioneerBluetooth(generation,ssid,cancelled) }
+                    val preparation=ParallelWirelessPreparation("pioneer-bluetooth-auth-$generation",
+                        onFailure={ cancelled.set(true) }) {
+                        try {
+                            awaitPioneerBluetooth(generation,cancelled)
+                            preparePioneerBluetooth(generation,ssid,cancelled)
+                        }
                         catch(error: Throwable) {
-                            cancelled.set(true)
                             debugLog("parallel vehicle Bluetooth preparation failed",error)
                             throw error
                         }
@@ -1515,7 +1518,7 @@ class CarPlayController(
                     }
                     preparation.start()
                     debugLog("parallel vehicle Bluetooth authentication launched alongside hotspot preparation")
-                }
+                } else awaitPioneerBluetooth(generation,pioneerWirelessCancelled)
             }
             if (!pioneerVehicleWireless) {
                 val initialAdapter = currentBluetoothAdapter()
@@ -1609,7 +1612,7 @@ class CarPlayController(
             onStatus(CarPlayStatus.WaitingForPairedIphone)
 
             val preparedBluetooth=parallelBluetooth?.let { preparation ->
-                onStatus(CarPlayStatus.ConnectingBluetooth,generation)
+                onStatus(if(pioneerBluetoothWaiting.get()) CarPlayStatus.WaitingVehicleBluetooth else CarPlayStatus.ConnectingBluetooth,generation)
                 preparation.await { isStaleWirelessRun(generation) || pioneerWirelessCancelled.get() }.also {
                     check(it.ssid==hotspotInfo.ssid) { "Vehicle hotspot SSID changed during parallel authentication" }
                     debugLog("parallel vehicle Bluetooth authentication joined; hotspot is ready, preparing listener")
@@ -1908,6 +1911,15 @@ class CarPlayController(
                 closeWirelessStack(generation = generation)
             }
         }
+    }
+
+    private fun awaitPioneerBluetooth(generation: Int, cancelled: AtomicBoolean) {
+        try {
+            com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.preflight(
+                appContext,config.wirelessBluetoothDeviceAddress,cancelled,::connectionDiagnostic,
+                waiting={ pioneerBluetoothWaiting.set(true);onStatus(CarPlayStatus.WaitingVehicleBluetooth,generation) })
+        } finally { pioneerBluetoothWaiting.set(false) }
+        if(!isStaleWirelessRun(generation) && !cancelled.get()) onStatus(CarPlayStatus.ConnectingBluetooth,generation)
     }
 
     private fun preparePioneerBluetooth(generation: Int, ssid: String, cancelled: AtomicBoolean): PioneerBluetoothBootstrap {
@@ -3082,6 +3094,8 @@ class CarPlayController(
             WIFI_P2P_START_TIMEOUT_MILLIS
         } else if (hotspotMode == WirelessHotspotMode.MANUAL) {
             ((readyDeadline - System.nanoTime()) / 1_000_000).coerceAtLeast(1)
+        } else if(hotspotMode == WirelessHotspotMode.PIONEER_VEHICLE) {
+            120_000L
         } else {
             HOTSPOT_START_TIMEOUT_MILLIS
         }
@@ -3300,6 +3314,20 @@ class CarPlayController(
         // Serialize old resource teardown without holding the session/state monitor across
         // root IPC. Every new bring-up passes this barrier before acquiring new leases.
         synchronized(wirelessCleanupLock) {
+            // Keep the worker reachable if joining fails. A new attempt must not overlap
+            // firmware calls from an old attempt; never join while holding its publish lock.
+            val preparing = synchronized(wirelessResourceLock) {
+                if (generation != null && generation != wirelessGeneration.get()) return
+                if (pioneerVehicleWireless) pioneerWirelessCancelled.set(true)
+                pioneerBluetoothPreparation?.cancel()
+                // Authentication may be blocked in transport I/O, so unblock it before joining.
+                closeBluetoothBootstrapTransport()
+                pioneerBluetoothPreparation
+            }
+            preparing?.close()
+            synchronized(wirelessResourceLock) {
+                if (pioneerBluetoothPreparation === preparing) pioneerBluetoothPreparation = null
+            }
             val releaseVehicle: (() -> Unit)? = synchronized(wirelessResourceLock) {
                 if (generation != null && generation != wirelessGeneration.get()) return@synchronized null
                 val vehicleCleanup = mutableListOf<() -> Unit>()
@@ -3310,12 +3338,6 @@ class CarPlayController(
                     if(prepared!=null) vehicleCleanup += { closeBestEffort("vehicle hotspot prewarm") { prepared.close() } }
                 }
                 if (pioneerVehicleWireless) pioneerWirelessCancelled.set(true)
-                val preparing=pioneerBluetoothPreparation
-                pioneerBluetoothPreparation=null
-                preparing?.cancel()
-                if(preparing!=null) vehicleCleanup += {
-                    closeBestEffort("parallel vehicle Bluetooth preparation") { preparing.close() }
-                }
                 val owner = firstTcpWatchdog?.listener
                 firstTcpWatchdog?.terminate()
                 val diagnostics = wirelessDiagnostics
@@ -3653,6 +3675,9 @@ class CarPlayController(
             val causes = generateSequence(error) { it.cause }.toList()
             if(pioneerVehicleWireless && causes.filterIsInstance<WirelessStartupException>().any {
                     it.reason==WirelessStartupFailure.BLUETOOTH_NOT_CONNECTED })
+                connectionProgress?.failWirelessStep(ConnectionStep.DEVICE,"vehicle_bluetooth_not_connected")
+            if(pioneerVehicleWireless && causes.filterIsInstance<WirelessStartupException>().any {
+                    it.reason==WirelessStartupFailure.BLUETOOTH_CONFIGURATION_CONFLICT })
                 connectionProgress?.failWirelessStep(ConnectionStep.DEVICE)
             onStatus(CarPlayStatus.Failed(error.message ?: error.javaClass.simpleName,
                 causes.any { it is com.shilapi.xcertplay.network.P2pResetRequiredException },
@@ -3746,6 +3771,7 @@ class CarPlayController(
         is CarPlayStatus.HotspotReady ->
             "STEP wifi/ap-ready: backend=$backend ssid=$ssid band=$band " +
                 "channel=$channel bssid=$bssid address=$address"
+        CarPlayStatus.WaitingVehicleBluetooth -> "STEP bt/wait: waiting for selected iPhone OEM Bluetooth connection"
         CarPlayStatus.WaitingForPairedIphone ->
             "STEP bt/select: waiting for a paired or connected iPhone"
         CarPlayStatus.ConnectingBluetooth ->

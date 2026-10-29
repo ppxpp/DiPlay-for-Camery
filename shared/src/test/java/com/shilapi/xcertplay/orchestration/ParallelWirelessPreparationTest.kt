@@ -55,4 +55,55 @@ class ParallelWirelessPreparationTest {
             assertSame(failure, preparation.failureOrNull())
         } finally { preparation.close() }
     }
+    @Test fun failureCancelsPeerAndRemainsTheReportedCause() {
+        val cancelled = AtomicBoolean(false)
+        val notified = CountDownLatch(1)
+        val failure = IOException("Bluetooth failed")
+        val preparation = ParallelWirelessPreparation<Unit>("test-peer-cancel", onFailure = {
+            assertSame(failure, it)
+            cancelled.set(true)
+            notified.countDown()
+        }) { throw failure }
+        try {
+            preparation.start()
+            assertTrue(notified.await(2, TimeUnit.SECONDS))
+            assertSame(failure, assertThrows(IOException::class.java) { preparation.await { cancelled.get() } })
+        } finally { preparation.close() }
+    }
+
+    @Test fun callbackFailureCannotReplaceOriginalFailure() {
+        val failure = IOException("Bluetooth failed")
+        val callbackFailure = IllegalStateException("Cancellation failed")
+        val preparation = ParallelWirelessPreparation<Unit>("test-callback", onFailure = {
+            throw callbackFailure
+        }) { throw failure }
+        try {
+            preparation.start()
+            assertSame(failure, assertThrows(IOException::class.java) { preparation.await { false } })
+            assertArrayEquals(arrayOf(callbackFailure), failure.suppressed)
+        } finally { preparation.close() }
+    }
+
+    @Test fun nonCooperativeWorkerMustExitBeforeCloseCanSucceed() {
+        val entered = CountDownLatch(1)
+        val release = AtomicBoolean(false)
+        val exited = CountDownLatch(1)
+        val preparation = ParallelWirelessPreparation("test-stuck", joinTimeoutMillis = 10) {
+            entered.countDown()
+            try {
+                while (!release.get()) {
+                    try { Thread.sleep(1) } catch (_: InterruptedException) { }
+                }
+            } finally { exited.countDown() }
+        }
+        try {
+            preparation.start()
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            assertThrows(IllegalStateException::class.java) { preparation.close() }
+        } finally {
+            release.set(true)
+            assertTrue(exited.await(2, TimeUnit.SECONDS))
+            preparation.close()
+        }
+    }
 }

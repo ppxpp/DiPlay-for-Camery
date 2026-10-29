@@ -13,22 +13,41 @@ object PioneerVehicleWireless {
     fun phones(): List<Phone> {
         PioneerBlueforceNative.verifyRuntime()
         check(supported()) { "Camry A-navigation adaptation is disabled" }
-        val adapter=PioneerAdapter().apply { initialize() }
-        return adapter.paired().map { Phone(it.name,it.address) }
+        return PioneerBluetoothSnapshot().phones()
     }
-    fun preflight(context: Context, target: String?, cancelled: AtomicBoolean, log: (String) -> Unit) {
+    fun preflight(context: Context, target: String?, cancelled: AtomicBoolean, log: (String) -> Unit, waiting: () -> Unit = {}) {
         check(supported()) { "Camry A-navigation adaptation is disabled" }
         com.shilapi.xcertplay.media.PioneerNativeOpusEncoder.configure(context)
         PioneerBlueforceNative.verifyRuntime()
-        val adapter=PioneerAdapter().apply { initialize() }
-        val known=adapter.paired()
-        val selected=if(target.isNullOrBlank()) known.singleOrNull() else known.singleOrNull {
-            PioneerBlueforceNative.sameAddress(it.address,target)
+        synchronized(lock) { leases.prepare { it.close() } }
+        val recovery=PioneerBootProfileRecovery(context,cancelled,log)
+        val reconnect=PioneerAudioReconnect(context,cancelled,log)
+        // Register before querying, and remain passive until the OEM has connected
+        // the selected phone. Broadcasts only wake the read-only snapshot query.
+        val snapshot=PioneerBluetoothSnapshot(log)
+        var selectedAddress: String?=null
+        fun awaitOemConnection() {
+            PioneerBluetoothWait.await(context,{
+                selectedAddress=snapshot.connectedAddress(target)
+                selectedAddress!=null
+            },cancelled::get,waiting,log)
         }
-        if(selected==null) throw com.shilapi.xcertplay.network.WirelessStartupException(
+        awaitOemConnection()
+        // A journal is not permission to interfere with boot auto-connect. Restore
+        // only after ordinary HFP/A2DP is present; retain it on any recovery failure.
+        if(!reconnect.recoverIfNeeded(snapshot) || !recovery.recoverIfNeeded(snapshot))
+            throw com.shilapi.xcertplay.network.WirelessStartupException(
+                com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_NOT_CONNECTED,
+                "蓝牙连接已变化，请连接后重试")
+        // connectProfile can change the connection state even during rollback.
+        awaitOemConnection()
+        val adapter=PioneerAdapter().apply { initialize() }
+        val selected=adapter.paired().singleOrNull {
+            PioneerBlueforceNative.sameAddress(it.address,checkNotNull(selectedAddress))
+        } ?: throw com.shilapi.xcertplay.network.WirelessStartupException(
             com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_NOT_CONNECTED,
-            "请在原厂蓝牙设置中配对并连接已选 iPhone，再重试无线 CarPlay")
-        adapter.requireConnected(selected)
+            "蓝牙未连接，请连接后重试")
+        PioneerBluetoothLink.requireConnected(adapter,selected)
         PioneerBlueforceNative.verifyRuntime()
         val baseline=PioneerCallbackRepair(context,cancelled,log).audit()
         val active=baseline.ports.filter { it.connected || it.lowerStatus!=0 }
@@ -54,7 +73,7 @@ object PioneerVehicleWireless {
             PioneerBlueforceNative.sameAddress(it.address,target)
         }
         checkNotNull(device) { "Select an iPhone paired in the original vehicle Bluetooth settings" }
-        adapter.requireConnected(device) // Recheck before claiming or changing a serial/profile lease.
+        PioneerBluetoothLink.requireConnected(adapter,device)
         val connection=PioneerSerialConnection(context,adapter,cancelled,log,device)
         val lease=Connection(connection,(adapter.query("getAddress") as? String).orEmpty(),device.address,log)
         check(lease.bluetoothAddress.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")) &&

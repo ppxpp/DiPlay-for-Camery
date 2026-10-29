@@ -173,7 +173,15 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 state?.outcome == ConnectionOutcome.COMPLETE -> context.getString(R.string.connect_progress_skipped)
                 else -> context.getString(R.string.connect_progress_pending)
             }
-            time.setTextColor(palette.secondaryText)
+            val bluetoothHint=if(displayedChannel==com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS && step==ConnectionStep.DEVICE) {
+                when(state?.tasks?.firstOrNull { it.task==com.shilapi.xcertplay.orchestration.progress.ConnectionTask.WIRELESS_LINK }?.detail) {
+                    "vehicle_bluetooth_wait" -> R.string.vehicle_bluetooth_connect_hint
+                    "vehicle_bluetooth_not_connected" -> R.string.vehicle_bluetooth_missing_hint
+                    else -> null
+                }
+            } else null
+            if(bluetoothHint!=null) time.text="${time.text}\n${context.getString(bluetoothHint)}"
+            time.setTextColor(if(bluetoothHint==R.string.vehicle_bluetooth_missing_hint) palette.danger else palette.secondaryText)
         }
     }
 

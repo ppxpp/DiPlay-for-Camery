@@ -7,6 +7,7 @@ fun ConnectionProgress.status(status: CarPlayStatus) {
     if(channel == ConnectionChannel.PIONEER_WIRELESS) {
         when(status) {
             CarPlayStatus.ConnectingBluetooth -> task(ConnectionTask.WIRELESS_LINK,ConnectionTaskState.RUNNING)
+            CarPlayStatus.WaitingVehicleBluetooth -> task(ConnectionTask.WIRELESS_LINK,ConnectionTaskState.RUNNING,"vehicle_bluetooth_wait")
             CarPlayStatus.StartingHotspot -> task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.RUNNING)
             is CarPlayStatus.HotspotReady -> task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.COMPLETE)
             is CarPlayStatus.Failed, CarPlayStatus.ControlEnded -> stop(ConnectionOutcome.FAILED)
@@ -36,7 +37,7 @@ fun ConnectionProgress.status(status: CarPlayStatus) {
         CarPlayStatus.RunningWireless, CarPlayStatus.RunningControl -> task(ConnectionTask.AUTHENTICATE, ConnectionTaskState.COMPLETE)
         CarPlayStatus.StartingHotspot -> task(ConnectionTask.WIRELESS_NETWORK, ConnectionTaskState.RUNNING)
         is CarPlayStatus.HotspotReady -> task(ConnectionTask.WIRELESS_NETWORK, ConnectionTaskState.COMPLETE)
-        CarPlayStatus.ConnectingBluetooth -> {
+        CarPlayStatus.ConnectingBluetooth, CarPlayStatus.WaitingVehicleBluetooth -> {
             task(ConnectionTask.DETECT, ConnectionTaskState.RUNNING)
             task(ConnectionTask.WIRELESS_LINK, ConnectionTaskState.RUNNING)
         }
@@ -50,7 +51,7 @@ fun ConnectionProgress.status(status: CarPlayStatus) {
         CarPlayStatus.SelectingConfiguration, CarPlayStatus.OpeningDataPaths,
         CarPlayStatus.ConnectingBluetooth -> step(ConnectionStep.DEVICE)
         CarPlayStatus.WaitingForIphone, CarPlayStatus.RequestingIphonePermission,
-        CarPlayStatus.WaitingForPairedIphone -> step(ConnectionStep.DEVICE, true)
+        CarPlayStatus.WaitingForPairedIphone, CarPlayStatus.WaitingVehicleBluetooth -> step(ConnectionStep.DEVICE, true)
         CarPlayStatus.StartingHotspot, is CarPlayStatus.HotspotReady,
         CarPlayStatus.AttachingNetwork -> step(ConnectionStep.NETWORK)
         CarPlayStatus.Pairing, CarPlayStatus.ConnectingControl,

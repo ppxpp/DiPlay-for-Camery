@@ -483,6 +483,8 @@ class CarPlayVpnService : VpnService() {
         error: Throwable,
     ) {
         val message = error.message ?: error.javaClass.simpleName
+        runCatching { listener.onDebugLog("AirPlay transport failure origin=" +
+            error.stackTrace.take(4).joinToString(" <- ")) }
         com.shilapi.xcertplay.pioneer.PioneerVpnFirewallLease.invalidate()
         Log.e(TAG, "CarPlay transport stopped: $message", error)
         Thread(

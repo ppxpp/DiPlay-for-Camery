@@ -4,4 +4,7 @@
     <string name="settings_camry_hotspot_retention_description">Only applies to Camry A Navigation. After CarPlay disconnects, the hotspot turns off after the selected delay. Reconnecting during this time reuses the hotspot to reduce waiting.</string>
     <string name="settings_camry_hotspot_retention_immediate">Turn off immediately</string>
     <string name="settings_camry_hotspot_retention_seconds">%1$d seconds</string>
+    <string name="waiting_vehicle_bluetooth">Waiting for iPhone to connect to the car’s Bluetooth</string>
+    <string name="vehicle_bluetooth_connect_hint">Connect the car’s Bluetooth first</string>
+    <string name="vehicle_bluetooth_missing_hint">Bluetooth not connected. Connect and retry.</string>
 </resources>

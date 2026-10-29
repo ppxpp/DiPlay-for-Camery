@@ -16,4 +16,18 @@ class PioneerBluetoothReadinessTest {
             assertFalse(failure.reason.retryable)
         }
     }
+    @Test fun eitherOemPhoneProfileIsSufficient() {
+        for (profiles in listOf(1, 2, 3, 129, 130, 131)) {
+            assertTrue(PioneerBluetoothSnapshot.ready(true, profiles))
+        }
+    }
+
+    @Test fun aclOrSerialAloneCannotTriggerVendorInitialization() {
+        for (profiles in listOf(0, 16, 64, 128)) {
+            assertFalse(PioneerBluetoothSnapshot.ready(true, profiles))
+        }
+        for (profiles in listOf(1, 2, 3, 131)) {
+            assertFalse(PioneerBluetoothSnapshot.ready(false, profiles))
+        }
+    }
 }

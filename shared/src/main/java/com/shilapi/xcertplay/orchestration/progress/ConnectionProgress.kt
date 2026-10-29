@@ -91,13 +91,13 @@ class ConnectionProgress(
     }
 
     /** A prerequisite can fail before its displayed turn; never mark predecessors complete. */
-    @Synchronized fun failWirelessStep(failed: ConnectionStep) {
+    @Synchronized fun failWirelessStep(failed: ConnectionStep, detail: String = "") {
         if(channel!=ConnectionChannel.PIONEER_WIRELESS || outcome!=ConnectionOutcome.CONNECTING) return
         require(failed in PIONEER_WIRELESS_STEPS)
         accrue(clock())
         current=failed
         visited+=failed
-        task(ConnectionTask.WIRELESS_LINK,ConnectionTaskState.FAILED)
+        task(ConnectionTask.WIRELESS_LINK,ConnectionTaskState.FAILED,detail)
         stop(ConnectionOutcome.FAILED)
     }
 
