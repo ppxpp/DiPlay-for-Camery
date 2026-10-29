@@ -2,7 +2,7 @@ export const site = {
   name: 'DiPlay 凯美瑞 A 导航适配版',
   shortName: 'DiPlay 凯美瑞版',
   intro:
-    '为八代凯美瑞先锋 A 导航安卓车机提供有线和无线 CarPlay。地图、音乐和通话直接出现在车机屏幕上，不需要越狱、转接盒、账号或认证服务器。',
+    '为八代凯美瑞先锋 A 导航安卓车机提供有线和无线 CarPlay。地图、音乐和通话直接出现在车机屏幕上，不需要越狱、转接盒、账号或认证服务器。开源、免费，并支持应用内 OTA 升级。',
 
   repoUrl: 'https://github.com/ppxpp/DiPlay',
 
