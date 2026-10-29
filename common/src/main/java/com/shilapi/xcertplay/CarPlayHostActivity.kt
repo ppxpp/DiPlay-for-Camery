@@ -2175,6 +2175,12 @@ class CarPlayHostActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
+        val licenseNotice = TextView(this).apply {
+            text = getString(R.string.home_license_notice)
+            gravity = Gravity.START
+            maxWidth = dp(360)
+            isFocusable = false
+        }
         val icon = ImageView(this).apply {
             setImageResource(R.drawable.ic_carplay)
             contentDescription = getString(R.string.carplay)
@@ -2279,6 +2285,7 @@ class CarPlayHostActivity : ComponentActivity() {
             help.setTextColor(colors.secondary)
             gestureHint.setTextColor(colors.secondary)
             val buttonPalette = DiPlayPalette.of(appNight)
+            licenseNotice.setTextColor(buttonPalette.warning)
             back.style(DiPlayButtonKind.PRIMARY, buttonPalette, overlay = false)
             retry.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
@@ -2290,6 +2297,10 @@ class CarPlayHostActivity : ComponentActivity() {
             addView(panel, FrameLayout.LayoutParams(-1, -2))
         }
         viewport.addView(preparationScroll, FrameLayout.LayoutParams(-1, -1))
+        // Pinned over the page instead of inside the centred panel, so it never pushes the logo down.
+        viewport.addView(licenseNotice, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
+            setMargins(dp(16), dp(12), dp(16), 0)
+        })
         root.addView(viewport, FrameLayout.LayoutParams(-1, -1))
         // Above the video and gesture layer, below the menus.
         sidePanelBlur = ImageView(this).apply {
@@ -2322,6 +2333,7 @@ class CarPlayHostActivity : ComponentActivity() {
             if (preparationHeight == height) return
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
+            licenseNotice.textSize = size(10.5f, 12f)
             val iconSize = spacing(32f, 48f)
             icon.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             title.textSize = size(22f, 28f)

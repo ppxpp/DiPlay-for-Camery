@@ -949,5 +949,5 @@
     <string name="disclaimer_page4_l1">Al continuar aceptas enviar datos de uso y fallos. Nunca enviamos ubicación ni rutas, información que te identifique, códigos de la unidad o información del vehículo.</string>
     <string name="disclaimer_page4_l2">Puedes desactivarlo en Ajustes · Diagnóstico; las sesiones y los fallos se detienen tras reiniciar la app.</string>
     <string name="home_build_basis">(Basado en DiPlay %1$s)</string>
-    <string name="home_license_notice">Código abierto y gratuito · Solo para aprendizaje · Prohibida la reventa o el uso comercial · No usar durante la conducción</string>
+    <string name="home_license_notice">Este software es de código abierto y gratuito · Prohibida la reventa o el uso comercial · No usar durante la conducción · Bajo su propio riesgo</string>
 </resources>

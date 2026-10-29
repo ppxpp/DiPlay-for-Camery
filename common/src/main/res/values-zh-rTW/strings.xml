@@ -1028,5 +1028,5 @@
     <string name="disclaimer_page4_l1">繼續即表示同意傳送使用統計與當機資料。我們不會上傳位置軌跡、個人身分資訊、車機編碼或車輛資訊。</string>
     <string name="disclaimer_page4_l2">可隨時在「設定 · 診斷」中關閉；重新啟動應用程式後完全停止。</string>
     <string name="home_build_basis">（基於DiPlay%1$s版本構建）</string>
-    <string name="home_license_notice">開源免費 · 僅供學習交流 · 禁止轉售商用 · 請勿用於真實駕駛場景</string>
+    <string name="home_license_notice">本軟體開源免費 · 禁止轉售商用 · 禁止駕駛場景使用 · 後果自行承擔</string>
 </resources>
