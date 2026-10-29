@@ -11,7 +11,11 @@ internal object StableClientId {
     private const val PREFERENCES = "diplay_update_client_v1"
     private const val FALLBACK_ID = "fallback_id"
 
-    fun get(context: Context): String? {
+    fun get(context: Context): String? = resolve(context).also {
+        android.util.Log.i("DiPlayUpdate", "Update client ID: $it")
+    }
+
+    private fun resolve(context: Context): String? {
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
             ?.takeIf { it.isNotBlank() }
         if (androidId != null) {
