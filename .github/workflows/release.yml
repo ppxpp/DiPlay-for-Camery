@@ -108,6 +108,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Resolve analytics configuration
+        env:
+          UMENG_APP_KEY: ${{ secrets.UMENG_APP_KEY }}
+        run: |
+          if [ -n "$(printf '%s' "$UMENG_APP_KEY" | tr -d '[:space:]')" ]; then
+            echo "ANALYTICS_MODE=umeng" >> "$GITHUB_ENV"
+            echo "Bundling the Umeng SDK."
+          else
+            echo "ANALYTICS_MODE=none" >> "$GITHUB_ENV"
+            echo "::warning::UMENG_APP_KEY is not configured; building this release without analytics."
+          fi
+
       - name: Run update tests and build signed release
         env:
           DIPLAY_UMENG_APPKEY: ${{ secrets.UMENG_APP_KEY }}
@@ -121,6 +133,7 @@ jobs:
           :pioneer-adapter:lintDebug
           :mobile:assembleRelease
           -PdiplayUpdateChannel="${CHANNEL}"
+          -Pdiplay.analytics="${ANALYTICS_MODE}"
           --stacktrace
 
       - name: Read and verify the built version
