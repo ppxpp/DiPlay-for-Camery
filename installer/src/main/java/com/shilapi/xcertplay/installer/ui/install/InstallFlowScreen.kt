@@ -85,18 +85,18 @@ private data class InstallStepInfo(
 
 private val installSteps = listOf(
     InstallStepInfo(
-        title = "准备安装包",
-        subtitle = "检查手机里是否已有安装包；已经下载过的不会重复下载。",
+        title = "下载安装文件",
+        subtitle = "把要装到车机上的应用文件下载到手机；已下载过的不会重复下载。",
         riskLevel = RiskLevel.Info,
-        riskTitle = "安装包会自动检查完整性",
-        riskMessage = "下载完成后会检查安装包是否完整，确认没问题后才会使用。",
+        riskTitle = "文件会自动校验",
+        riskMessage = "下载完成后会自动检查文件是否完整，确认无误才会用来安装。",
     ),
     InstallStepInfo(
         title = "打开车机调试模式",
-        subtitle = "按图文步骤打开 USB 调试，让手机可以安装应用到车机。",
+        subtitle = "在车机设置里打开“USB 调试”开关，手机才能把应用装到车机上。",
         riskLevel = RiskLevel.Warning,
-        riskTitle = "安装完成后请关闭调试模式",
-        riskMessage = "调试模式会让连接的电脑获得较高权限；安装完成后建议关闭。",
+        riskTitle = "装完后请关闭 USB 调试",
+        riskMessage = "USB 调试开着会有安全风险，安装完成后建议回车机设置关闭。",
     ),
     InstallStepInfo(
         title = "连接手机和车机",
@@ -104,17 +104,17 @@ private val installSteps = listOf(
     ),
     InstallStepInfo(
         title = "备份车机原应用",
-        subtitle = "备份将被替换的应用安装包。备份不包含应用数据。",
+        subtitle = "先把车机上要被替换的应用保存到手机，之后想还原时可以用。",
         riskLevel = RiskLevel.Warning,
-        riskTitle = "备份不包含应用数据",
-        riskMessage = "备份只保存安装包，不保存设置、登录状态等应用数据。",
+        riskTitle = "应用数据不会被备份",
+        riskMessage = "备份只保存应用本身；聊天记录、账号登录等数据不会保存。",
     ),
     InstallStepInfo(
         title = "确认安装内容",
-        subtitle = "确认要替换的应用和需要卸载的内容。",
+        subtitle = "最后确认一遍：要装哪些应用，会卸载哪些应用。",
         riskLevel = RiskLevel.Danger,
         riskTitle = "卸载会清除应用内数据",
-        riskMessage = "备份不包含应用数据，卸载后无法恢复这些数据。",
+        riskMessage = "卸载后，这些应用里的设置、登录状态等数据将无法恢复。",
     ),
     InstallStepInfo(
         title = "安装到车机",
@@ -229,9 +229,9 @@ fun InstallFlowScreen(
                 step == installSteps.lastIndex -> "完成"
                 step == 0 && installKit == null -> if (kitLoading) "正在获取安装包信息…" else "重试"
                 step == 0 && !allRequiredReady -> when {
-                    downloadState.isRunning -> "正在准备安装包..."
+                    downloadState.isRunning -> "正在下载…"
                     readyCount > 0 -> "继续下载"
-                    else -> "下载安装包"
+                    else -> "开始下载"
                 }
                 step == 2 && !connectionReady -> if (adb.connecting) {
                     "正在连接..."
@@ -351,10 +351,10 @@ fun InstallFlowScreen(
             ?: listOf("丰云悦享", "爱趣听", "微信")
         val appList = uninstallLabels.joinToString("\n") { "• $it" }
         DestructiveConfirmDialog(
-            title = "即将卸载车机应用",
-            message = "为了安装新版本，需要先卸载车机上的以下应用：\n$appList\n\n" +
-                "卸载会清除这些应用内的数据，包括设置、登录状态和连接信息。" +
-                "备份只保存安装包，不包含应用数据。",
+            title = "即将卸载车机上的这些应用",
+            message = "为了装上新版本，需要先卸载：\n$appList\n\n" +
+                "卸载后，这些应用里的设置、登录状态等数据会一起清空，且无法找回" +
+                "（应用本身已备份到手机，可以恢复）。",
             notice = installKit?.uninstallNotice
                 ?: "卸载丰云悦享不会影响车联网功能（包括里程、油耗数据显示、远程空调等），" +
                 "这些功能由车机系统提供。",
@@ -420,10 +420,10 @@ private fun DownloadStepContent(
     }
 
     val profileName = installKit.deviceProfiles.firstOrNull()?.name ?: "凯美瑞 A 导航"
-    InfoCard(title = "安装包状态") {
+    InfoCard(title = "下载进度") {
         InfoRow(label = "目标车型", value = profileName)
         InfoRow(label = "应用数量", value = "${installKit.appCount} 个")
-        InfoRow(label = "已准备", value = "$readyCount / ${installKit.appCount}")
+        InfoRow(label = "已下载", value = "$readyCount / ${installKit.appCount}")
         InfoRow(label = "总大小", value = formatSize(totalBytes))
     }
 
@@ -432,7 +432,7 @@ private fun DownloadStepContent(
         LineProgressBar(progress = fraction)
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "正在准备安装包：${formatSize(downloadedBytes)} / ${formatSize(totalBytes)}",
+            text = "已下载 ${formatSize(downloadedBytes)} / ${formatSize(totalBytes)}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -461,13 +461,13 @@ private fun DownloadStepContent(
     Spacer(Modifier.height(12.dp))
     if (allReady) {
         Text(
-            text = "安装包已准备好，可以继续。",
+            text = "文件已下载完成，可以继续下一步。",
             style = MaterialTheme.typography.bodyMedium,
             color = DiPlaySuccess,
         )
     } else {
         Text(
-            text = "点击下方按钮下载安装包。已下载过的不会重复下载，中断后会自动续传。",
+            text = "点击下方“开始下载”，把文件下载到手机；中断后再次点击会接着下载。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -534,8 +534,8 @@ private fun DownloadAppRow(app: InstallApp, state: AppDownloadState?) {
 private fun statusLabel(state: AppDownloadState?): String {
     val status = state?.status ?: DownloadStatus.Pending
     return when (status) {
-        DownloadStatus.Pending -> "等待下载"
-        DownloadStatus.Verifying -> "检查中"
+        DownloadStatus.Pending -> "待下载"
+        DownloadStatus.Verifying -> "校验中"
         DownloadStatus.Downloading -> {
             val downloaded = state?.downloadedBytes ?: 0L
             val total = state?.totalBytes ?: 0L
@@ -546,7 +546,7 @@ private fun statusLabel(state: AppDownloadState?): String {
             }
             "下载中 $percent%"
         }
-        DownloadStatus.Ready -> "已准备"
+        DownloadStatus.Ready -> "已下载"
         DownloadStatus.Failed -> "下载失败，可重试"
         DownloadStatus.Invalid -> "下载地址暂不可用"
     }
@@ -561,15 +561,14 @@ private fun statusColor(state: AppDownloadState?): Color = when (state?.status) 
 
 @Composable
 private fun AdbGuideStepContent() {
-    InfoCard(title = "在车机上操作") {
-        BulletLine("打开车机设置，找到“开发者选项”")
-        BulletLine("打开“USB 调试”")
-        BulletLine("用 OTG 数据线连接手机和车机")
+    InfoCard(title = "在车机上这样操作") {
+        BulletLine("打开车机“设置”，进入“开发者选项”")
+        BulletLine("打开“USB 调试”开关")
     }
     Spacer(Modifier.height(12.dp))
-    InfoCard(title = "没有识别到车机？") {
+    InfoCard(title = "找不到“开发者选项”？") {
         Text(
-            text = "重新插拔数据线，并确认车机的“USB 调试”已经打开。",
+            text = "部分车机需要在“设置 → 关于”里连点版本号数次才会出现；也可以插上数据线后直接到下一步试试。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -699,7 +698,7 @@ private fun BackupStepContent(
         state.running -> {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "正在备份，请稍候…",
+                text = "正在保存到手机，应用越大耗时越久，请稍候…",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -707,8 +706,8 @@ private fun BackupStepContent(
         allDone -> {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "已备份 $doneCount 个应用" +
-                    if (missingCount > 0) "，$missingCount 个车机未安装" else "",
+                text = "已保存 $doneCount 个应用到手机" +
+                    if (missingCount > 0) "；$missingCount 个车机上本来就没有" else "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = DiPlaySuccess,
             )
@@ -716,12 +715,12 @@ private fun BackupStepContent(
         skipped -> {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "已跳过备份，可以继续。",
+                text = "已选择跳过备份；之后想还原车机原应用时将没有备份可用。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TextButton(onClick = onStartBackup) {
-                Text("仍要备份")
+                Text("现在备份")
             }
         }
         else -> {
@@ -808,7 +807,7 @@ private fun PreviewStepContent(
     if (uninstallLabels.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "将卸载车机上的：${uninstallLabels.joinToString("、")}。",
+            text = "同时会卸载车机上的：${uninstallLabels.joinToString("、")}。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -824,16 +823,16 @@ private fun PreviewStepContent(
     }
     Spacer(Modifier.height(8.dp))
     Text(
-        text = "确认无误后，点击“下一步”开始。",
+        text = "确认没问题后，点“下一步”开始安装。",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
 private fun actionLabel(installMode: String): String = when (installMode) {
-    "replace" -> "先卸载，再安装"
-    "upgrade" -> "直接更新"
-    else -> "自动处理"
+    "replace" -> "先卸载旧版，再安装"
+    "upgrade" -> "覆盖更新"
+    else -> "直接安装"
 }
 
 private fun displayVersion(app: InstallApp): String =
@@ -877,17 +876,17 @@ private fun InstallStepContent(
     Spacer(Modifier.height(8.dp))
     when {
         allDone -> Text(
-            text = "安装完成。",
+            text = "全部安装完成。",
             style = MaterialTheme.typography.bodyMedium,
             color = DiPlaySuccess,
         )
         state.finished -> Text(
-            text = "有应用安装失败，可以重试。",
+            text = "有应用没装上，可以点下方按钮重试。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
         state.running -> Text(
-            text = "正在安装，请保持屏幕常亮，不要拔线。",
+            text = "正在安装，请保持手机亮屏，不要拔线或退出。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -940,17 +939,17 @@ private fun InstallAppRow(state: AppInstallState) {
 private fun CompleteStepContent() {
     InfoCard(title = "安装完成") {
         Text(
-            text = "DiPlay 已安装完成。",
+            text = "DiPlay 已经装到车机上了。",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
         )
-        BulletLine("建议重启车机")
-        BulletLine("重启后打开 DiPlay 连接 CarPlay")
-        BulletLine("建议关闭车机调试模式")
+        BulletLine("重启车机，让 DiPlay 生效")
+        BulletLine("重启后打开 DiPlay，连接 iPhone 使用 CarPlay")
+        BulletLine("记得回车机设置关闭“USB 调试”")
     }
     Spacer(Modifier.height(8.dp))
     Text(
-        text = "如果有应用没有安装成功，请先重试或恢复备份，不要直接重启车机。",
+        text = "如果有应用没装上，先不要重启车机；点“上一步”重试，或回首页用“恢复备份”还原。",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

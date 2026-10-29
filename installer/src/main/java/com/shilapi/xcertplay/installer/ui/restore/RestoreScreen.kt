@@ -334,7 +334,7 @@ private fun RestoreAppRow(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = if (app.isSystemApp) "系统应用 · 恢复为原版本" else "版本 ${app.versionCode}",
+                text = if (app.isSystemApp) "系统应用 · 恢复为车机自带版本" else "恢复为备份时车机上的版本",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

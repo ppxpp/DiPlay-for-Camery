@@ -61,6 +61,14 @@ fun HomeScreen(
         ) {
             item { BrandHeader() }
             item {
+                Text(
+                    text = "帮你把 DiPlay 安装到凯美瑞 A 导航车机，全程跟着提示点“下一步”即可，不需要电脑。装好后，iPhone 就能在原车屏幕上使用 CarPlay。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item { PreparationCard() }
+            item {
                 ModeCard(
                     title = "安装 / 升级",
                     description = "备份原应用并安装 DiPlay",
@@ -78,12 +86,11 @@ fun HomeScreen(
                     highlighted = false,
                 )
             }
-            item { PreparationCard() }
             item {
                 RiskBanner(
                     level = RiskLevel.Warning,
                     title = "操作前请注意",
-                    message = "本工具会卸载/替换车机上的指定应用。请驻车、拉手刹后操作，不要拔线或断电。",
+                    message = "安装会替换车机上的部分应用。请在驻车、拉好手刹后操作，过程中不要拔线或熄火断电。",
                 )
             }
             item {
