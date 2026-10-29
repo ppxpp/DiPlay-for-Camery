@@ -3001,7 +3001,10 @@ private class AudioRenderer(
     private companion object {
         const val TAG = "xcertplay-usb"
         const val AAC_OBJECT_TYPE_LC = 2
-        const val MIN_OPUS_PACKET_BYTES = 4
+        // RFC 6716 permits one-byte packets (including DTX). Dropping short
+        // packets removes their audio duration and starves the telephony track.
+        // Leave frame validation/concealment to the Opus decoder; reject only empty RTP payloads.
+        const val MIN_OPUS_PACKET_BYTES = 1
         const val OPUS_CODEC_DELAY_NANOS = 6_500_000L
         const val OPUS_SEEK_PRE_ROLL_NANOS = 80_000_000L
         const val INPUT_TIMEOUT_US = 10_000L
