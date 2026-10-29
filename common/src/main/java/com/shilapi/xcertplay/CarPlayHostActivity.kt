@@ -972,6 +972,8 @@ class CarPlayHostActivity : ComponentActivity() {
                 .put("videoRendered", sink?.liveVideoCounters()?.rendered)
                 .put("videoReceived", sink?.liveVideoCounters()?.received)
                 .put("settingsMenuOpen", menuOpen).put("hostWindowFocused", hasWindowFocus())
+                .put("settingsMenuLayoutReady",SettingsMenuLayout.ready(settingsMenu))
+                .put("settingsMenuWidth",settingsMenu?.width ?: 0).put("settingsMenuHeight",settingsMenu?.height ?: 0)
                 .put("carPlayNightMode", carPlayNightMode.key).put("carPlayNight", darkMode)
                 .put("vehicleNight", com.shilapi.xcertplay.pioneer.CamryDayNight.latestNight)
                 .put("microphoneProbe", com.shilapi.xcertplay.media.MicrophoneProbe.snapshot())
@@ -3514,11 +3516,10 @@ class CarPlayHostActivity : ComponentActivity() {
         val pageHost = FrameLayout(this)
         val selectedPage = settingsMenuCategoryKey.takeIf(pages::containsKey) ?: "connection"
         settingsMenuCategoryKey = selectedPage
-        pages.forEach { (key, page) ->
-            page.visibility = if (key == selectedPage) View.VISIBLE else View.GONE
-            pageHost.addView(page, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
+        // Keep only the active page attached. Some head units retain a zero-size
+        // measurement for short pages first measured GONE under a fill-viewport ScrollView.
+        pageHost.addView(pages.getValue(selectedPage), FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
@@ -3535,15 +3536,30 @@ class CarPlayHostActivity : ComponentActivity() {
         lateinit var chips: HorizontalScrollView
         fun selectCategory(key: String) {
             settingsMenuCategoryKey = key
-            pages.forEach { (candidate, page) ->
-                page.visibility = if (candidate == key) View.VISIBLE else View.GONE
+            val selected = pages.getValue(key)
+            if (pageHost.getChildAt(0) !== selected) {
+                pageHost.getChildAt(0)?.clearFocus()
+                pageHost.removeAllViews()
+                selected.visibility = View.VISIBLE
+                pageHost.addView(selected, FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
+            selected.forceLayout()
+            pageHost.requestLayout()
+            scroll.requestLayout()
             categoryButtons.forEach { (candidate, button) ->
                 button.style(if (candidate == key) DiPlayButtonKind.PRIMARY else DiPlayButtonKind.SECONDARY,
                     overlayPalette, overlay = true)
             }
             scroll.scrollTo(0, 0)
             chips.requestLayout()
+            if (overlay.isShown) {
+                (overlay.parent as? FrameLayout)?.let { SettingsMenuLayout.prepare(it, overlay) }
+            }
+            scroll.post {
+                if (settingsMenuCategoryKey == key && scroll.isAttachedToWindow) scroll.scrollTo(0, 0)
+            }
+            appendLog("UI_SETTINGS_CATEGORY key=$key width=${selected.width} height=${selected.height} items=${selected.childCount}")
             settingsMenuRenderedState = settingsMenuRenderState()
         }
         revealInSettingsMenu = { view ->
@@ -6481,13 +6497,8 @@ class CarPlayHostActivity : ComponentActivity() {
             parent.addView(settingsMenu, index, FrameLayout.LayoutParams(-1, -1))
         }
         val builtAt = System.nanoTime()
-        menuOpen = true
-        updateCallPopupGuard()
         disconnectSessionButton?.visibility =
             if (CarPlayBackgroundSession.hasSession()) View.VISIBLE else View.GONE
-        gestureOverlay?.visibility = View.GONE
-        settingsMenu?.visibility = View.VISIBLE
-        focusSettingsMenuRoot()
         safeAreaEditor?.visibility = View.GONE
         syncMfiSettingsControls()
         updateManualHotspotFields()
@@ -6497,11 +6508,42 @@ class CarPlayHostActivity : ComponentActivity() {
         updateHotspotStatusBlock()
         updateSafeAreaSummary()
         updateResolutionMenu()
+        val menu=settingsMenu
+        val root=menu?.parent as? FrameLayout
+        val ready=try { root!=null && menu!=null && SettingsMenuLayout.prepare(root,menu) }
+            catch(failure: RuntimeException) {
+                appendLog("UI_SETTINGS_LAYOUT_FAILED ${failure.javaClass.simpleName}")
+                false
+            }
+        if(!ready) {
+            restoreTouchAfterHiddenMenu()
+            appendLog("UI_SETTINGS_OPEN_ABORTED invalid_layout; CarPlay touch restored")
+            return
+        }
+        menuOpen=true
+        updateCallPopupGuard()
+        gestureOverlay?.visibility=View.GONE
+        focusSettingsMenuRoot()
         updateDebugOverlays()
+        appendLog("UI_SETTINGS_LAYOUT_READY width=${menu?.width} height=${menu?.height}")
         appendLog("UI_SETTINGS_OPEN totalMs=${(System.nanoTime() - openingStarted) / 1_000_000L} " +
             "loadMs=${(loadedAt - openingStarted) / 1_000_000L} baselineMs=${(baselineAt - loadedAt) / 1_000_000L} " +
             "buildMs=${(builtAt - baselineAt) / 1_000_000L} rebuilt=$rebuild " +
             "iconMs=${(iconEndedAt - iconStartedAt) / 1_000_000L}")
+    }
+
+    /** Never leave a hidden/zero-sized menu owning CarPlay input. */
+    private fun restoreTouchAfterHiddenMenu() {
+        menuOpen=false
+        settingsMenu?.visibility=View.GONE
+        gestureOverlay?.visibility=View.VISIBLE
+        settingsMenuNeedsRebuild=true
+        menuSettingsSignature=null
+        menuWirelessNetworkSignature=null
+        // Swallow the remaining fingers from the menu gesture; a fresh DOWN resets this.
+        gestureSequenceActive=true
+        gestureTracking=false
+        updateCallPopupGuard()
     }
 
     /**
@@ -7015,7 +7057,11 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun onHostTouch(view: View, event: MotionEvent): Boolean {
-        if (menuOpen) return true
+        if(menuOpen) {
+            if(safeAreaEditorActive || SettingsMenuLayout.ready(settingsMenu)) return true
+            restoreTouchAfterHiddenMenu()
+            appendLog("UI_SETTINGS_INPUT_RECOVERY hidden_menu; CarPlay touch restored")
+        }
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
