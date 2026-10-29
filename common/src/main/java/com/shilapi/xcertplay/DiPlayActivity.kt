@@ -450,7 +450,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val requestedPage = savedInstanceState?.getString("page")?.takeUnless { it == "disclaimer" }
             ?: intent.getStringExtra("page")
         page = requestedPage
-            ?: if (RemoteGatewaySettings.loadSelected(this) == null && setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
+            ?: if (setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
         if (requestedPage == "update") {
             page = "settings"
@@ -604,12 +604,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     override fun onResume() {
         super.onResume()
         if (forwardingToProjection) return
-        if (setupError == null) {
-            com.shilapi.xcertplay.network.NativeNcmPreparation.prepareInBackground(this,
-                wireless = { AirPlayPersistence.loadWirelessEnabled(applicationContext) },
-                hasSession = { CarPlayBackgroundSession.hasSession() },
-                log = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(applicationContext, it) })
-        }
         WheelKeyService.restoreIfNeeded(this)
         applyFullscreenMode()
         // Returning from another activity can bring the head unit's own density back.
@@ -1046,12 +1040,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             else connect(true)
         }
         card.addView(connectButton, matchButton(height = if (compact) 54 else 68))
-        if (RemoteGatewaySettings.isAvailable(this)) {
-            card.addView(homeButton(getString(R.string.gateway_title), false) {
-                startActivity(Intent(this, GatewayDeviceActivity::class.java))
-            }, matchButton(CONTROL_GAP_DP, if (compact) 46 else 56))
-        }
         val connectionHint = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
+            WirelessHotspotMode.PIONEER_VEHICLE -> getString(R.string.settings_pioneer_wireless_description)
             WirelessHotspotMode.EXISTING_WIFI -> getString(R.string.existing_wifi_hint)
             WirelessHotspotMode.MANUAL -> getString(R.string.hotspot_hint_manual)
             WirelessHotspotMode.LOCAL_ONLY_HOTSPOT -> getString(R.string.hotspot_hint_local)
@@ -1111,6 +1101,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val message = getString(
                 if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_home_beta
                 else R.string.update_available_home,
+                release.tagName,
             )
             val tint = { alpha: Int -> (WARNING and 0x00FFFFFF) or (alpha shl 24) }
             val chip = GradientDrawable().apply {
@@ -1354,7 +1345,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         active = CarPlayBackgroundSession.active,
         running = CarPlayBackgroundSession.hasSession(),
         wireless = AirPlayPersistence.loadWirelessEnabled(this),
-        phoneChosen = RemoteGatewaySettings.loadSelected(this) != null || DiPlayPreferences.phoneAddress(this) != null,
+        phoneChosen = DiPlayPreferences.phoneAddress(this) != null,
         hotspotSetupNeeded = AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL &&
             carHotspotDetailsMissing(),
     )
@@ -1884,6 +1875,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 rowShowsTitle = false) {
                 policy.save(this, com.shilapi.xcertplay.pioneer.CamryAdaptation.Mode.entries[it])
                 updateStatus()
+                if(!policy.enabled()) com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention.clearAsync()
                 markReconnectNeeded()
             }
             card.addView(label(getString(R.string.settings_camry_description), 14, MUTED))
@@ -1910,6 +1902,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
             card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
             card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
+            val retention=com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention
+            searchIndexSink?.add(getString(R.string.settings_camry_hotspot_retention_title))
+            var retentionSeconds=retention.seconds(this)
+            card.addView(OverlaySliderRow(this,getString(R.string.settings_camry_hotspot_retention_title),
+                (0..60).toList(),retentionSeconds,{ seconds ->
+                    if(seconds==0) getString(R.string.settings_camry_hotspot_retention_immediate)
+                    else getString(R.string.settings_camry_hotspot_retention_seconds,seconds)
+                }).apply {
+                onSave = { retentionSeconds=it }
+                onCommit = { retention.setSeconds(this@DiPlayActivity,retentionSeconds) }
+            })
+            card.addView(label(getString(R.string.settings_camry_hotspot_retention_description),14,MUTED))
             card.addView(space(12))
             // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
             // so that menu could not be reached to switch back (#696).
@@ -1932,6 +1936,54 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            if (com.shilapi.xcertplay.pioneer.PioneerAdbDebug.supported()) {
+                card.addView(label(getString(R.string.settings_camry_usb_adb_description), 14, MUTED))
+                lateinit var adbButton: SettingButton
+                var adbBusy = false
+                fun refreshAdb() {
+                    val state = com.shilapi.xcertplay.pioneer.PioneerAdbDebug.enabled()
+                    val status = if (adbBusy) R.string.settings_camry_usb_adb_changing else when (state) {
+                        true -> R.string.settings_camry_usb_adb_on
+                        false -> R.string.settings_camry_usb_adb_off
+                        null -> R.string.settings_camry_usb_adb_unknown
+                    }
+                    adbButton.text = getString(R.string.settings_camry_usb_adb, getString(status))
+                }
+                adbButton = button(getString(R.string.settings_camry_usb_adb,
+                    getString(R.string.settings_camry_usb_adb_unknown)), false) {
+                    if (!adbBusy) {
+                        val desired = com.shilapi.xcertplay.pioneer.PioneerAdbDebug.enabled() != true
+                        adbBusy = true
+                        adbButton.isEnabled = false
+                        refreshAdb()
+                        Thread({
+                            val result = runCatching {
+                                com.shilapi.xcertplay.pioneer.PioneerAdbDebug.setEnabled(applicationContext, desired)
+                            }
+                            runOnUiThread {
+                                adbBusy = false
+                                adbButton.isEnabled = true
+                                refreshAdb()
+                                if (result.isFailure && !isDestroyed)
+                                    toast(getString(R.string.settings_camry_usb_adb_failed))
+                            }
+                        }, "pioneer-settings-adb").start()
+                    }
+                }
+                card.addView(adbButton, matchButton(10, 60))
+                val updater = object : Runnable {
+                    override fun run() {
+                        if (!adbButton.isAttachedToWindow) return
+                        refreshAdb()
+                        adbButton.postDelayed(this, 1_000)
+                    }
+                }
+                adbButton.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(view: View) { view.post(updater) }
+                    override fun onViewDetachedFromWindow(view: View) { view.removeCallbacks(updater) }
+                })
+                refreshAdb()
+            }
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }
@@ -2015,7 +2067,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
                 val labels = modes.map { mode -> when (mode) {
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.NATIVE_NCM -> NativeNcmSettingsLabel.label(this)
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
                     com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
                 } }
@@ -2703,6 +2754,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun backup(content: LinearLayout) {
         val preferredPrefix = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
+            WirelessHotspotMode.PIONEER_VEHICLE -> "bcm1"
             WirelessHotspotMode.WIFI_P2P -> "p2p"
             WirelessHotspotMode.LOCAL_ONLY_HOTSPOT -> "ap"
             WirelessHotspotMode.MANUAL, WirelessHotspotMode.EXISTING_WIFI -> "wlan"
@@ -2814,6 +2866,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         container.addView(label(getString(R.string.settings_update_flavor_note), 14, MUTED).apply {
             setPadding(0, 0, 0, dp(8))
         })
+        updateRelease?.let { release ->
+            container.addView(button(getString(R.string.settings_update_notes_open), false) {
+                showUpdateNotesDialog(release)
+            }, matchButton(10, 54))
+        }
         updateMessage?.let { container.addView(label(it, 14, MUTED)) }
         when (updateStage) {
             UpdateStage.IDLE, UpdateStage.FAILED ->
@@ -2821,7 +2878,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     matchButton(if (updateMessage == null) 0 else 10, 60))
             UpdateStage.CHECKING -> container.addView(label(getString(R.string.update_checking), 14, MUTED))
             UpdateStage.AVAILABLE -> container.addView(
-                button(getString(R.string.update_download), true) { downloadUpdate() },
+                button(getString(R.string.update_download, updateRelease?.tagName.orEmpty()), true) { downloadUpdate() },
                 matchButton(10, 60))
             UpdateStage.DOWNLOADING -> container.addView(label(getString(R.string.update_downloading, updateProgress ?: 0), 14, MUTED))
             UpdateStage.VERIFYING -> container.addView(label(getString(R.string.update_verifying), 14, MUTED))
@@ -2842,6 +2899,30 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             ).apply { setPadding(0, dp(12), 0, 0) },
         )
         return container
+    }
+
+    /** Long release notes belong in a dialog, not in the settings page flow. */
+    private fun showUpdateNotesDialog(release: UpdateRelease) {
+        val body = column().apply { setPadding(dp(24), dp(12), dp(24), dp(12)) }
+        body.addView(label(
+            release.releaseNotes?.takeIf { it.isNotBlank() } ?: getString(R.string.settings_update_notes_empty),
+            15, TEXT,
+        ).apply {
+            setTextIsSelectable(true)
+            setLineSpacing(dp(4).toFloat(), 1f)
+        })
+        val scroll = ScrollView(appDialogContext()).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(body, FrameLayout.LayoutParams(-1, -2))
+        }
+        val content = FrameLayout(appDialogContext()).apply {
+            addView(scroll, FrameLayout.LayoutParams(-1, dp(240)))
+        }
+        appDialogBuilder()
+            .setTitle(getString(R.string.settings_update_notes_title))
+            .setView(content)
+            .setPositiveButton(getString(R.string.close), null)
+            .show()
     }
 
     private fun updateChannelControl(parent: LinearLayout) {
@@ -2937,7 +3018,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 availableUpdate = null
                                 updateRelease = null
                                 UpdateAvailability.clear(this)
-                                updateMessage = getString(R.string.update_up_to_date)
+                                updateMessage = getString(R.string.update_up_to_date, version())
                                 updateStage = UpdateStage.IDLE
                             }
                             UpdateLookupResult.ChannelUnavailable -> {
@@ -3593,11 +3674,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }, LinearLayout.LayoutParams(0, dp(6), 1f).apply { if (index > 0) marginStart = dp(8) })
         }
         content.addView(progress)
-        if (RemoteGatewaySettings.isAvailable(this)) {
-            content.addView(button(getString(R.string.gateway_title), false) {
-                startActivity(Intent(this, GatewayDeviceActivity::class.java))
-            }, matchButton(CONTROL_GAP_DP, 56))
-        }
         when (step) {
             SetupGuide.STEP_CAR -> setupCarStep(content)
             SetupGuide.STEP_CONNECTION -> setupConnectionStep(content)
@@ -3795,13 +3871,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun wirelessLinkControls(parent: LinearLayout) {
         val mode = if (pendingCarHotspotSetup) WirelessHotspotMode.MANUAL else AirPlayPersistence.loadWirelessHotspotMode(this)
-        val modes = listOf(WirelessHotspotMode.MANUAL, WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.EXISTING_WIFI)
-        val titles = listOf(getString(R.string.settings_built_in_car_hotspot_recommended), getString(R.string.wifi_direct), getString(R.string.existing_wifi_title))
-        val descriptions = listOf(
-            getString(R.string.hotspot_mode_manual_desc),
-            getString(R.string.hotspot_mode_p2p_desc),
-            getString(R.string.existing_wifi_description)
-        )
+        val vehicleWireless = com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.supported()
+        val modes = if(vehicleWireless) listOf(WirelessHotspotMode.PIONEER_VEHICLE)
+            else listOf(WirelessHotspotMode.MANUAL, WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.EXISTING_WIFI)
+        val titles = if(vehicleWireless) listOf(getString(R.string.settings_pioneer_wireless_hotspot))
+            else listOf(getString(R.string.settings_built_in_car_hotspot_recommended), getString(R.string.wifi_direct), getString(R.string.existing_wifi_title))
+        val descriptions = if(vehicleWireless) listOf(getString(R.string.settings_pioneer_wireless_description))
+            else listOf(getString(R.string.hotspot_mode_manual_desc), getString(R.string.hotspot_mode_p2p_desc), getString(R.string.existing_wifi_description))
         val wide = resources.configuration.screenWidthDp >= 850
         val choices = if (wide) row().apply { gravity = Gravity.TOP } else column()
         parent.addView(choices)
@@ -5585,7 +5661,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun applyWirelessLink(mode: WirelessHotspotMode) {
         startupHotspotCancelled = true
+        val vehicleChange = mode == WirelessHotspotMode.PIONEER_VEHICLE ||
+            AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.PIONEER_VEHICLE
         AirPlayPersistence.saveWirelessHotspotMode(this, mode)
+        if(mode!=WirelessHotspotMode.PIONEER_VEHICLE) com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention.clearAsync()
+        if (vehicleChange) markReconnectNeeded()
         render()
         toast(getString(R.string.saved_for_your_next_connection))
     }
@@ -5933,7 +6013,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
         if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
-        if (wireless && RemoteGatewaySettings.loadSelected(this) == null && DiPlayPreferences.phoneAddress(this) == null) {
+        if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
             pendingWireless = true; choosePhone(); return
         }
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
@@ -5945,9 +6025,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val open = {
             AirPlayPersistence.saveWirelessEnabled(this, wireless)
-            if (wireless && RemoteGatewaySettings.loadSelected(this) != null) {
-                AirPlayPersistence.saveMfiTarget(this, com.shilapi.xcertplay.orchestration.MfiTarget.LOCAL)
-            }
             openProjection()
         }
         if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop { runOnUiThread { open() } }
@@ -5960,6 +6037,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (forwardingToProjection) overridePendingTransition(0, 0)
     }
     private fun choosePhone() {
+        if(AirPlayPersistence.loadWirelessHotspotMode(this)==WirelessHotspotMode.PIONEER_VEHICLE) {
+            choosePioneerPhone()
+            return
+        }
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT); return
         }
@@ -6002,6 +6083,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 if (start) connect(true)
             }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> openBluetoothSettings() }
             .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
+    }
+
+    private fun choosePioneerPhone() {
+        Thread({
+            val result=runCatching { com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerVehicleWireless.phones() }
+            runOnUiThread {
+                if(isFinishing || isDestroyed)return@runOnUiThread
+                val phones=result.getOrNull().orEmpty()
+                if(phones.isEmpty()) {
+                    pendingWireless=false
+                    appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
+                        .setMessage(getString(R.string.settings_pioneer_pair_original))
+                        .setPositiveButton(getString(R.string.got_it),null).show()
+                } else appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
+                    .setItems(phones.map { it.name.ifBlank { getString(R.string.paired_device) } }.toTypedArray()) { _,index ->
+                        val phone=phones[index]
+                        DiPlayPreferences.savePhone(this,phone.address,phone.name.ifBlank { "iPhone" })
+                        val start=pendingWireless;pendingWireless=false;render()
+                        if(start)connect(true)
+                    }.setNegativeButton(getString(R.string.cancel)) { _,_ -> pendingWireless=false }.show()
+            }
+        },"pioneer-paired-phones").apply { isDaemon=true;start() }
     }
 
     private fun wirelessHelp() {
@@ -6068,7 +6171,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setupError != null -> getString(R.string.setup_needs_attention)
             CarPlayBackgroundSession.active -> getString(R.string.carplay_connected)
             running -> getString(R.string.connecting_to_your_iphone)
-            RemoteGatewaySettings.loadSelected(this) != null -> getString(R.string.gateway_ready)
             DiPlayPreferences.phoneAddress(this) != null -> "${getString(R.string.status_ready_for_prefix)}${DiPlayPreferences.phoneName(this)}"
             else -> getString(R.string.ready_when_you_are)
         }

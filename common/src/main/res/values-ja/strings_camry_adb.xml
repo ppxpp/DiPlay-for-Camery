@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">USB ADB デバッグ · %1$s</string>
+    <string name="settings_camry_usb_adb_on">オン</string>
+    <string name="settings_camry_usb_adb_off">オフ</string>
+    <string name="settings_camry_usb_adb_unknown">不明／切替中</string>
+    <string name="settings_camry_usb_adb_changing">切替中…</string>
+    <string name="settings_camry_usb_adb_description">カムリ A ナビ専用。タップで USB ADB デバッグを切り替えます。</string>
+    <string name="settings_camry_usb_adb_failed">ADB の状態を確認できません。しばらくしてから再試行してください。</string>
+</resources>

@@ -22,8 +22,7 @@ enum class VideoCodec { H264, H265 }
  */
 class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {},
     private val bindAddress: InetAddress? = null,
-    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
-    private val expectedPeer: InetAddress? = null) : Closeable {
+) : Closeable {
     interface Listener {
         fun onCodec(codec: VideoCodec) {}
         fun onConfig(codecData: ByteArray) {}
@@ -51,8 +50,7 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
         this.listener = listener
         val bound = ServerSocket()
         bound.reuseAddress = true
-        if (nativeBinding != null) nativeBinding.bind(bound)
-        else bound.bind(InetSocketAddress(bindAddress ?: InetAddress.getByName("::"), 0))
+        bound.bind(InetSocketAddress(bindAddress ?: InetAddress.getByName("::"), 0))
         server = bound
         try { portLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(bound.localPort, false, lwipSession) }
         catch (error: Throwable) { bound.close(); throw error }
@@ -94,7 +92,6 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     private fun accept(bound: ServerSocket) {
         try {
             val accepted = bound.accept()
-            nativeBinding?.validateAccepted(accepted, expectedPeer)
             socket = accepted
             run(accepted)
         } catch (error: Exception) {

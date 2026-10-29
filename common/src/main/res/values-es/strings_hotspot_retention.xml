@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">Mantener el punto de acceso tras desconectar CarPlay</string>
+    <string name="settings_camry_hotspot_retention_description">Solo para Camry A Navigation. Tras desconectar CarPlay, el punto de acceso se apaga después del tiempo seleccionado. Reconectar durante ese tiempo permite reutilizarlo y reducir la espera.</string>
+    <string name="settings_camry_hotspot_retention_immediate">Apagar inmediatamente</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d segundos</string>
+    <string name="waiting_vehicle_bluetooth">Esperando a que el iPhone se conecte al Bluetooth del coche</string>
+    <string name="vehicle_bluetooth_connect_hint">Conecta primero el Bluetooth del coche</string>
+    <string name="vehicle_bluetooth_missing_hint">Bluetooth desconectado. Conecta y reintenta.</string>
+</resources>

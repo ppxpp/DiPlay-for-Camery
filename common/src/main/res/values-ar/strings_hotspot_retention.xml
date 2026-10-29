@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">إبقاء نقطة الاتصال بعد فصل CarPlay</string>
+    <string name="settings_camry_hotspot_retention_description">يسري فقط على Camry A Navigation. بعد فصل CarPlay، تتوقف نقطة الاتصال بعد المدة المحددة. تتيح إعادة الاتصال خلال هذه المدة استخدام نقطة الاتصال نفسها لتقليل الانتظار.</string>
+    <string name="settings_camry_hotspot_retention_immediate">إيقاف فورًا</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d ثانية</string>
+    <string name="waiting_vehicle_bluetooth">في انتظار اتصال iPhone ببلوتوث السيارة</string>
+    <string name="vehicle_bluetooth_connect_hint">اتصل ببلوتوث السيارة أولًا</string>
+    <string name="vehicle_bluetooth_missing_hint">البلوتوث غير متصل. اتصل وحاول مجددًا.</string>
+</resources>

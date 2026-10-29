@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">Зберігати точку доступу після відключення CarPlay</string>
+    <string name="settings_camry_hotspot_retention_description">Лише для Camry A Navigation. Після відключення CarPlay точка доступу вимкнеться через заданий час. Повторне підключення в цей період використовує ту саму точку доступу й скорочує очікування.</string>
+    <string name="settings_camry_hotspot_retention_immediate">Вимкнути негайно</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d с</string>
+    <string name="waiting_vehicle_bluetooth">Очікування підключення iPhone до Bluetooth автомобіля</string>
+    <string name="vehicle_bluetooth_connect_hint">Спочатку підключіть Bluetooth автомобіля</string>
+    <string name="vehicle_bluetooth_missing_hint">Bluetooth не підключено. Підключіть і повторіть.</string>
+</resources>

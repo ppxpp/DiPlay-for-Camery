@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">CarPlay 中斷後保留熱點</string>
+    <string name="settings_camry_hotspot_retention_description">僅對凱美瑞 A 導航生效。CarPlay 中斷後，熱點將在設定時間後關閉，期間重新連線可重用熱點，縮短等待時間。</string>
+    <string name="settings_camry_hotspot_retention_immediate">立即關閉</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d 秒</string>
+    <string name="waiting_vehicle_bluetooth">等待 iPhone 連接車機藍牙</string>
+    <string name="vehicle_bluetooth_connect_hint">請先連接車機藍牙</string>
+    <string name="vehicle_bluetooth_missing_hint">藍牙未連接，請連接後重試</string>
+</resources>

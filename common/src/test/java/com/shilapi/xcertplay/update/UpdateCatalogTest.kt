@@ -45,6 +45,43 @@ class UpdateCatalogTest {
     }
 
     @Test
+    fun parsesReleaseNotes() {
+        val json = """
+            {
+              "schemaVersion": 1,
+              "version": "0.3.0",
+              "versionCode": 100,
+              "releaseNotes": "Fixed the reconnect race\nFaster hotspot reuse",
+              "artifacts": [
+                {
+                  "name": "DiPlay-0.3.0.apk",
+                  "arch": "universal",
+                  "url": "https://dl.example.com/DiPlay-0.3.0.apk",
+                  "checksumsUrl": "https://dl.example.com/SHA256SUMS.txt"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val release = UpdateCatalog.parse(json)
+
+        assertEquals("Fixed the reconnect race\nFaster hotspot reuse", release?.releaseNotes)
+    }
+
+    @Test
+    fun capsOversizedReleaseNotes() {
+        val notes = "x".repeat(UpdateCatalog.MAX_RELEASE_NOTES_CHARS + 10)
+        val json = manifest().replace(
+            "\"mandatory\": false,",
+            "\"releaseNotes\": \"$notes\",",
+        )
+
+        val release = UpdateCatalog.parse(json)
+
+        assertEquals(UpdateCatalog.MAX_RELEASE_NOTES_CHARS, release?.releaseNotes?.length)
+    }
+
+    @Test
     fun prefersTheUniversalApkWhenSeveralArtifactsExist() {
         val artifacts = """
             [

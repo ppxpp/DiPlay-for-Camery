@@ -9,10 +9,14 @@ internal data class UpdateRelease(
     val apkName: String,
     val apkUrl: String,
     val checksumsUrl: String,
+    val releaseNotes: String? = null,
 )
 
 internal object UpdateCatalog {
     internal const val CHECKSUMS_FILE = "SHA256SUMS.txt"
+
+    /** Keeps a hostile or careless manifest from bloating the update card. */
+    internal const val MAX_RELEASE_NOTES_CHARS = 4_000
 
     /** Returns the first APK artifact from the latest manifest, or null. */
     internal fun parse(json: String): UpdateRelease? {
@@ -42,6 +46,9 @@ internal object UpdateCatalog {
         if (apkName.isEmpty() || apkUrl.isEmpty() || checksumsUrl.isEmpty()) return null
         if (!apkUrl.startsWith("https://") || !checksumsUrl.startsWith("https://")) return null
 
-        return UpdateRelease(version, versionCode, apkName, apkUrl, checksumsUrl)
+        val releaseNotes = manifest.optString("releaseNotes").trim().takeIf { it.isNotEmpty() }
+            ?.take(MAX_RELEASE_NOTES_CHARS)
+
+        return UpdateRelease(version, versionCode, apkName, apkUrl, checksumsUrl, releaseNotes)
     }
 }

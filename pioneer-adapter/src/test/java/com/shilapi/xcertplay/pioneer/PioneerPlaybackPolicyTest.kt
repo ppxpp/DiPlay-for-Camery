@@ -8,12 +8,12 @@ import org.junit.Test
 class PioneerPlaybackPolicyTest {
     @After fun tearDown() { PioneerWiredSession.current?.close() }
 
-    @Test fun freescaleReorderOptimizationDefaultsToVpnOnly() {
+    @Test fun freescaleReorderOptimizationDefaultsToVpnAndVehicleWireless() {
         assertFalse(PioneerPlaybackPolicy.freescaleNoReorderEnabled)
         for (backend in PioneerWiredSession.Backend.entries) {
             PioneerWiredSession.begin(backend, verifiedDevice = true).use {
                 org.junit.Assert.assertEquals(
-                    backend == PioneerWiredSession.Backend.VPN,
+                    backend in setOf(PioneerWiredSession.Backend.VPN,PioneerWiredSession.Backend.WIRELESS),
                     PioneerPlaybackPolicy.freescaleNoReorderEnabled,
                 )
             }

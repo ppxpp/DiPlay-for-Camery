@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">Налагодження USB ADB · %1$s</string>
+    <string name="settings_camry_usb_adb_on">Увімкнено</string>
+    <string name="settings_camry_usb_adb_off">Вимкнено</string>
+    <string name="settings_camry_usb_adb_unknown">Невідомо / перемикання</string>
+    <string name="settings_camry_usb_adb_changing">Перемикання…</string>
+    <string name="settings_camry_usb_adb_description">Лише для Camry A. Натисніть для перемикання налагодження USB ADB.</string>
+    <string name="settings_camry_usb_adb_failed">Не вдалося підтвердити стан ADB. Спробуйте пізніше.</string>
+</resources>

@@ -25,6 +25,9 @@ class ProbeActivity : Activity() {
     private lateinit var output: TextView
     private lateinit var logScroll: ScrollView
     private lateinit var devices: Spinner
+    private lateinit var hotspotSsid: EditText
+    private lateinit var originalProfile: EditText
+    private lateinit var hotspotPassword: EditText
     private lateinit var status: TextView
     private val buttons = mutableListOf<Button>()
     private val stages = mutableListOf<TextView>()
@@ -32,8 +35,6 @@ class ProbeActivity : Activity() {
     private var paired = emptyList<PairedDevice>()
     private var adapterAvailable = false
     private var busy = false
-    private var iosCallbackRegistered = false
-    private var iosSppRequested = false
     private var receiverRegistered = false
     private val events = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -48,6 +49,7 @@ class ProbeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         report = ProbeReport(this)
+        PioneerBlueforceNative.configure(this, ::record)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         buildUi()
         record("新测试会话 uid=${Process.myUid()} pid=${Process.myPid()}；历史日志仅供回溯")
@@ -72,7 +74,27 @@ class ProbeActivity : Activity() {
                 runTest {
                     record("ADB 技术验证 action=$action")
                     when (action) {
-                        "bluetooth" -> { inspect(paired.first()); iosMgrConnectSpp(); iosMgrCleanup() }
+                        "wifi_hotspot_diag", "wifi_hotspot_start", "wifi_hotspot_5g", "wifi_hotspot_status", "wifi_hotspot_stop", "wifi_hotspot_firewall" -> {
+                            val mode = when (action) {
+                                "wifi_hotspot_firewall" -> HotspotProbeAction.FIREWALL
+                                "wifi_hotspot_start" -> HotspotProbeAction.START
+                                "wifi_hotspot_5g" -> HotspotProbeAction.FIVE_GHZ
+                                "wifi_hotspot_stop" -> HotspotProbeAction.STOP
+                                "wifi_hotspot_status" -> HotspotProbeAction.STATUS
+                                else -> HotspotProbeAction.DIAG
+                            }
+                            record(RootCommand(this@ProbeActivity, ::record).run(mode))
+                        }
+                        "bluetooth" -> inspect(commandTarget(command))
+                        "blueforce_callback_audit" -> PioneerCallbackRepair(this@ProbeActivity,cancelled,::record).audit()
+                        "blueforce_callback_repair" -> PioneerCallbackRepair(this@ProbeActivity,cancelled,::record).repair()
+                        "blueforce_restore_profile" -> PioneerSerialProbe(this@ProbeActivity,pioneer,cancelled,::record)
+                            .restoreProfile(commandTarget(command),command.getIntExtra("profile_mask",-1))
+                        "blueforce_observe" -> serial(commandTarget(command), false)
+                        "blueforce_carplay", "blueforce_prepare_carplay", "blueforce_prepare_carplay_ap" -> fullCarPlay(commandTarget(command),
+                            action.startsWith("blueforce_prepare_carplay"), commandSettings(command))
+                        "blueforce_iap2" -> serial(commandTarget(command), true)
+                        "blueforce_prepare_iap2" -> serial(commandTarget(command), true, true)
                         "audio_inventory" -> AudioChannelProbe(this@ProbeActivity, ::record, cancelled).inventory()
                         "audio" -> AudioChannelProbe(this@ProbeActivity, ::record, cancelled).play(
                             command.getIntExtra("source", 300), command.getIntExtra("stream", 401),
@@ -113,10 +135,47 @@ class ProbeActivity : Activity() {
             left.addView(row)
         }
         button(left, "读取步骤 1–4 的接口证据") { runSelected { inspect(it) } }
-        button(left, "验证原生候选连接入口") { runSelected { connectCandidate(it) } }
-        button(left, "IOSMgr：注册 IIOSClient 回调（77）") { runTest { iosMgrCallbackToggle() } }
-        button(left, "IOSMgr：发起 SPP 连接协商（65）") { runTest { iosMgrConnectSpp() } }
-        button(left, "IOSMgr：断开 SPP 并注销（66/78）") { runTest { iosMgrCleanup() } }
+        val prefs = getSharedPreferences("probe-existing-wifi", MODE_PRIVATE)
+        val defaults = ProbeNetworkDefaults.read(this)
+        left.addView(label("CarPlay 验证：车机与 iPhone 连接同一 Wi-Fi", 15f))
+        hotspotSsid = EditText(this).apply {
+            hint="Wi-Fi 名称"; setText(prefs.getString("ssid", defaults.ssid)); setTextColor(Color.WHITE)
+            setHintTextColor(Color.LTGRAY); isSingleLine=true
+        }
+        hotspotPassword = EditText(this).apply {
+            hint="Wi-Fi 密码"; setText(prefs.getString("password", defaults.password))
+            inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setTextColor(Color.WHITE); setHintTextColor(Color.LTGRAY); isSingleLine=true
+        }
+        left.addView(hotspotSsid); left.addView(hotspotPassword)
+        left.addView(label("先审计服务回调；主动验证会按需使用 DiPlay root 通道补注册",14f))
+        button(left, "只读审计服务内部回调（root）") { runTest {
+            PioneerCallbackRepair(this,cancelled,::record).audit()
+        } }
+        button(left, "按需补注册服务串口回调（root）") { runTest {
+            PioneerCallbackRepair(this,cancelled,::record).repair()
+        } }
+        originalProfile=EditText(this).apply {
+            hint="现场原 profile 掩码（上次为2）";setText("2");setTextColor(Color.WHITE)
+            setHintTextColor(Color.LTGRAY);inputType=android.text.InputType.TYPE_CLASS_NUMBER;isSingleLine=true
+        }
+        left.addView(originalProfile)
+        button(left, "清理目标残留并恢复原 profile（root）") {
+            runCatching { selected() to originalProfile.text.toString().toInt() }.onSuccess { (device,mask) ->
+                runTest { PioneerSerialProbe(this,pioneer,cancelled,::record).restoreProfile(device,mask) }
+            }.onFailure { record("未恢复：${message(it)}") }
+        }
+        button(left, "完整蓝牙阶段：MFi → CarPlay → Wi-Fi 接管") { runFull(false) }
+        button(left, "单设备临时配置 → 完整蓝牙阶段 → 恢复") { runFull(true) }
+        button(left, "原生回调只读观察（20秒）") { runSelected { serial(it, false) } }
+        button(left, "基础排查：仅验证 iAP2 link") { runSelected { serial(it, true) } }
+        button(left, "基础排查：临时配置并验证 link") { runSelected { serial(it, true, true) } }
+        button(left, "车机自身热点 → 完整蓝牙交接") { runSelected { fullCarPlay(it,true,CarPlayProbeSettings("","",true)) } }
+        button(left, "车机热点：启动（root）") { runTest { record(RootCommand(this, ::record).run(HotspotProbeAction.START)) } }
+        button(left, "车机热点：切换5GHz（root）") { runTest { record(RootCommand(this, ::record).run(HotspotProbeAction.FIVE_GHZ)) } }
+        button(left, "车机热点：状态（root）") { runTest { record(RootCommand(this, ::record).run(HotspotProbeAction.STATUS)) } }
+        button(left, "车机热点：放行专用AP接口（root）") { runTest { record(RootCommand(this, ::record).run(HotspotProbeAction.FIREWALL)) } }
+        button(left, "车机热点：停止并清理（root）") { runTest { record(RootCommand(this, ::record).run(HotspotProbeAction.STOP)) } }
         button(left, "读取音源 / 音频通道清单") { runTest {
             AudioChannelProbe(this, ::record, cancelled).inventory()
         } }
@@ -124,9 +183,9 @@ class ProbeActivity : Activity() {
             startActivity(Intent(this, UsbBtProbeActivity::class.java))
         }
         button(left, "检查步骤 5–6 的前置条件") { runTest {
-            stage(4, "静态解码已定位字节通道链路（77 注册 → 65 请求 SPP → 87 承载数据）；未实测前不定论")
-            stage(5, "待验证：无线授权由 iPhone 侧驱动 iAP2 流程；本探针不伪造授权或凭据")
-            record("IOSMgr 接口已在解码层定位；实测通过后接入 Iap2LinkProbe 和 DiPlay 无线控制引擎")
+            stage(4, "先审计/补注册服务内部串口回调，再用 event500 + serialportWriteData 验证真实协议")
+            stage(5, "完整验证复用 DiPlay MFi 和无线控制客户端，观察真实 Wi-Fi tunnel 接管")
+            record("旧 IOSMgr onBTReceiveData 仅打印日志，已移除 77→65→87 连接测试入口")
         } }
         val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         columns.addView(right, LinearLayout.LayoutParams(0, -1, 0.62f))
@@ -138,6 +197,10 @@ class ProbeActivity : Activity() {
         } }, LinearLayout.LayoutParams(0, dp(48), 1f))
         actions.addView(Button(this).apply { text = "导出报告"; setOnClickListener { share() } },
             LinearLayout.LayoutParams(0, dp(48), 1f))
+        actions.addView(Button(this).apply { text = "清空日志"; setOnClickListener {
+            runCatching { report.clear(); output.text = report.read() }
+                .onFailure { Toast.makeText(this@ProbeActivity, message(it), Toast.LENGTH_LONG).show() }
+        } }, LinearLayout.LayoutParams(0, dp(48), 1f))
         output = label(report.read(), 14f).apply {
             setTextIsSelectable(true)
             typeface = android.graphics.Typeface.MONOSPACE
@@ -178,14 +241,16 @@ class ProbeActivity : Activity() {
         if (busy) return
         busy = true; cancelled.set(false)
         buttons.forEach { it.isEnabled = false }; devices.isEnabled = false
+        listOf(hotspotSsid,hotspotPassword,originalProfile).forEach { it.isEnabled=false }
         status.text = "测试中 · 结果会自动保存"
         worker.execute {
             try { action() }
-            catch (failure: Exception) { record("测试未完成：${message(failure)}") }
+            catch (failure: Throwable) { record("测试未完成：${message(failure)}") }
             finally { runOnUiThread {
                 if (!isDestroyed) {
                     busy = false
                     buttons.forEach { it.isEnabled = true }; devices.isEnabled = true
+                    listOf(hotspotSsid,hotspotPassword,originalProfile).forEach { it.isEnabled=true }
                     status.text = "本轮结束 · 请查看各步骤证据"
                 }
             } }
@@ -219,34 +284,40 @@ class ProbeActivity : Activity() {
             it.name.contains("pair", true) || it.name.contains("uuid", true) || it.name.contains("service", true)
         }.joinToString { it.toString() })
     }
-    private fun connectCandidate(device: PairedDevice) {
-        val binder = PioneerBinder(::record)
-        check(binder.firmwareKnown()) { "固件不同，未调用候选入口" }
-        val before = binder.output(81, device.handle)
-        val state = binder.query(134, 0)
-        val block = ProbePolicy.connectionBlock(true, before, state == listOf(0, 0))
-        if (block != null) {
-            stage(3, "阻塞：$block"); record("未发送连接请求：$block"); return
+    private fun commandTarget(command: Intent): PairedDevice {
+        val address = command.getStringExtra("target_address") ?: error("ADB 动作必须提供 target_address，不默认选第一台")
+        return pioneer.paired().singleOrNull { PioneerBlueforceNative.sameAddress(it.address, address) }
+            ?: error("目标不在当前配对列表中")
+    }
+    private fun runFull(prepare: Boolean) {
+        runCatching {
+            val target = selected()
+            val settings = CarPlayProbeSettings(hotspotSsid.text.toString(), hotspotPassword.text.toString())
+            check(settings.ssid.isNotBlank()) { "请填写车机当前连接的 Wi-Fi 名称" }
+            getSharedPreferences("probe-existing-wifi", MODE_PRIVATE).edit().putString("ssid",settings.ssid)
+                .putString("password",settings.password).apply()
+            runTest { fullCarPlay(target,prepare,settings) }
+        }.onFailure { record("未开始测试：${message(it)}") }
+    }
+    private fun commandSettings(command: Intent): CarPlayProbeSettings {
+        if (command.getStringExtra("probe_action") == "blueforce_prepare_carplay_ap") return CarPlayProbeSettings("", "", true)
+        val prefs=getSharedPreferences("probe-existing-wifi", MODE_PRIVATE)
+        val defaults=ProbeNetworkDefaults.read(this)
+        return CarPlayProbeSettings(command.getStringExtra("hotspot_ssid") ?: prefs.getString("ssid", defaults.ssid).orEmpty(),
+            command.getStringExtra("hotspot_password") ?: prefs.getString("password", defaults.password).orEmpty())
+    }
+    private fun fullCarPlay(device: PairedDevice, prepare: Boolean, settings: CarPlayProbeSettings) {
+        stage(4,"完整蓝牙测试：身份识别、MFi、Wi-Fi 配置、CarPlay StartSession")
+        PioneerCarPlayProbe(this,settings,cancelled,::record).use { probe ->
+            probe.prepare(pioneer)
+            PioneerSerialProbe(this,pioneer,cancelled,::record).run(device,true,prepare,probe::verify)
         }
-        record("候选入口 133/index=0：未证实属于 CarPlay；不修改 profile 配置")
-        val start = binder.startCandidate()
-        if (start != listOf(0)) {
-            stage(3, "失败：原生连接返回 $start；不推断 SSP 或硬件能力"); return
-        }
-        try {
-            stage(3, "请求已受理；正在观察，尚未证明 iAP2")
-            repeat(20) {
-                if (cancelled.get()) return@repeat
-                Thread.sleep(1000)
-                binder.query(134, 0)
-            }
-            stage(3, "观察结束：缺少 UUID 与字节证据，尚未验证 iAP2")
-        } finally {
-            // 只清理本次请求的、测试前为空闲的候选通道。
-            runCatching { binder.stopCandidate() }.onFailure { record("本次候选清理失败：${message(it)}") }
-            record("配置回读 before=$before after=${binder.output(81, device.handle)}")
-            record("连接 profile 回读=${binder.output(80, device.handle)}")
-        }
+        stage(5,"本轮结束：以 bluetoothWorkVerified 和分阶段证据为准")
+    }
+    private fun serial(device: PairedDevice, active: Boolean, prepare: Boolean = false) {
+        stage(3, "Blueforce 原生通道测试：target=${device.address} active=$active prepare=$prepare")
+        PioneerSerialProbe(this,pioneer, cancelled, ::record).run(device, active, prepare)
+        stage(4, "本轮结束；以 RX、TX 和 iap2Verified 记录为准，不能等同于完整 CarPlay")
     }
     private fun iosMgrSweep() {
         val ios = IosMgrProbe(::record)
@@ -254,94 +325,7 @@ class ProbeActivity : Activity() {
         for (code in listOf(75, 76, 67, 74, 70, 71, 72, 82)) ios.call(code, IosMgrProbe.DEV_BT)
         for (mode in 0..2) ios.call(79, mode)
         stage(3, "已读取 IOSMgr 原生状态；会话有无以 67/74 与 dumpsys IOSMgr 对照为准")
-        stage(4, "静态解码已定位字节通道（77→65→87）；实测完成前不定论，不写字节、不伪造会话")
-    }
-    private fun iosMgrCallbackToggle() {
-        check(IosMgrProbe.firmwareKnown()) { "固件指纹不同，未发送 IOSMgr 调用" }
-        val ios = IosMgrProbe(::record)
-        record(ios.availableDescription())
-        if (!iosCallbackRegistered) {
-            val result = ios.call(77, IosMgrProbe.DEV_BT)
-            iosCallbackRegistered = result.status == 0
-            record("回调注册：status=${result.status} registered=$iosCallbackRegistered（独立 CLIENT_ID 槽，未占用其他客户端）")
-            stage(4, if (iosCallbackRegistered) "IIOSClient 回调已注册，事件将实时记录；处理完成用清理按钮注销" else "注册被拒绝或被过滤，见报告")
-        } else {
-            val result = ios.call(78, IosMgrProbe.DEV_BT)
-            iosCallbackRegistered = result.status != 0
-            record("回调注销：status=${result.status} stillRegistered=$iosCallbackRegistered")
-            stage(4, if (iosCallbackRegistered) "注销未受理；进程退出后残留注册会自然失效" else "IIOSClient 回调已注销")
-        }
-    }
-    private fun iosMgrConnectSpp() {
-        check(IosMgrProbe.firmwareKnown()) { "固件指纹不同，未发送 IOSMgr 调用" }
-        val ios = IosMgrProbe(::record)
-        record(ios.availableDescription())
-        if (!iosCallbackRegistered) {
-            val reg = ios.call(77, IosMgrProbe.DEV_BT, quiet = true)
-            iosCallbackRegistered = reg.status == 0
-            record("预置回调观察：注册${if (iosCallbackRegistered) "成功" else "未受理"}（77 状态=${reg.status}）")
-        }
-        val device = ios.call(79, IosMgrProbe.DEV_BT)
-        val connect = ios.call(67, IosMgrProbe.DEV_BT)
-        val lastResult = ios.call(74, IosMgrProbe.DEV_BT)
-        val accepted = listOf(device, connect, lastResult).all { it.status == 0 }
-        val block = ProbePolicy.sppConnectBlock(true, accepted, device.value, connect.value)
-        if (block != null) {
-            stage(3, "阻塞：$block")
-            record("未发送连接请求：$block")
-            return
-        }
-        record("连接前基线：dev=${device.value} conn=${connect.value} 上次结果=${lastResult.value}（74 是对端保留的上次结果 bool，不参与门禁）")
-        val request = ios.call(65, IosMgrProbe.DEV_BT)
-        if (request.status != 0) {
-            stage(3, "失败：ConnectSpp 未受理（状态=${request.status}）；不推断硬件或配对能力")
-            return
-        }
-        iosSppRequested = true
-        stage(3, "已受理 SPP 连接请求；观察 30s，比对前后状态与回调")
-        record("已受理（65 状态=0）；每秒轮询 67/74/79，值变化时记录")
-        var lastLine = ""
-        repeat(30) { index ->
-            if (!cancelled.get()) {
-                Thread.sleep(1000)
-                val currentConnect = ios.call(67, IosMgrProbe.DEV_BT, quiet = true)
-                val currentResult = ios.call(74, IosMgrProbe.DEV_BT, quiet = true)
-                val currentDevice = ios.call(79, IosMgrProbe.DEV_BT, quiet = true)
-                val line = "t+${index + 1}s conn=${currentConnect.value} result=${currentResult.value} dev=${currentDevice.value}"
-                if (line != lastLine) {
-                    record(line)
-                    lastLine = line
-                }
-            }
-        }
-        val afterConnect = ios.call(67, IosMgrProbe.DEV_BT)
-        val afterResult = ios.call(74, IosMgrProbe.DEV_BT)
-        val afterDevice = ios.call(79, IosMgrProbe.DEV_BT)
-        record("连接后回读：dev=${afterDevice.value} conn=${afterConnect.value} 上次结果=${afterResult.value}")
-        stage(4, "观察结束：SPP 是否进入 iAP2 以回调事件、67/74 值变化与 iPhone 侧表现为准")
-    }
-    private fun iosMgrCleanup() {
-        check(IosMgrProbe.firmwareKnown()) { "固件指纹不同，未发送 IOSMgr 调用" }
-        val ios = IosMgrProbe(::record)
-        record(ios.availableDescription())
-        if (iosSppRequested) {
-            val before = ios.call(67, IosMgrProbe.DEV_BT)
-            val disconnect = ios.call(66, IosMgrProbe.DEV_BT)
-            iosSppRequested = false
-            Thread.sleep(1500)
-            val after = ios.call(67, IosMgrProbe.DEV_BT)
-            record("断开 SPP：66 状态=${disconnect.status}；conn ${before.value} -> ${after.value}")
-            stage(3, "已请求断开本次会话发起的 SPP（66 状态=${disconnect.status}）")
-        } else {
-            record("本次会话未发起过 SPP 连接，未发送 66；不误断系统会话")
-        }
-        if (iosCallbackRegistered) {
-            val unreg = ios.call(78, IosMgrProbe.DEV_BT)
-            iosCallbackRegistered = unreg.status != 0
-            record("回调注销：78 状态=${unreg.status} stillRegistered=$iosCallbackRegistered")
-        } else {
-            record("回调未注册，无需注销")
-        }
+        stage(4, "IOSMgr 接收端仅日志；应使用新版 Blueforce 原始回调验证")
     }
     private fun stage(index: Int, evidence: String) {
         record("步骤 ${index + 1}：$evidence")

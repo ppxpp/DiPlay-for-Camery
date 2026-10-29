@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">カムリ A ナビ車載機連携</string>
     <string name="settings_camry_title">カムリ A ナビ車載機連携を有効にする</string>
-    <string name="settings_camry_description">有効にすると、DiPlay はカムリ A ナビ車載機に合わせて USB、VPN、音声、マイク、HUD を制御します。自動判定は機種で識別します。判定されない場合は強制有効を選択し、その他の車両では無効にしてください。変更後は CarPlay を再接続してください。</string>
+    <string name="settings_camry_description">有効にすると、DiPlay はカムリ A ナビ車載機に合わせて USB、VPN、音声、マイク、HUD を制御します。自動判定は機種で識別します。判定されない場合は強制有効を選択し、その他の車両では無効にしてください。変更後は CarPlay を再接続してください。 有効時は車載機専用のワイヤレス接続方式を使用します。</string>
     <string name="settings_camry_auto">自動判定（既定）</string>
     <string name="settings_camry_on">強制有効</string>
     <string name="settings_camry_off">無効</string>

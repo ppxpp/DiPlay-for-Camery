@@ -14,6 +14,16 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class Iap2WirelessControlClientTest {
+    @Test fun preparedAuthenticationIsBoundToOneClientAndIdentityAndConsumedOnce() {
+        val owner = Any()
+        val config = Iap2IdentificationConfig("DiPlay", "model", "manufacturer", "serial", "1", "1", 0)
+        val proof = Iap2WirelessControlClient.PreparedAuthentication(owner, config)
+        assertThrows(IllegalStateException::class.java) { proof.consume(Any(), config) }
+        assertThrows(IllegalStateException::class.java) { proof.consume(owner, config.copy(serialNumber = "different")) }
+        proof.consume(owner, config)
+        assertThrows(IllegalStateException::class.java) { proof.consume(owner, config) }
+    }
+
     @Test fun startSessionEventRequiresSuccessfulSendAndFollowsTheWrite() {
         var sent = false
         var events = 0

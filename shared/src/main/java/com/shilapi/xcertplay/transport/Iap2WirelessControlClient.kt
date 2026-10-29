@@ -20,6 +20,47 @@ class Iap2WirelessControlClient(
     private val session: Iap2Session,
     private val mfi: Iap2MfiAuthenticationClient,
 ) {
+    /** Proof of authentication on this exact client/session; no network endpoint is published here. */
+    class PreparedAuthentication internal constructor(
+        private val owner: Any,
+        private val identification: Iap2IdentificationConfig,
+    ) {
+        private val consumed=java.util.concurrent.atomic.AtomicBoolean(false)
+        internal fun consume(client: Any, config: Iap2IdentificationConfig) {
+            check(owner===client && identification==config) { "Wireless authentication belongs to a different session or identity" }
+            check(consumed.compareAndSet(false,true)) { "Wireless authentication has already been consumed" }
+        }
+    }
+
+    fun authenticate(
+        identification: Iap2IdentificationConfig,
+        timeoutMillis: Long = 15_000,
+        vehicleStatusProvider: VehicleStatusProvider? = null,
+        onProgress: (String) -> Unit = {},
+    ): PreparedAuthentication {
+        require(identification.wireless != null) { "Wireless authentication requires a wireless identity" }
+        require(timeoutMillis in 1..MAX_TIMEOUT_MILLIS)
+        val identified=identification.withVehicleStatusFrom(vehicleStatusProvider)
+        authenticateControl(identification,identified,WirelessControlDeadline(timeoutMillis),onProgress)
+        return PreparedAuthentication(this,identified)
+    }
+
+    private fun authenticateControl(
+        original: Iap2IdentificationConfig,
+        identified: Iap2IdentificationConfig,
+        deadline: WirelessControlDeadline,
+        onProgress: (String) -> Unit,
+    ) {
+        if(identified.vehicleStatusEnabled!=original.vehicleStatusEnabled)
+            onProgress("iap2 no battery reading: not declaring an electric vehicle")
+        Iap2IdentificationClient(session).identify(identified,deadline.requireRemaining(),onProgress)
+        onProgress("iap2 identification accepted")
+        mfi.run(session,deadline.requireRemaining(),onProgress)
+        onProgress("iap2 authentication accepted")
+        for(subscription in Iap2WiredControlClient.subscriptions()) session.send(subscription,deadline.requireRemaining())
+        onProgress("iap2 subscriptions sent")
+    }
+
     fun run(
         identification: Iap2IdentificationConfig,
         endpoint: Iap2WirelessCarPlayEndpoint,
@@ -34,6 +75,7 @@ class Iap2WirelessControlClient(
         // The caller must prove that the current CarPlay session is usable before keeping it alive.
         keepAliveAfterDeadline: () -> Boolean = { false },
         onProgress: (String) -> Unit = {},
+        preparedAuthentication: PreparedAuthentication? = null,
     ): Iap2WirelessControlResult {
         require(identification.wireless != null) {
             "Wireless control requires an Iap2IdentificationConfig with wireless transport"
@@ -44,22 +86,9 @@ class Iap2WirelessControlClient(
 
         val deadline = WirelessControlDeadline(timeoutMillis)
         val identified = identification.withVehicleStatusFrom(vehicleStatusProvider)
-        if (identified.vehicleStatusEnabled != identification.vehicleStatusEnabled) {
-            onProgress("iap2 no battery reading: not declaring an electric vehicle")
-        }
-        Iap2IdentificationClient(session).identify(identified, deadline.requireRemaining(), onProgress)
-        onProgress("iap2 identification accepted")
-        var stage = Iap2WirelessControlStage.IDENTIFIED
-
-        mfi.run(session, deadline.requireRemaining(), onProgress)
-        stage = Iap2WirelessControlStage.AUTHENTICATED
-        onProgress("iap2 authentication accepted")
-
-        for (subscription in Iap2WiredControlClient.subscriptions()) {
-            session.send(subscription, deadline.requireRemaining())
-        }
-        stage = Iap2WirelessControlStage.SUBSCRIBED
-        onProgress("iap2 subscriptions sent")
+        if(preparedAuthentication==null) authenticateControl(identification,identified,deadline,onProgress)
+        else preparedAuthentication.consume(this,identified)
+        var stage = Iap2WirelessControlStage.SUBSCRIBED
         onReady()
 
         fun sendControl(frame: Iap2Frame) {

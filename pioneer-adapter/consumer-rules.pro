@@ -10,3 +10,5 @@
 
 
 -keep class com.shilapi.xcertplay.pioneer.PioneerRootSessionHelper { public static void main(java.lang.String[]); }
+
+-keep class com.shilapi.xcertplay.pioneer.PioneerAdbHelper { public static void main(java.lang.String[]); }

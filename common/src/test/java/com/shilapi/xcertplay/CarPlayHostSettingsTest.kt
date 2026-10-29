@@ -56,7 +56,8 @@ class CarPlayHostSettingsTest {
     private lateinit var controllers: MockedConstruction<CarPlayController>
 
     @Before fun setUp() {
-        activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        val owner = Robolectric.buildActivity(CarPlayHostActivity::class.java)
+        activity = owner.get()
         controllers = mockConstruction(CarPlayController::class.java)
         (field("teardownExecutor") as ExecutorService).shutdownNow()
         setField("teardownExecutor", PausedExecutorService())
@@ -70,7 +71,12 @@ class CarPlayHostSettingsTest {
         AirPlayPersistence.saveMfiTarget(activity, MfiTarget.USB_CH341)
         AirPlayPersistence.saveWirelessHotspotMode(activity, WirelessHotspotMode.WIFI_P2P)
         invoke("loadPersistedSettings")
-        invoke("buildContentView")
+        activity.setContentView(invoke("buildContentView") as View)
+        owner.visible()
+        val root = (field("videoView") as View).parent as View
+        root.measure(View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(990, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 1920, 990)
     }
 
     @After fun tearDown() {
@@ -196,6 +202,7 @@ class CarPlayHostSettingsTest {
             assertFalse(field("gestureSequenceActive") as Boolean)
         }
         invoke("openSettingsMenu")
+        selectCategory("vehicle")
         val button = views(menu()).filterIsInstance<Button>()
             .first { it.text == activity.getString(R.string.settings_gesture_disabled_action) }
         button.performClick()
@@ -205,6 +212,7 @@ class CarPlayHostSettingsTest {
     }
 
     @Test fun menuStaysCenteredAndUsesAvailableWidthAcrossWindowSizes() {
+        setField("settingsMenuCategoryKey", "more")
         invoke("openSettingsMenu")
         val overlay = menu() as ViewGroup
         val panel = overlay.getChildAt(0)
@@ -269,7 +277,11 @@ class CarPlayHostSettingsTest {
         }.performClick()
         assertEquals("display", field("settingsMenuCategoryKey"))
         assertEquals(1, (0 until pages.childCount).count { pages.getChildAt(it).visibility == View.VISIBLE })
-        fun page(key: String) = (0 until pages.childCount).map(pages::getChildAt).single { it.tag == key }
+        fun page(key: String): View {
+            selectCategory(key)
+            assertEquals(1, pages.childCount)
+            return pages.getChildAt(0).also { assertEquals(key, it.tag) }
+        }
         assertTrue(views(page("display")).filterIsInstance<TextView>().any {
             it.text == activity.getString(R.string.frame_rate)
         })
@@ -588,6 +600,7 @@ class CarPlayHostSettingsTest {
     }
 
     @Test fun resolutionEndpointLabelsMatchTheActualSliderRange() {
+        setField("settingsMenuCategoryKey", "display")
         invoke("openSettingsMenu")
         val labels = views(menu()).filterIsInstance<TextView>().map { it.text.toString() }.toList()
         assertTrue(labels.contains(activity.getString(R.string.custom_resolution_summary, 30)))
@@ -613,7 +626,7 @@ class CarPlayHostSettingsTest {
         invoke("openSettingsMenu")
         setField("manualHotspotSsid", "Unsaved hotspot")
         val oldMenu = menu()
-        val scroll = views(oldMenu).filterIsInstance<android.widget.ScrollView>().single()
+        val scroll = field("settingsMenuContentScroll") as ScrollView
         scroll.scrollTo(0, 120)
 
         AirPlayPersistence.saveAppAppearance(activity, AppAppearance.LIGHT)
@@ -694,7 +707,7 @@ class CarPlayHostSettingsTest {
         assertTrue(field("menuOpen") as Boolean)
         assertEquals("connection", field("settingsMenuCategoryKey"))
         assertEquals(View.VISIBLE, views(menu()).first { it.tag == "connection" }.visibility)
-        assertEquals(View.GONE, views(menu()).first { it.tag == "more" }.visibility)
+        assertFalse(views(menu()).any { it.tag == "more" })
         val message = field("manualHotspotErrorView") as TextView
         assertEquals(View.VISIBLE, message.visibility)
         assertEquals(activity.getString(R.string.hotspot_ssid_is_required), message.text.toString())
@@ -1013,6 +1026,10 @@ class CarPlayHostSettingsTest {
         val size = sizeClass.getDeclaredConstructor(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
             .apply { isAccessible = true }.newInstance(width, height)
         setField("activeDisplaySize", size)
+        val root = (field("videoView") as View).parent as View
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, width, height)
     }
 
     private fun checkSwipeMenuScreenshot(name: String, width: Int, height: Int) {
@@ -1086,14 +1103,25 @@ class CarPlayHostSettingsTest {
         reporter(status)
     }
 
+    private fun selectCategory(key: String) {
+        val title = when (key) {
+            "display" -> R.string.settings_display
+            "vehicle" -> R.string.settings_vehicle
+            "advanced" -> R.string.settings_advanced
+            "more" -> R.string.settings_more
+            else -> R.string.connection
+        }
+        views(menu()).filterIsInstance<Button>().first { it.text == activity.getString(title) }.performClick()
+    }
+
     private fun menu() = field("settingsMenu") as View
     private fun saveButton() = views(menu()).filterIsInstance<Button>()
         .single { it.text == activity.getString(R.string.save_and_reconnect) }
-    private fun resolutionSlider() = views(menu()).filterIsInstance<SeekBar>()
+    private fun resolutionSlider() = selectCategory("display").let { views(menu()) }.filterIsInstance<SeekBar>()
         .first { it.max == CarPlayDisplayScale.MAX_PERCENT - CarPlayDisplayScale.MIN_PERCENT }
-    private fun gestureButton() = views(menu()).filterIsInstance<Button>()
+    private fun gestureButton() = selectCategory("vehicle").let { views(menu()) }.filterIsInstance<Button>()
         .first { it.text == activity.getString(R.string.settings_gesture_fingers, field("gestureFingerCount")) }
-    private fun fullSettingsButton() = views(menu()).filterIsInstance<Button>()
+    private fun fullSettingsButton() = selectCategory("more").let { views(menu()) }.filterIsInstance<Button>()
         .first { it.text == activity.getString(R.string.app_name) + " " + activity.getString(R.string.settings) }
     /** Answers the "Discard your changes?" dialog that an exit with staged edits now shows. */
     private fun discardPendingEdits() {

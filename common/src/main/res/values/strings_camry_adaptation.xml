@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">Camry A-navigation head-unit adaptation</string>
     <string name="settings_camry_title">Enable Camry A-navigation head-unit adaptation</string>
-    <string name="settings_camry_description">When enabled, DiPlay takes over USB, VPN, audio, microphone and HUD for the Camry A-navigation head unit. Automatic detection matches the head-unit model; choose Force on when detection misses, or Off on other vehicles. Reconnect CarPlay after changing this setting.</string>
+    <string name="settings_camry_description">When enabled, DiPlay takes over USB, VPN, audio, microphone and HUD for the Camry A-navigation head unit. Automatic detection matches the head-unit model; choose Force on when detection misses, or Off on other vehicles. Reconnect CarPlay after changing this setting. While enabled, wireless connections use the vehicle-specific scheme.</string>
     <string name="settings_camry_auto">Automatic detection (default)</string>
     <string name="settings_camry_on">Force on</string>
     <string name="settings_camry_off">Off</string>

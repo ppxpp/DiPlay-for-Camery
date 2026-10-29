@@ -26,6 +26,13 @@ class UpdateAvailabilityTest {
         assertEquals(release, UpdateAvailability.available(context, 99L, UpdateChannel.STABLE))
     }
 
+    @Test fun persistsReleaseNotes() {
+        val release = release("v0.3.0", 100L).copy(releaseNotes = "Fixed A\nAdded B")
+        UpdateAvailability.save(context, release, UpdateChannel.STABLE)
+
+        assertEquals(release, UpdateAvailability.available(context, 99L, UpdateChannel.STABLE))
+    }
+
     @Test fun removesAReleaseAfterTheAppCatchesUp() {
         UpdateAvailability.save(context, release("v0.3.0", 100L), UpdateChannel.STABLE)
 

@@ -36,7 +36,7 @@ object PioneerUsbPermissionProbe {
         return PioneerDebugUpdateGuard.withCacheMaintenance { execute(app, action, node) }
     }
 
-    /** Connection worker only: initial native-NCM authorization may already be done by module prewarm. */
+    /** Connection worker only: reuse an existing USB authorization when available. */
     fun grantForConnection(context: Context, device: UsbDevice, stillCurrent: () -> Boolean): JSONObject {
         check(PioneerUsbPolicy.matchesDevice() && !holdsRequests(context)) { "Automatic USB grant unavailable or held" }
         val app = context.applicationContext

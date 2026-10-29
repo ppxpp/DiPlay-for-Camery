@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">Depuración USB ADB · %1$s</string>
+    <string name="settings_camry_usb_adb_on">Activada</string>
+    <string name="settings_camry_usb_adb_off">Desactivada</string>
+    <string name="settings_camry_usb_adb_unknown">Desconocido / cambiando</string>
+    <string name="settings_camry_usb_adb_changing">Cambiando…</string>
+    <string name="settings_camry_usb_adb_description">Solo para Camry A. Toca para cambiar la depuración USB ADB.</string>
+    <string name="settings_camry_usb_adb_failed">No se pudo confirmar el estado de ADB. Inténtalo de nuevo.</string>
+</resources>

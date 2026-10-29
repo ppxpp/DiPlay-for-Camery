@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-apply(from = rootProject.file("gradle/native-ncm.gradle"))
 apply(from = rootProject.file("gradle/analytics.gradle"))
 
 // gradle/analytics.gradle decided whether the Umeng SDK belongs in this build; the tracker the rest
