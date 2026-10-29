@@ -232,6 +232,7 @@
     <string name="hotspot_ssid">ホットスポットのSSID</string>
     <string name="hotspot_ssid_contains_u_0000">ホットスポットのSSIDにU+0000が含まれています</string>
     <string name="hotspot_ssid_is_required">ホットスポットのSSIDを入力してください</string>
+    <string name="connection_config_invalid">接続設定が無効です。設定 → 接続 でホットスポットの設定を確認してください。</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">SSIDはUTF-8で32バイト以内にしてください</string>
     <string name="hotspot_status">ホットスポットの状態</string>
     <string name="i2c">I2C</string>

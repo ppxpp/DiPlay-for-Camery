@@ -227,6 +227,7 @@
     <string name="hotspot_ssid">SSID точки доступа</string>
     <string name="hotspot_ssid_contains_u_0000">SSID точки доступа содержит U+0000</string>
     <string name="hotspot_ssid_is_required">Укажите SSID точки доступа</string>
+    <string name="connection_config_invalid">Недопустимые настройки подключения. Откройте Настройки → Подключение, чтобы проверить конфигурацию точки доступа.</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">SSID точки доступа должен занимать не более 32 байт UTF-8</string>
     <string name="hotspot_status">Состояние точки доступа</string>
     <string name="i2c_device">Устройство I2C</string>

@@ -227,6 +227,7 @@
     <string name="hotspot_ssid">‏SSID نقطة الاتصال</string>
     <string name="hotspot_ssid_contains_u_0000">‏SSID نقطة الاتصال يحتوي على U+0000</string>
     <string name="hotspot_ssid_is_required">‏SSID نقطة الاتصال مطلوب</string>
+    <string name="connection_config_invalid">إعدادات الاتصال غير صالحة. افتح الإعدادات ← الاتصال للتحقق من إعدادات نقطة الاتصال.</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">يجب ألا يتجاوز SSID لنقطة الاتصال 32 بايت UTF-8</string>
     <string name="hotspot_status">حالة نقطة الاتصال</string>
     <string name="i2c_device">جهاز I2C</string>

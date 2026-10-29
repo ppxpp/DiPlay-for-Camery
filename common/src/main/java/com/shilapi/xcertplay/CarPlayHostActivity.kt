@@ -5880,7 +5880,19 @@ class CarPlayHostActivity : ComponentActivity() {
         // Settings → Connection can change the target while this screen stays open (#696).
         mfiTarget = AirPlayPersistence.loadMfiTarget(this)
         runCatching { DiPlayBootstrap.ensure(this, mfiTarget) }
-        val config = createRuntimeConfig()
+        // Persisted settings can be invalid (e.g. manual hotspot mode with a blank SSID); the
+        // settings page validates them, but this screen must not crash when they were saved broken.
+        val config = try {
+            createRuntimeConfig()
+        } catch (e: IllegalArgumentException) {
+            appendLog("CarPlay start aborted: ${e.message}")
+            Log.e(TAG, "invalid CarPlay runtime configuration", e)
+            startupRetryStopped = true
+            connectionProgressPanel.failed()
+            startupRetryButton?.visibility = View.VISIBLE
+            setConnectionStage(getString(R.string.connection_config_invalid))
+            return
+        }
         val progress = connectionProgressPanel.begin(config)
         val effectiveSize = if (isMultiWindowActive() && !AirPlayPersistence.loadAdaptPipResolution(this) &&
             maximumDetectedWidthPixels >= size.width && maximumDetectedHeightPixels >= size.height &&

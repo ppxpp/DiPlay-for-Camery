@@ -234,6 +234,7 @@
     <string name="hotspot_ssid">Hotspot SSID</string>
     <string name="hotspot_ssid_contains_u_0000">Hotspot SSID contains U+0000</string>
     <string name="hotspot_ssid_is_required">Hotspot SSID is required</string>
+    <string name="connection_config_invalid">Connection settings are invalid. Open Settings → Connection to check the hotspot configuration.</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">Hotspot SSID must be at most 32 UTF-8 bytes</string>
     <string name="hotspot_status">Hotspot status</string>
     <string name="i2c">I2C</string>

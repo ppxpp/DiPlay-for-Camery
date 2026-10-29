@@ -231,6 +231,7 @@
     <string name="hotspot_ssid">SSID dell’hotspot</string>
     <string name="hotspot_ssid_contains_u_0000">L’SSID dell’hotspot contiene U+0000</string>
     <string name="hotspot_ssid_is_required">L’SSID dell’hotspot è obbligatorio</string>
+    <string name="connection_config_invalid">Impostazioni di connessione non valide. Apri Impostazioni → Connessione per controllare la configurazione dell\'hotspot.</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">L’SSID dell’hotspot può essere al massimo di 32 byte UTF-8</string>
     <string name="hotspot_status">Stato dell’hotspot</string>
     <string name="i2c_device">Dispositivo I2C</string>

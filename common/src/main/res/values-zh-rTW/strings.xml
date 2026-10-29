@@ -228,6 +228,7 @@
     <string name="hotspot_ssid">熱點 SSID</string>
     <string name="hotspot_ssid_contains_u_0000">熱點 SSID 包含 U+0000</string>
     <string name="hotspot_ssid_is_required">必須填寫熱點 SSID</string>
+    <string name="connection_config_invalid">連線設定無效，請在 設定 → 連線 中檢查熱點設定。</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">熱點 SSID 最多為 32 個 UTF-8 位元組</string>
     <string name="hotspot_status">熱點狀態</string>
     <string name="i2c">I2C</string>

@@ -228,6 +228,7 @@
     <string name="hotspot_ssid">热点 SSID</string>
     <string name="hotspot_ssid_contains_u_0000">热点 SSID 包含 U+0000</string>
     <string name="hotspot_ssid_is_required">必须填写热点 SSID</string>
+    <string name="connection_config_invalid">连接设置无效，请在 设置 → 连接 中检查热点配置。</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">热点 SSID 最多为 32 个 UTF-8 字节</string>
     <string name="hotspot_status">热点状态</string>
     <string name="i2c">I2C</string>
