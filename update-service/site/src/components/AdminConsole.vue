@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import { adminSession } from '../data/admin-session.ts';
+import { releaseDisplayName } from '../data/releases.ts';
 
 type Channel = 'stable' | 'beta';
 type ChannelFilter = 'all' | Channel;
@@ -19,6 +20,7 @@ type Release = {
   versionName?: string;
   versionCode: number;
   publishedAt?: string;
+  artifacts?: Array<{ name?: string }>;
   management?: Management;
 };
 type ApiRelease = Omit<Release, 'channel' | 'releaseKey'> & { releaseKey?: string };
@@ -334,7 +336,7 @@ onUnmounted(() => {
               </span>
               <div class="release-title">
                 <div class="release-title-row">
-                  <h2>{{ release.versionName ?? release.version }}</h2>
+                  <h2>{{ releaseDisplayName(release) }}</h2>
                   <span
                     v-if="release.releaseKey === currentVersions[release.channel]"
                     class="tag tag--brand"

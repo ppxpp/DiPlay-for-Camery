@@ -61,7 +61,7 @@ function confirmAndDownload() {
       :class="['btn', tone]"
       type="button"
       :disabled="!available"
-      :title="available ? `v${version}` : undefined"
+      :title="available ? version : undefined"
       @click="open"
     >
       <svg v-if="icon === 'flask'" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -118,7 +118,7 @@ function confirmAndDownload() {
 
         <div class="dialog-box">
           <p>
-            版本 <bdi>v{{ version }}</bdi>
+            版本 <bdi>{{ version }}</bdi>
             <template v-if="channel.artifact.size"> · 大小 {{ formatUpdateSize(channel.artifact.size) }}</template>
             <template v-if="channel.artifact.sha256">
               · SHA-256 <code>{{ channel.artifact.sha256 }}</code></template
