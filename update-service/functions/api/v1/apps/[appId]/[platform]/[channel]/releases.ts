@@ -11,7 +11,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   if (!appId || !platform || !channel || ![appId, platform, channel].every((value) => SLUG.test(value))) return json({ error: "invalid_path" }, 400);
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return json({ error: "asset_base_url_not_configured" }, 500);
-  const releases = await allReleaseManifests(env.META, releasePrefix(appId, platform, channel));
+  // Unpublished candidates stay out of the public history until an admin enables delivery.
+  const releases = (await allReleaseManifests(env.META, releasePrefix(appId, platform, channel)))
+    .filter(({ manifest }) => manifest.management?.enabled !== false);
   return json({ releases: releases.map(({ manifest }) => ({
     version: manifest.version,
     versionName: manifest.versionName ?? manifest.version,
