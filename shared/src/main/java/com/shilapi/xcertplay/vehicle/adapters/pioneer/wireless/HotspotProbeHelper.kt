@@ -64,7 +64,9 @@ object HotspotProbeHelper {
                 ?.substringAfter('=')?.toLongOrNull()
             if(requestedAt!=null && dispatchedAt!=null) {
                 log("localOnly=timing phase=request_files elapsedMs=${dispatchedAt-requestedAt}")
+                metric("request_files",dispatchedAt-requestedAt,"complete",log)
                 log("localOnly=timing phase=dispatch_to_entry elapsedMs=${helperEntered-dispatchedAt}")
+                metric("dispatch_to_entry",helperEntered-dispatchedAt,"complete",log)
             }
             leaseToken=token
             ruleTag = "diplay-ap-${Os.stat(output.parentFile!!.path).st_uid}-$token"
@@ -90,6 +92,7 @@ object HotspotProbeHelper {
                 ready.writeText(android.os.SystemClock.elapsedRealtime().toString())
                 Os.chmod(ready.path,384);Os.chown(ready.path,Os.stat(output.parentFile!!.path).st_uid,-1)
                 log("localOnly=timing phase=prewarm_init elapsedMs=${android.os.SystemClock.elapsedRealtime()-helperEntered}")
+                metric("prewarm_init",android.os.SystemClock.elapsedRealtime()-helperEntered,"complete",log)
                 timed("prewarm_authorization_wait",log) {
                     HotspotPrewarmAuthorization.await(File(output.path+".go"),token,::checkCancelled,
                         { android.os.SystemClock.elapsedRealtime() },{ Thread.sleep(25) })
@@ -150,7 +153,16 @@ object HotspotProbeHelper {
 
     private inline fun timed(phase: String, log: (String) -> Unit, action: () -> Unit) {
         val start=android.os.SystemClock.elapsedRealtime()
-        try { action() } finally { log("localOnly=timing phase=$phase elapsedMs=${android.os.SystemClock.elapsedRealtime()-start}") }
+        var complete = false
+        try { action(); complete = true } finally {
+            val elapsed = android.os.SystemClock.elapsedRealtime()-start
+            log("localOnly=timing phase=$phase elapsedMs=$elapsed")
+            metric(phase,elapsed,if(complete) "complete" else "failed",log)
+        }
+    }
+
+    private inline fun metric(phase: String, millis: Long, result: String, log: (String) -> Unit) {
+        log("DIPLAY_METRIC phase=$phase durationMs=${millis.coerceAtLeast(0)} result=$result")
     }
 
     private fun awaitExit(worker: java.lang.Process, timeoutMs: Long): Boolean {

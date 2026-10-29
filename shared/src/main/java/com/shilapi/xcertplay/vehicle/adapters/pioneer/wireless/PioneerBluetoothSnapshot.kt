@@ -3,8 +3,44 @@ package com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless
 import android.os.Parcel
 
 /** Passive native Binder queries; never loads BluetoothAdapter/BluetoothJni or registers native callbacks. */
-internal class PioneerBluetoothSnapshot(private val log: (String) -> Unit = {}) {
+internal class PioneerBluetoothSnapshot(private val log: (String) -> Unit = {},
+    private val calls: PioneerVendorCalls = PioneerVendorCalls.shared) {
     companion object {
+        // Passive queries have their own short-lived budget and cannot poison or occupy the
+        // connection/recovery gate. A timed-out diagnostic call is never queued behind again.
+        private val diagnosticCalls = PioneerVendorCalls(750)
+        @Synchronized fun diagnosticReport(target: String?): String = buildString {
+            val reader = PioneerBluetoothSnapshot(calls = diagnosticCalls)
+            val deadline = android.os.SystemClock.elapsedRealtime() + 6_000
+            fun budget() { check(android.os.SystemClock.elapsedRealtime() < deadline) { "diagnostic_budget" } }
+            var seenTarget = false
+            try {
+                budget()
+                val handles = reader.handles(requireResponse = true)
+                appendLine("pairedCount=${handles.size} targetConfigured=${!target.isNullOrBlank()}")
+                handles.forEachIndexed { index, handle ->
+                    budget()
+                    val address = checkNotNull(reader.string(74, handle))
+                    check(address.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")))
+                    budget()
+                    val connected = reader.read(65, handle) { reply ->
+                        check(reply.dataAvail() == 4)
+                        reply.readInt().also { check(it in 0..1) } == 1
+                    }
+                    budget()
+                    val profiles = reader.read(80, handle) { reply -> check(reply.dataAvail() == 4); reply.readInt() }
+                    check(connected != null && profiles != null)
+                    val selected = PioneerBlueforceNative.sameAddress(address, target.orEmpty())
+                    seenTarget = seenTarget || selected
+                    appendLine("device=${index + 1} selected=$selected deviceConnected=$connected connectedProfiles=$profiles " +
+                        "profileReady=${connected != null && profiles != null && ready(connected, profiles)}")
+                }
+                appendLine("targetPresent=$seenTarget status=complete")
+            } catch (error: Exception) {
+                appendLine("status=incomplete error=${error.javaClass.simpleName} targetObserved=$seenTarget")
+            }
+        }
+
         internal fun ready(connected: Boolean, connectedProfiles: Int): Boolean =
             connected && connectedProfiles and 0x03 != 0
     }
@@ -24,7 +60,7 @@ internal class PioneerBluetoothSnapshot(private val log: (String) -> Unit = {}) 
     // Verified against BpBlueforce: paired list=25, deviceIsConnected=65,
     // deviceGetAddress=74, deviceGetName=75. These replies have no Java exception header.
     private fun <T> read(code: Int, handle: Int?=null, decode: (Parcel) -> T): T? =
-        PioneerVendorCalls.shared.call("bluetooth-snapshot-$code") {
+        calls.call("bluetooth-snapshot-$code") {
             val service=PioneerBinder.service(PioneerBinder.SERVICE) ?: return@call null
             check(service.interfaceDescriptor==PioneerBinder.SERVICE) { "先锋蓝牙服务协议不匹配" }
             val request=Parcel.obtain()
@@ -52,14 +88,19 @@ internal class PioneerBluetoothSnapshot(private val log: (String) -> Unit = {}) 
         String(bytes,start,length,Charsets.UTF_8)
     }
 
-    fun devices(): List<Device> {
-        val handles=read(25) { reply ->
+    private fun handles(requireResponse: Boolean = false): List<Int> {
+        val result = read(25) { reply ->
             check(reply.dataAvail()>=4) { "先锋蓝牙设备列表不完整" }
             val count=reply.readInt()
             check(count in 0..5 && reply.dataAvail()==count*4) { "先锋蓝牙设备列表格式不匹配" }
             List(count) { reply.readInt() }
-        }.orEmpty()
-        return handles.distinct().mapNotNull { handle ->
+        }
+        if (requireResponse) checkNotNull(result) { "Bluetooth query unavailable" }
+        return result.orEmpty().distinct()
+    }
+
+    fun devices(): List<Device> {
+        return handles().mapNotNull { handle ->
             val address=string(74,handle) ?: return@mapNotNull null
             check(address.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))) { "先锋蓝牙设备地址无效" }
             Device(handle,address)

@@ -28,4 +28,4 @@ enum class WirelessStartupFailure {
         this != BLUETOOTH_CONFIGURATION_CONFLICT
 }
 
-class WirelessStartupException(val reason: WirelessStartupFailure, message: String) : IOException(message)
+class WirelessStartupException(val reason: WirelessStartupFailure, message: String, val timeoutMillis: Long? = null) : IOException(message)

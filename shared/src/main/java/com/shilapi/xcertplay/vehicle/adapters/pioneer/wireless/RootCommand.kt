@@ -12,7 +12,8 @@ internal enum class HotspotProbeAction { PREPARE, PREPARE_LOCAL_ONLY, RESUME_LOC
 
 /** Fixed commands; prewarming cannot authorize any network mutation. */
 internal class RootCommand(private val context: Context, private val token: String,
-    private val cancelled: () -> Boolean, private val log: (String) -> Unit) {
+    private val cancelled: () -> Boolean, private val log: (String) -> Unit,
+    private val onTiming: (String, Long, String) -> Unit = { _, _, _ -> }) {
     private class Request(val action: HotspotProbeAction, val output: File, val started: Long, val deferred: Boolean) {
         val failure=AtomicReference<Throwable?>()
         val cancel=File(output.path+".cancel")
@@ -75,6 +76,10 @@ internal class RootCommand(private val context: Context, private val token: Stri
                 if(!cleanup && cancelled() && !cancelSent) { request.cancel();cancelSent=true }
                 val result=request.output.readText()
                 if(result.contains("\nRESULT:")) {
+                    if (!cleanup) HotspotHelperMetrics.parse(result).forEach { metric ->
+                        runCatching { onTiming("hotspot_${action.name.lowercase()}_${metric.phase}", metric.millis,
+                            if (cancelSent) "cancelled" else metric.result) }
+                    }
                     check(cleanup || !cancelSent) { "Vehicle hotspot cancelled" }
                     if(request.deferred && result.contains("localOnly=prewarm_failed_without_execution") && !cancelled()) {
                         request.cancel()

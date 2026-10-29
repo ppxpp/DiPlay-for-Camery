@@ -13,6 +13,61 @@ import org.junit.Before
 import org.junit.Test
 
 class SettingsBackupServerTest {
+    @Test fun zipReportStreamsAnAuthenticatedFileAndPreservesBackupRoutes() {
+        val file = java.nio.file.Files.createTempFile("diagnostic", ".zip").toFile()
+        val payload = ByteArray(3 * 1024 * 1024) { (it % 251).toByte() }
+        file.writeBytes(payload)
+        var collections = 0
+        val streaming = SettingsBackupServer(page = "page".toByteArray(), export = { "settings".toByteArray() },
+            import = { SettingsImportOutcome(0, 0, false) }, reportFile = { collections++; file })
+        val started = requireNotNull(streaming.start())
+        try {
+            val wrong = URL("http://127.0.0.1:${started.port}/b/wrong/report").openConnection() as HttpURLConnection
+            try { assertEquals(404, wrong.responseCode); assertEquals(0, collections) } finally { wrong.disconnect() }
+            val connection = URL("http://127.0.0.1:${started.port}/b/${started.token}/report").openConnection() as HttpURLConnection
+            connection.readTimeout = 5000
+            try {
+                assertEquals(200, connection.responseCode)
+                assertEquals("application/zip", connection.contentType)
+                assertEquals(payload.size, connection.contentLength)
+                assertTrue(connection.getHeaderField("Content-Disposition").contains(".zip"))
+                org.junit.Assert.assertArrayEquals(payload, connection.inputStream.use { it.readBytes() })
+                assertEquals(1, collections)
+            } finally { connection.disconnect() }
+            val settings = URL("http://127.0.0.1:${started.port}/b/${started.token}/export").readText()
+            assertEquals("settings", settings)
+        } finally { streaming.stop(); file.delete() }
+    }
+
+    @Test fun reportDeadlineClosesTheSocketEvenWhileCollectionIsPending() {
+        val file = java.nio.file.Files.createTempFile("diagnostic", ".zip").toFile().apply { writeText("zip") }
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val streaming = SettingsBackupServer(page = ByteArray(0), export = { ByteArray(0) },
+            import = { SettingsImportOutcome(0, 0, false) }, reportFile = {
+                entered.countDown(); release.await(2, java.util.concurrent.TimeUnit.SECONDS); file
+            }).apply { reportTimeoutMillis = 100 }
+        val started = requireNotNull(streaming.start())
+        try {
+            Socket("127.0.0.1", started.port).use { socket ->
+                socket.soTimeout = 2000
+                socket.getOutputStream().write("GET /b/${started.token}/report HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray())
+                assertTrue(entered.await(1, java.util.concurrent.TimeUnit.SECONDS))
+                assertEquals(-1, socket.getInputStream().read())
+            }
+        } finally { release.countDown(); streaming.stop(); file.delete() }
+    }
+
+    @Test fun zipCollectionFailureReturnsAnErrorInsteadOfAnEmptySuccessfulArchive() {
+        val streaming = SettingsBackupServer(page = ByteArray(0), export = { ByteArray(0) },
+            import = { SettingsImportOutcome(0, 0, false) }, reportFile = { error("collection failed") })
+        val started = requireNotNull(streaming.start())
+        try {
+            val connection = URL("http://127.0.0.1:${started.port}/b/${started.token}/report").openConnection() as HttpURLConnection
+            try { assertEquals(500, connection.responseCode) } finally { connection.disconnect() }
+        } finally { streaming.stop() }
+    }
+
     private lateinit var server: SettingsBackupServer
     private lateinit var endpoint: SettingsBackupEndpoint
     private val imported = AtomicReference<SettingsImportOutcome?>()

@@ -21,13 +21,15 @@ import org.json.JSONObject
 /** A vehicle AP lease; it never stops an AP borrowed from another owner. */
 internal class OwnedPioneerHotspot(private val context: Context, @Volatile private var isCancelled: () -> Boolean,
     private var log: (String) -> Unit) : WirelessHotspotManager {
+    @Volatile private var onTiming: (String, Long, String) -> Unit = { _, _, _ -> }
+    fun bindTiming(observer: (String, Long, String) -> Unit) { onTiming = observer }
     private val token=UUID.randomUUID().toString().replace("-","")
     private val journal=File(context.filesDir,"pioneer-wireless-hotspot.json")
     private val lockFile=File(context.filesDir,"pioneer-wireless-hotspot.lock")
     private var lockStream: FileOutputStream?=null
     private var leaseLock: FileLock?=null
     private var startupDeadline=Long.MAX_VALUE
-    private val commands=RootCommand(context,token,{ closed || isCancelled() || SystemClock.elapsedRealtime()>=startupDeadline },{ log(it) })
+    private val commands=RootCommand(context,token,{ closed || isCancelled() || SystemClock.elapsedRealtime()>=startupDeadline },{ log(it) },{ id, millis, result -> onTiming(id, millis, result) })
     private val operation=Any()
     @Volatile private var closed=false
     private var state: JSONObject?=null
@@ -72,7 +74,12 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
         } catch(failure: Throwable) { releaseLock();throw failure }
 
         try {
-            recoverPrevious()
+            val recoveryStart = SystemClock.elapsedRealtime()
+            var recoveryComplete = false
+            try { recoverPrevious(); recoveryComplete = true } finally {
+                runCatching { onTiming("hotspot_previous_cleanup", SystemClock.elapsedRealtime()-recoveryStart,
+                    if (recoveryComplete) "complete" else "failed") }
+            }
             checkCurrent()
             val initial=apState()
             check(initial==11 || initial==13) { "Vehicle hotspot is changing state; retry after it settles" }

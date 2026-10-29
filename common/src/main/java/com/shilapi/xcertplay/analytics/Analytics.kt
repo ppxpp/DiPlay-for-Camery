@@ -40,12 +40,19 @@ object Analytics {
         val candidate = runCatching { createAnalyticsTracker(application) }.getOrNull() ?: NoopAnalyticsTracker
         val started = runCatching { candidate.start(application) }.isSuccess
         tracker = if (started) candidate else NoopAnalyticsTracker
+        if (started) runCatching { ConnectionAnalytics.initialize(application) }
     }
 
     fun event(name: String, attributes: Map<String, String> = emptyMap()) {
         val current = tracker
         if (!current.isEnabled) return
         runCatching { current.event(name, attributes) }
+    }
+
+    fun metric(name: String, value: Long, attributes: Map<String, String> = emptyMap()) {
+        val current = tracker
+        if (!current.isEnabled) return
+        runCatching { current.metric(name, value, attributes) }
     }
 
     fun isAllowed(context: Context): Boolean =
@@ -60,7 +67,10 @@ object Analytics {
      */
     fun setEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_DISABLED, !enabled).apply()
-        if (enabled) startIfAllowed(context) else tracker = NoopAnalyticsTracker
+        if (enabled) startIfAllowed(context) else {
+            tracker = NoopAnalyticsTracker
+            ConnectionAnalytics.disable(context)
+        }
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

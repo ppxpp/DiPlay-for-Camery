@@ -231,6 +231,7 @@
     <string name="hotspot_ssid">SSID dell’hotspot</string>
     <string name="hotspot_ssid_contains_u_0000">L’SSID dell’hotspot contiene U+0000</string>
     <string name="hotspot_ssid_is_required">L’SSID dell’hotspot è obbligatorio</string>
+    <string name="connection_config_invalid">Impostazioni di connessione non valide. Apri Impostazioni → Connessione per controllare la configurazione dell\'hotspot.</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">L’SSID dell’hotspot può essere al massimo di 32 byte UTF-8</string>
     <string name="hotspot_status">Stato dell’hotspot</string>
     <string name="i2c_device">Dispositivo I2C</string>
@@ -966,7 +967,7 @@
     <string name="connection_help_wifi_direct">Tieni attivi Wi-Fi e Bluetooth della head unit e l’iPhone sbloccato e vicino, poi riprova. Se continua a non funzionare, dimentica l’auto sull’iPhone in Impostazioni → Generali → CarPlay e connettiti di nuovo.</string>
     <string name="connection_help_existing_wifi">Controlla che la head unit e l’iPhone siano sulla stessa rete Wi-Fi e che nome e password corrispondano alle impostazioni di DiPlay, poi riprova.</string>
     <string name="settings_report_on_phone">Ottieni il report su un telefono</string>
-    <string name="settings_report_on_phone_hint">Inquadra il codice con la fotocamera del telefono per aprire questa pagina nel suo browser, poi scegli Scarica report. Tieni aperta questa schermata finché il download non è terminato.</string>
+    <string name="settings_report_on_phone_hint">Scansiona e scarica il rapporto ZIP con log, stato del sistema e componenti disponibili. La raccolta può richiedere un minuto. Tieni aperta questa schermata fino al termine del download.</string>
     <string name="settings_mfi_target_description">Scegli USB/CH341 solo mentre un adattatore di autenticazione CH341 è collegato alla head unit. Senza, scegli Locale offline. Si applica alla prossima connessione.</string>
     <string name="settings_call_speakerphone">Chiamate sul vivavoce</string>
     <string name="settings_call_speakerphone_description">Per un telefono o tablet Android usato come head unit: riproduce le chiamate CarPlay sul suo altoparlante invece che sull’auricolare e usa il suo microfono vivavoce. Lascialo disattivato su una head unit di un’auto. Si applica dalla prossima chiamata.</string>
@@ -1043,4 +1044,5 @@
     <string name="disclaimer_page4_l2">Puoi disattivarlo in Impostazioni · Diagnostica; sessioni e crash si fermano dopo il riavvio dell\'app.</string>
     <string name="home_build_basis">(Basato su DiPlay %1$s)</string>
     <string name="home_license_notice">Questo software è open source e gratuito · Vietata la rivendita o l\'uso commerciale · Non usare durante la guida · A proprio rischio</string>
+    <string name="diagnostic_same_wifi_required">Importante: telefono e unità devono essere connessi alla stessa rete Wi-Fi. Se usi l’hotspot dell’auto, collega prima il telefono e poi scansiona il codice.</string>
 </resources>

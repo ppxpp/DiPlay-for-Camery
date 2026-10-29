@@ -227,6 +227,7 @@
     <string name="hotspot_ssid">SSID точки доступа</string>
     <string name="hotspot_ssid_contains_u_0000">SSID точки доступа содержит U+0000</string>
     <string name="hotspot_ssid_is_required">Укажите SSID точки доступа</string>
+    <string name="connection_config_invalid">Недопустимые настройки подключения. Откройте Настройки → Подключение, чтобы проверить конфигурацию точки доступа.</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">SSID точки доступа должен занимать не более 32 байт UTF-8</string>
     <string name="hotspot_status">Состояние точки доступа</string>
     <string name="i2c_device">Устройство I2C</string>
@@ -892,7 +893,7 @@
     <string name="connection_help_wifi_direct">Не выключайте Wi-Fi и Bluetooth головного устройства, держите iPhone разблокированным рядом и повторите попытку. Если сбой повторяется, забудьте автомобиль на iPhone в разделе «Настройки → Основные → CarPlay» и подключитесь снова.</string>
     <string name="connection_help_existing_wifi">Убедитесь, что головное устройство и iPhone подключены к одной сети Wi-Fi, а её имя и пароль совпадают с настройками DiPlay, и повторите попытку.</string>
     <string name="settings_report_on_phone">Получить отчёт на телефоне</string>
-    <string name="settings_report_on_phone_hint">Отсканируйте код камерой телефона, чтобы открыть страницу в его браузере, и выберите «Скачать отчёт». Не закрывайте этот экран, пока загрузка не завершится.</string>
+    <string name="settings_report_on_phone_hint">Отсканируйте код и скачайте ZIP с журналами, состоянием системы и доступными компонентами. Сбор может занять около минуты. Не закрывайте экран до завершения загрузки.</string>
     <string name="settings_mfi_target_description">Выбирайте USB/CH341, только если к головному устройству подключён адаптер аутентификации CH341. Без него выберите «Локальный офлайн». Применяется при следующем подключении.</string>
     <string name="settings_call_speakerphone">Звонки через громкоговоритель</string>
     <string name="settings_call_speakerphone_description">Для телефона или планшета Android, используемого как головное устройство: звонки CarPlay звучат из громкоговорителя, а не из разговорного динамика, и используется микрофон громкой связи. На головном устройстве автомобиля оставьте выключенным. Применяется со следующего звонка.</string>
@@ -953,4 +954,5 @@
     <string name="disclaimer_page4_l2">Отключить можно в «Настройки · Диагностика»; сеансы и отчёты о сбоях прекращаются после перезапуска приложения.</string>
     <string name="home_build_basis">(Собрано на основе DiPlay %1$s)</string>
     <string name="home_license_notice">Это ПО с открытым исходным кодом и бесплатно · Перепродажа и коммерческое использование запрещены · Не использовать в реальном движении · На свой риск</string>
+    <string name="diagnostic_same_wifi_required">Важно: телефон и головное устройство должны быть подключены к одной сети Wi-Fi. При использовании точки доступа автомобиля сначала подключите к ней телефон.</string>
 </resources>

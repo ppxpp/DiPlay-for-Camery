@@ -333,8 +333,12 @@ class SmoothVideoHostLifecycleTest {
     private fun retiringSinks(): Set<AndroidMediaSink> = (getField("retiringSinks") as Set<AndroidMediaSink>).toSet()
 
     private fun restartCarPlay(reason: String) {
-        activity.javaClass.getDeclaredMethod("restartCarPlay", String::class.java)
-            .apply { isAccessible = true }.invoke(activity, reason)
+        activity.javaClass.getDeclaredMethod(
+            "restartCarPlay",
+            String::class.java,
+            Boolean::class.javaPrimitiveType,
+            String::class.java,
+        ).apply { isAccessible = true }.invoke(activity, reason, false, "configuration_change")
     }
 
     private fun shutdown(reason: String) {

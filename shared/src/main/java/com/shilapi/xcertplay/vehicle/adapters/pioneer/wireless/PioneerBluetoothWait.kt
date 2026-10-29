@@ -53,7 +53,7 @@ internal object PioneerBluetoothWait {
                 }
                 val remaining=deadline-SystemClock.elapsedRealtime()
                 if(remaining<=0) throw WirelessStartupException(WirelessStartupFailure.BLUETOOTH_NOT_CONNECTED,
-                    "等待 iPhone 连接车机蓝牙超时，请在原厂蓝牙设置中连接后重试")
+                    "等待 iPhone 连接车机蓝牙超时，请在原厂蓝牙设置中连接后重试", timeoutMillis)
                 if(!announced) { announced=true;waiting();log("Vehicle Bluetooth waiting timeoutMs=$timeoutMillis receiver=$registered") }
                 synchronized(signal) {
                     // Do not lose a notification received during the state query.

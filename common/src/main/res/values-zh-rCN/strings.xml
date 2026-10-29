@@ -228,6 +228,7 @@
     <string name="hotspot_ssid">热点 SSID</string>
     <string name="hotspot_ssid_contains_u_0000">热点 SSID 包含 U+0000</string>
     <string name="hotspot_ssid_is_required">必须填写热点 SSID</string>
+    <string name="connection_config_invalid">连接设置无效，请在 设置 → 连接 中检查热点配置。</string>
     <string name="hotspot_ssid_must_be_at_most_32_utf_8_bytes">热点 SSID 最多为 32 个 UTF-8 字节</string>
     <string name="hotspot_status">热点状态</string>
     <string name="i2c">I2C</string>
@@ -952,7 +953,7 @@
     <string name="connection_help_wifi_direct">保持车机的 Wi-Fi 和蓝牙开启，iPhone 解锁并放在附近，然后重试。如果仍然失败，请在 iPhone 的“设置 → 通用 → CarPlay 车载”中忘记这辆车，再重新连接。</string>
     <string name="connection_help_existing_wifi">请确认车机和 iPhone 连接的是同一个 Wi-Fi 网络，且网络名称和密码与 DiPlay 设置一致，然后重试。</string>
     <string name="settings_report_on_phone">在手机上取得报告</string>
-    <string name="settings_report_on_phone_hint">用手机相机扫码，在浏览器中打开此页面，然后选择“下载报告”。下载完成前请保持此画面开启。</string>
+    <string name="settings_report_on_phone_hint">用手机相机扫码，在浏览器中选择“下载报告”，取得包含日志、系统状态及可读取系统组件的 ZIP 诊断包。采集可能需要约一分钟，下载完成前请保持此画面开启。</string>
     <string name="settings_mfi_target_description">只有车机上插着 CH341 认证适配器时才选择 USB/CH341。没有适配器时请选择「本地离线」。下次连接时生效。</string>
     <string name="settings_call_speakerphone">通话使用扬声器</string>
     <string name="settings_call_speakerphone_description">适用于用作车机的 Android 手机或平板：CarPlay 通话从扬声器播放而不是听筒，并使用免提麦克风。车机上请保持关闭。从下一次通话开始生效。</string>
@@ -1031,4 +1032,5 @@
     <string name="disclaimer_page4_l2">可随时在「设置 · 诊断」中关闭；重启应用后完全停止。</string>
     <string name="home_build_basis">（基于DiPlay%1$s版本构建）</string>
     <string name="home_license_notice">本软件开源免费 · 禁止转售商用 · 禁止驾驶场景使用 · 后果自行承担</string>
+    <string name="diagnostic_same_wifi_required">重要：手机和车机必须连接同一个 Wi-Fi！使用车机热点时，请先让手机连接车机热点，再扫码下载。</string>
 </resources>
