@@ -43,6 +43,7 @@ import com.shilapi.xcertplay.installer.ui.components.InfoRow
 import com.shilapi.xcertplay.installer.ui.components.LineProgressBar
 import com.shilapi.xcertplay.installer.update.AppUpdate
 import com.shilapi.xcertplay.installer.update.AppUpdateRepository
+import com.shilapi.xcertplay.installer.update.AppUpdateStatus
 import com.shilapi.xcertplay.installer.update.installUpdateApk
 import kotlinx.coroutines.launch
 import java.io.File
@@ -63,18 +64,28 @@ fun SettingsScreen(
             }.getOrDefault(""),
         )
     }
-    var update by remember { mutableStateOf<AppUpdate?>(null) }
+    var update by remember { mutableStateOf(AppUpdateStatus.available) }
     var updateFile by remember { mutableStateOf<File?>(null) }
     var updatePercent by remember { mutableStateOf<Int?>(null) }
     var updateFailed by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
+    var checkFailed by remember { mutableStateOf(false) }
     var checkedOnce by remember { mutableStateOf(false) }
-    var checkToken by remember { mutableIntStateOf(1) }
+    var checkToken by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(checkToken) {
+        if (checkToken == 0) return@LaunchedEffect
         checking = true
+        checkFailed = false
         updateFailed = false
-        update = AppUpdateRepository.check(context)
+        val result = AppUpdateRepository.check(context)
+        result.onSuccess { found ->
+            update = found
+            AppUpdateStatus.available = found
+        }
+        result.onFailure {
+            checkFailed = true
+        }
         checking = false
         checkedOnce = true
     }
@@ -109,7 +120,6 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             InfoCard(title = "应用升级") {
-                InfoRow(label = "当前版本", value = currentVersion.ifBlank { "未知" })
                 when {
                     checking -> CheckingRow()
                     updateFile != null -> {
@@ -134,6 +144,13 @@ fun SettingsScreen(
                         )
                     }
                     else -> {
+                        if (checkFailed) {
+                            Text(
+                                text = "检查失败，请确认网络后重试。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         if (updateFailed) {
                             Text(
                                 text = "下载失败，请重试。",
@@ -147,7 +164,7 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
-                        if (checkedOnce && update == null) {
+                        if (checkedOnce && !checkFailed && update == null) {
                             Text(
                                 text = "已是最新版本。",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -179,6 +196,20 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            InfoCard(title = "关于") {
+                InfoRow(label = "版本", value = currentVersion.ifBlank { "未知" })
+                Text(
+                    text = "帮你把 DiPlay 安装到凯美瑞 A 导航车机，全程按提示操作即可，不需要电脑。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "非丰田/广汽丰田官方工具，仅供测试使用。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             InfoCard(title = "开发") {

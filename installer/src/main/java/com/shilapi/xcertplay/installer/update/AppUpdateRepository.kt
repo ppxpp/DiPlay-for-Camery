@@ -26,7 +26,7 @@ object AppUpdateRepository {
     private const val UPDATE_URL =
         "https://diplay.mgulu.com/api/v1/apps/installer/android/stable/latest"
 
-    suspend fun check(context: Context): AppUpdate? = withContext(Dispatchers.IO) {
+    suspend fun check(context: Context): Result<AppUpdate?> = withContext(Dispatchers.IO) {
         runCatching {
             val clientId = Settings.Secure.getString(
                 context.contentResolver,
@@ -34,7 +34,7 @@ object AppUpdateRepository {
             ) ?: "unknown"
             val connection = (URL("$UPDATE_URL?id=${Uri.encode(clientId)}").openConnection() as HttpURLConnection)
             checkUpdate(connection, context)
-        }.getOrNull()
+        }
     }
 
     private fun checkUpdate(
