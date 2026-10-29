@@ -131,11 +131,29 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
         } finally { temp.delete() }
     }
     private fun radio(): Radio {
-        val process=ProcessBuilder(radioBinary.path).redirectErrorStream(true).start()
-        val text=BoundedProcessOutput.read(process,8_000,{ closed || isCancelled() || SystemClock.elapsedRealtime()>=startupDeadline })
-        fun number(key: String)=Regex("(?m)^$key=(\\d+)").find(text)?.groupValues?.get(1)?.toInt()
-            ?: error("Vehicle radio audit did not confirm $key")
-        return Radio(number("bcm1_ifindex"),number("iftype"),number("frequency_mhz"))
+        // nl80211 omits WIPHY_FREQ while Broadcom is settling its channel. Missing
+        // data is not a changed radio: re-query briefly without tearing down AP/SPP.
+        // A real frequency/identity mismatch still fails in validateReady below.
+        val deadline=minOf(startupDeadline,SystemClock.elapsedRealtime()+3_000)
+        var samples=0
+        while(true) {
+            checkCurrent()
+            val remaining=deadline-SystemClock.elapsedRealtime()
+            check(remaining>0) { "Vehicle radio audit did not confirm frequency_mhz" }
+            val process=ProcessBuilder(radioBinary.path).redirectErrorStream(true).start()
+            val text=BoundedProcessOutput.read(process,remaining,{ closed || isCancelled() || SystemClock.elapsedRealtime()>=startupDeadline })
+            fun number(key: String)=Regex("(?m)^$key=(\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull()
+            val index=checkNotNull(number("bcm1_ifindex")) { "Vehicle radio audit did not confirm bcm1_ifindex" }
+            val type=checkNotNull(number("iftype")) { "Vehicle radio audit did not confirm iftype" }
+            val frequency=number("frequency_mhz")
+            if(frequency!=null) {
+                if(samples>0)log("Vehicle AP channel audit settled rechecks=$samples frequencyMHz=$frequency")
+                return Radio(index,type,frequency)
+            }
+            check(index>0 && type==3) { "Vehicle AP radio is not ready" }
+            if(samples++==0)log("Vehicle AP channel audit temporarily unavailable; rechecking same AP without reconnecting")
+            Thread.sleep(minOf(150,(deadline-SystemClock.elapsedRealtime()).coerceAtLeast(1)))
+        }
     }
     override fun validateReady() {
         checkCurrent()

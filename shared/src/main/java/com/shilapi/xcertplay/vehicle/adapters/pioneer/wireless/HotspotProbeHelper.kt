@@ -71,7 +71,14 @@ object HotspotProbeHelper {
             cancellation = File(output.path+".cancel")
             // Publish identity before checking cancellation. Recovery first cancels, then reads
             // this marker: a late dispatcher cannot mutate after recovery has moved on.
-            File(output.path+".running").writeText("${Process.myPid()}:${processStart(Process.myPid())}")
+            val running=File(output.path+".running")
+            val runningTemp=File(output.path+".running.tmp")
+            try {
+                runningTemp.writeText("${Process.myPid()}:${processStart(Process.myPid())}")
+                Os.chmod(runningTemp.path,384)
+                Os.chown(runningTemp.path,Os.stat(output.parentFile!!.path).st_uid,-1)
+                check(runningTemp.renameTo(running)) { "Cannot publish hotspot helper identity" }
+            } finally { runningTemp.delete() }
             if(deferred) {
                 check(action==HotspotProbeAction.PREPARE || action==HotspotProbeAction.PREPARE_LOCAL_ONLY)
                 checkCancelled()
@@ -247,7 +254,7 @@ object HotspotProbeHelper {
         } else {
             method.invoke(connectivity, 0, ResultReceiver(null), false)
         }
-        awaitApState(wifi, 13, 15_000, log)
+        awaitApState(wifi, 13, 60_000, log)
 
     }
 
@@ -317,8 +324,9 @@ object HotspotProbeHelper {
         var supplicant = Supplicant.open(log) ?: error("supplicant socket unavailable")
         try {
             var before = supplicant.command("IFNAME=$iface STATUS")
-            val initialDeadline=android.os.SystemClock.elapsedRealtime()+15000
+            val initialDeadline=android.os.SystemClock.elapsedRealtime()+30_000
             while(!before.contains("mode=AP") || !before.contains("wpa_state=COMPLETED")) {
+                checkCancelled()
                 check(android.os.SystemClock.elapsedRealtime()<initialDeadline) { "Vehicle AP supplicant did not become ready" }
                 Thread.sleep(100)
                 before=supplicant.command("IFNAME=$iface STATUS")
@@ -334,9 +342,9 @@ object HotspotProbeHelper {
             catch (failure: java.io.IOException) { log("AP disable reply timeout; reopen socket and verify state (${failure.javaClass.simpleName})") }
             supplicant.close()
             supplicant = Supplicant.open(log) ?: error("cannot reopen supplicant socket")
-            val deadline = System.currentTimeMillis() + 30_000
+            val deadline = android.os.SystemClock.elapsedRealtime() + 30_000
             var idle = false
-            while (System.currentTimeMillis() < deadline) {
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
                 checkCancelled()
                 val state = supplicant.command("IFNAME=$iface STATUS")
                 if (state.lineSequence().any { it == "wpa_state=DISCONNECTED" || it == "wpa_state=INACTIVE" }) { idle = true; break }
@@ -348,8 +356,9 @@ object HotspotProbeHelper {
             check(supplicant.command("IFNAME=$iface ENABLE_NETWORK 0") == "OK")
             check(supplicant.command("IFNAME=$iface SELECT_NETWORK 0") == "OK")
             var current = supplicant.command("IFNAME=$iface STATUS")
-            val readyDeadline=android.os.SystemClock.elapsedRealtime()+8000
+            val readyDeadline=android.os.SystemClock.elapsedRealtime()+30_000
             while(!current.contains("mode=AP") || !current.contains("wpa_state=COMPLETED") || !isFiveGhz(current)) {
+                checkCancelled()
                 check(android.os.SystemClock.elapsedRealtime()<readyDeadline) { "Vehicle 5GHz AP did not become ready" }
                 Thread.sleep(100)
                 current=supplicant.command("IFNAME=$iface STATUS")
@@ -504,9 +513,9 @@ object HotspotProbeHelper {
     }
 
     private fun awaitApState(wifi: Any, target: Int, timeoutMillis: Long, log: (String) -> Unit) {
-        val deadline = System.currentTimeMillis() + timeoutMillis
+        val deadline = android.os.SystemClock.elapsedRealtime() + timeoutMillis
         var last = -1
-        while (System.currentTimeMillis() < deadline) {
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
             if(target==13) checkCancelled()
             val state = runCatching { apState(wifi) }.getOrDefault(-1)
             if (state != last) {
