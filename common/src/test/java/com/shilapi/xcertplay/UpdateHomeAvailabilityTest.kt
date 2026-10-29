@@ -33,7 +33,7 @@ class UpdateHomeAvailabilityTest {
         UpdateAvailability.save(application, release, UpdateChannel.STABLE)
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         val activity = controller.get()
-        val text = activity.getString(R.string.update_available_home)
+        val text = activity.getString(R.string.update_available_home, release.tagName)
         val update = descendants(activity.window.decorView).filterIsInstance<TextView>()
             .single { it.text == text }
 
@@ -44,7 +44,7 @@ class UpdateHomeAvailabilityTest {
 
         assertEquals(SettingsCategory.ABOUT, ReflectionHelpers.getField<SettingsCategory>(activity, "settingsCategory"))
         assertTrue(descendants(activity.window.decorView).filterIsInstance<TextView>().any {
-            it.text == activity.getString(R.string.update_download)
+            it.text == activity.getString(R.string.update_download, release.tagName)
         })
         controller.pause().stop().destroy()
     }
@@ -57,7 +57,7 @@ class UpdateHomeAvailabilityTest {
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         val activity = controller.get()
         val update = descendants(activity.window.decorView).filterIsInstance<TextView>().single {
-            it.text == activity.getString(R.string.update_available_home)
+            it.text == activity.getString(R.string.update_available_home, release.tagName)
         }
 
         assertTrue(update.minHeight >= (48 * activity.resources.displayMetrics.density).toInt())

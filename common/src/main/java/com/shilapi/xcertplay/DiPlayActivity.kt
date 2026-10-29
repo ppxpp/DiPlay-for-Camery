@@ -1101,6 +1101,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val message = getString(
                 if (UpdateChannelStore.load(this) == UpdateChannel.BETA) R.string.update_available_home_beta
                 else R.string.update_available_home,
+                release.tagName,
             )
             val tint = { alpha: Int -> (WARNING and 0x00FFFFFF) or (alpha shl 24) }
             val chip = GradientDrawable().apply {
@@ -2865,6 +2866,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         container.addView(label(getString(R.string.settings_update_flavor_note), 14, MUTED).apply {
             setPadding(0, 0, 0, dp(8))
         })
+        updateRelease?.let { release ->
+            container.addView(button(getString(R.string.settings_update_notes_open), false) {
+                showUpdateNotesDialog(release)
+            }, matchButton(10, 54))
+        }
         updateMessage?.let { container.addView(label(it, 14, MUTED)) }
         when (updateStage) {
             UpdateStage.IDLE, UpdateStage.FAILED ->
@@ -2872,7 +2878,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     matchButton(if (updateMessage == null) 0 else 10, 60))
             UpdateStage.CHECKING -> container.addView(label(getString(R.string.update_checking), 14, MUTED))
             UpdateStage.AVAILABLE -> container.addView(
-                button(getString(R.string.update_download), true) { downloadUpdate() },
+                button(getString(R.string.update_download, updateRelease?.tagName.orEmpty()), true) { downloadUpdate() },
                 matchButton(10, 60))
             UpdateStage.DOWNLOADING -> container.addView(label(getString(R.string.update_downloading, updateProgress ?: 0), 14, MUTED))
             UpdateStage.VERIFYING -> container.addView(label(getString(R.string.update_verifying), 14, MUTED))
@@ -2893,6 +2899,30 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             ).apply { setPadding(0, dp(12), 0, 0) },
         )
         return container
+    }
+
+    /** Long release notes belong in a dialog, not in the settings page flow. */
+    private fun showUpdateNotesDialog(release: UpdateRelease) {
+        val body = column().apply { setPadding(dp(24), dp(12), dp(24), dp(12)) }
+        body.addView(label(
+            release.releaseNotes?.takeIf { it.isNotBlank() } ?: getString(R.string.settings_update_notes_empty),
+            15, TEXT,
+        ).apply {
+            setTextIsSelectable(true)
+            setLineSpacing(dp(4).toFloat(), 1f)
+        })
+        val scroll = ScrollView(appDialogContext()).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(body, FrameLayout.LayoutParams(-1, -2))
+        }
+        val content = FrameLayout(appDialogContext()).apply {
+            addView(scroll, FrameLayout.LayoutParams(-1, dp(240)))
+        }
+        appDialogBuilder()
+            .setTitle(getString(R.string.settings_update_notes_title))
+            .setView(content)
+            .setPositiveButton(getString(R.string.close), null)
+            .show()
     }
 
     private fun updateChannelControl(parent: LinearLayout) {
@@ -2988,7 +3018,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 availableUpdate = null
                                 updateRelease = null
                                 UpdateAvailability.clear(this)
-                                updateMessage = getString(R.string.update_up_to_date)
+                                updateMessage = getString(R.string.update_up_to_date, version())
                                 updateStage = UpdateStage.IDLE
                             }
                             UpdateLookupResult.ChannelUnavailable -> {

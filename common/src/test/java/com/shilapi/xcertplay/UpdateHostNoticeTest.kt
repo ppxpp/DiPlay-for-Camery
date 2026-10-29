@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import com.shilapi.xcertplay.host.R
@@ -24,6 +25,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implements
 import org.robolectric.annotation.Implementation
+import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
@@ -69,8 +71,21 @@ class UpdateHostNoticeTest {
         val activity = controller.get()
 
         assertEquals(SettingsCategory.ABOUT, ReflectionHelpers.getField<SettingsCategory>(activity, "settingsCategory"))
-        assertTrue(descendants(activity.window.decorView).filterIsInstance<TextView>().any {
-            it.text == activity.getString(R.string.update_download)
+        val texts = descendants(activity.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }
+        assertTrue(texts.contains(activity.getString(R.string.update_download, "v99.0.0")))
+        assertTrue(texts.contains(activity.getString(R.string.settings_update_notes_open)))
+
+        descendants(activity.window.decorView).filterIsInstance<TextView>()
+            .single { it.text == activity.getString(R.string.settings_update_notes_open) }
+            .performClick()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        val dialogTexts = descendants(dialog.window!!.decorView).filterIsInstance<TextView>()
+            .map { it.text.toString() }
+        assertTrue(dialogTexts.contains(activity.getString(R.string.settings_update_notes_title)))
+        assertTrue(dialogTexts.contains("Fixed the reconnect race"))
+        val notesHeight = (240 * activity.resources.displayMetrics.density).toInt()
+        assertTrue(descendants(dialog.window!!.decorView).filterIsInstance<ScrollView>().any {
+            it.layoutParams.height == notesHeight
         })
         controller.pause().stop().destroy()
     }
@@ -87,6 +102,7 @@ class UpdateHostNoticeTest {
         apkName = "DiPlay.apk",
         apkUrl = "https://example.com/DiPlay.apk",
         checksumsUrl = "https://example.com/SHA256SUMS.txt",
+        releaseNotes = "Fixed the reconnect race",
     )
 
     private fun descendants(view: View): Sequence<View> = sequence {
