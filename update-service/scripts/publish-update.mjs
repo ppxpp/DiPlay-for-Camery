@@ -21,6 +21,7 @@ const { values } = parseArgs({
     artifact: { type: "string" },
     arch: { type: "string", default: "universal" },
     "notes-url": { type: "string" },
+    "enable-delivery": { type: "boolean", default: false },
     "meta-bucket": { type: "string" },
     "assets-bucket": { type: "string" },
     "account-id": { type: "string" },
@@ -47,6 +48,8 @@ Optional:
   --channel <name>        Default: stable
   --arch <name>           Default: universal
   --notes-url <url>       Release notes URL
+  --enable-delivery       Publish with automatic delivery enabled (mode "all");
+                          omit to keep delivery off until an admin enables it
   --meta-bucket <name>    Default: R2_META_BUCKET
   --assets-bucket <name>  Default: R2_ASSETS_BUCKET
   --account-id <id>       Default: R2_ACCOUNT_ID
@@ -164,7 +167,7 @@ const manifest = {
   versionCode,
   publishedAt: new Date().toISOString(),
   mandatory: false,
-  management: { enabled: false, mode: "all", notes: "" },
+  management: { enabled: values["enable-delivery"] === true, mode: "all", notes: "" },
   ...(values["notes-url"] ? { notesUrl: values["notes-url"] } : {}),
   artifacts: [
     {
