@@ -2,7 +2,7 @@ export const site = {
   name: 'DiPlay 凯美瑞 A 导航适配版',
   shortName: 'DiPlay 凯美瑞版',
   intro:
-    '为八代凯美瑞先锋 A 导航安卓车机提供有线和无线 CarPlay。地图、音乐和通话直接出现在车机屏幕上，不需要越狱、转接盒、账号或认证服务器。',
+    '为八代凯美瑞先锋 A 导航安卓车机提供有线和无线 CarPlay。地图、音乐和通话直接出现在车机屏幕上，不需要越狱、转接盒、账号或认证服务器。开源、免费，并支持应用内 OTA 升级。',
 
   repoUrl: 'https://github.com/ppxpp/DiPlay',
 
@@ -15,7 +15,7 @@ export const site = {
 
   // 待填：飞书文档索引页；为空时首页“查看全部文档”显示为待发布
   docs: {
-    index: '',
+    index: 'https://my.feishu.cn/wiki/BSLLwqDh0iD1l8kuVd7cRzitnpg',
     install: 'https://my.feishu.cn/wiki/DrNzwzq6miBWFUk6t1gcYSVwn3g',
     features: '',
     knownIssues: ''
@@ -25,12 +25,12 @@ export const site = {
 
   device: {
     model: '八代凯美瑞 A 导航',
-    verifiedFirmware: '152 版本',
+    verifiedFirmware: '80 / 132 / 145 / 152（有线），152（无线）',
     connection: '无线 + 有线'
   },
 
   scope:
-    '目前只在 152 版本上完成验证，其他版本尚未验证。其他车型与车机不在支持范围内，也没有增加支持的计划；误装不会损坏系统，但功能无法保证。',
+    '有线连接已在 80、132、145、152 等多个固件版本上完成验证，无线连接已在 152 版本上完成验证，其余版本仍在验证中。其他车型与车机不在支持范围内，也没有增加支持的计划；误装不会损坏系统，但功能无法保证。',
 
 
   limits: [
