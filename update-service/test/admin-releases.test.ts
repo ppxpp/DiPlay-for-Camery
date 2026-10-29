@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSession, sessionCookieName } from "../functions/_shared/admin-auth";
-import { onRequestGet, onRequestPost, onRequestPut } from "../functions/api/v1/admin/releases";
+import { onRequestDelete, onRequestGet, onRequestPost, onRequestPut } from "../functions/api/v1/admin/releases";
 
 const ADMIN_SECRET = "test-session-secret";
 const ADMIN_USERNAME = "admin";
@@ -38,6 +38,7 @@ function memoryBucket(initial: Record<string, unknown>) {
       ? { key, json: async () => JSON.parse(store.get(key)!) }
       : null,
     put: async (key: string, body: string) => { store.set(key, body); },
+    delete: async (key: string) => { store.delete(key); },
     list: async ({ prefix }: { prefix: string }) => ({
       objects: [...store.keys()].filter((key) => key.startsWith(prefix)).sort().map((key) => ({ key })),
       truncated: false,
@@ -45,9 +46,10 @@ function memoryBucket(initial: Record<string, unknown>) {
   };
 }
 
-async function context(bucket: ReturnType<typeof memoryBucket>) {
+async function context(bucket: ReturnType<typeof memoryBucket>, assets = memoryBucket({})) {
   const env = {
     META: bucket as never,
+    ASSETS: assets as never,
     ASSET_BASE_URL: "https://dl.example.com",
     ADMIN_USERNAME,
     ADMIN_PASSWORD_HASH: "unused",
@@ -71,6 +73,14 @@ function call(handler: typeof onRequestPut, env: never, headers: Record<string, 
 
 function stored(bucket: ReturnType<typeof memoryBucket>, key: string) {
   return JSON.parse(bucket.store.get(key)!);
+}
+
+function deleteCall(env: never, headers: Record<string, string>, query: string) {
+  return onRequestDelete({
+    request: new Request(`${BASE_URL}?${query}`, { method: "DELETE", headers }),
+    env,
+    params: {},
+  } as never);
 }
 
 describe("admin release management", () => {
@@ -169,6 +179,65 @@ describe("admin release management", () => {
     expect(body.currentVersion).toBe(OLD_NAME);
     expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
     expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management.enabled).toBe(false);
+  });
+
+  it("deletes a non-current release and its uploaded files", async () => {
+    const assets = memoryBucket({
+      [`${PREFIX}${OLD_NAME}/${OLD_NAME}.apk`]: "apk",
+      [`${PREFIX}${OLD_NAME}/SHA256SUMS.txt`]: "sums",
+    });
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${OLD_NAME}.json`]: manifest(OLD_NAME, 2000),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket, assets);
+
+    const response = await deleteCall(env, headers, `channel=beta&releaseKey=${encodeURIComponent(OLD_NAME)}&version=0.2.21`);
+
+    expect(response.status).toBe(200);
+    expect(bucket.store.has(`${PREFIX}${OLD_NAME}.json`)).toBe(false);
+    expect(stored(bucket, LATEST_KEY).versionName).toBe(NEW_NAME);
+    expect(assets.store.size).toBe(0);
+  });
+
+  it("deletes the current release and repoints to the newest remaining release", async () => {
+    const previous = { ...manifest(OLD_NAME, 2000), management: { enabled: true, mode: "all", notes: "" } };
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${OLD_NAME}.json`]: previous,
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await deleteCall(env, headers, `channel=beta&releaseKey=${encodeURIComponent(NEW_NAME)}&version=0.2.21`);
+
+    expect(response.status).toBe(200);
+    expect(bucket.store.has(`${PREFIX}${NEW_NAME}.json`)).toBe(false);
+    expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
+  });
+
+  it("removes the pointer when the last release is deleted", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await deleteCall(env, headers, `channel=beta&releaseKey=${encodeURIComponent(NEW_NAME)}&version=0.2.21`);
+
+    expect(response.status).toBe(200);
+    expect(bucket.store.has(LATEST_KEY)).toBe(false);
+    expect(bucket.store.has(`${PREFIX}${NEW_NAME}.json`)).toBe(false);
+  });
+
+  it("rejects deleting an unknown release", async () => {
+    const bucket = memoryBucket({ [LATEST_KEY]: manifest(NEW_NAME, 2001) });
+    const { env, headers } = await context(bucket);
+
+    const response = await deleteCall(env, headers, `channel=beta&releaseKey=missing`);
+
+    expect(response.status).toBe(404);
   });
 
   it("keeps a previously enabled release published after delivery is turned off", async () => {

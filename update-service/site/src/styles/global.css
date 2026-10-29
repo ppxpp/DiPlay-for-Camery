@@ -530,6 +530,17 @@ a.btn:hover {
   border-color: #cbd5e1;
 }
 
+.btn.danger {
+  background: var(--color-surface);
+  border-color: #f3c4c4;
+  color: #b42318;
+}
+
+.btn.danger:hover {
+  background: #fff5f5;
+  border-color: #e79a9a;
+}
+
 .btn:disabled,
 .btn[aria-disabled="true"] {
   background: #f1f5f9;

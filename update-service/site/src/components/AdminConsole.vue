@@ -165,6 +165,28 @@ async function rollback(release: Release) {
   }
 }
 
+async function remove(release: Release) {
+  const label = release.versionName ?? release.version;
+  const current = release.releaseKey === currentVersions[release.channel];
+  const note = current ? '它当前是推荐版本，删除后会自动回退到上一个可用版本。' : '';
+  if (!window.confirm(`删除 ${label}？版本记录和安装包文件会一并删除，且不可恢复。${note}`)) return;
+  message.value = '';
+  try {
+    const params = new URLSearchParams({
+      channel: release.channel,
+      releaseKey: release.releaseKey,
+      version: release.version,
+    });
+    const result = await request(`/api/v1/admin/releases?${params}`, { method: 'DELETE' });
+    message.value = result.assetsRemoved === false
+      ? `已删除 ${label}，但安装包文件清理失败，请稍后重试。`
+      : `已删除 ${label}`;
+    await load();
+  } catch (cause) {
+    message.value = cause instanceof Error ? cause.message : '删除失败';
+  }
+}
+
 async function logout() {
   try {
     await request('/api/v1/admin/logout', { method: 'POST' });
@@ -338,6 +360,14 @@ onUnmounted(() => {
                 @click="rollback(release)"
               >
                 设为当前下发版本
+              </button>
+              <button
+                class="btn danger btn--compact"
+                type="button"
+                :disabled="busy"
+                @click="remove(release)"
+              >
+                删除
               </button>
             </div>
           </header>

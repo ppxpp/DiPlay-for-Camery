@@ -36,6 +36,7 @@ export interface StoredManifest {
 
 export interface Env {
   META: R2Bucket;
+  ASSETS: R2Bucket;
   ASSET_BASE_URL: string;
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD_HASH: string;

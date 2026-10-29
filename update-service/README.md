@@ -24,7 +24,10 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
 GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
+DELETE /api/v1/admin/releases?channel={channel}&releaseKey={versionName}  (admin)
 ```
+
+`DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
 
 A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
 
@@ -74,7 +77,7 @@ Set the public asset base URL in `wrangler.toml` or in the Pages project environ
 ASSET_BASE_URL = "https://dl.example.com"
 ```
 
-Bind the metadata bucket `gtmc-app-updates-meta-prod` as `META`. The assets bucket is read directly through its custom domain and is not bound to the Function.
+Bind the metadata bucket `gtmc-app-updates-meta-prod` as `META`. Bind the assets bucket as `ASSETS` so admin deletes can remove release files; the download site still reads it directly through its custom domain.
 
 Deploy the Pages project (builds the Astro site into `dist/`, then uploads it with the Functions):
 
