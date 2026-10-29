@@ -15,7 +15,7 @@ export const site = {
 
   // 待填：飞书文档索引页；为空时首页“查看全部文档”显示为待发布
   docs: {
-    index: '',
+    index: 'https://my.feishu.cn/wiki/BSLLwqDh0iD1l8kuVd7cRzitnpg',
     install: 'https://my.feishu.cn/wiki/DrNzwzq6miBWFUk6t1gcYSVwn3g',
     features: '',
     knownIssues: ''
