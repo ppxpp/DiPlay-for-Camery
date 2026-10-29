@@ -157,7 +157,10 @@ jobs:
                 ;;
             esac
           fi
+          ADAPTATION_VERSION="$(printf '%s' "$VERSION_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)"
+          test -n "$ADAPTATION_VERSION" || ADAPTATION_VERSION="$APP_VERSION"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "ADAPTATION_VERSION=$ADAPTATION_VERSION" >> "$GITHUB_ENV"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "Built $VERSION_NAME ($VERSION_CODE) as $APP_VERSION"
@@ -195,7 +198,9 @@ jobs:
         run: |
           RELEASE_DIR="$RUNNER_TEMP/release"
           mkdir -p "$RELEASE_DIR"
-          APK_NAME="${VERSION_NAME}.apk"
+          CHANNEL_SUFFIX=""
+          if [ "$CHANNEL" = "beta" ]; then CHANNEL_SUFFIX="-beta"; fi
+          APK_NAME="DiPlay凯美瑞A导航适配版_${ADAPTATION_VERSION}${CHANNEL_SUFFIX}.apk"
           cp mobile/build/outputs/apk/release/mobile-release.apk "$RELEASE_DIR/$APK_NAME"
           (
             cd "$RELEASE_DIR"
@@ -276,19 +281,30 @@ jobs:
             --cache-control "no-store" \
             --only-show-errors
 
-      - name: Verify the public update endpoint
+      - name: Verify the uploaded release manifest
         if: github.event_name == 'workflow_dispatch'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: "true"
         run: |
-          API_URL="${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          MANIFEST_KEY="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/latest.json"
           for attempt in 1 2 3 4 5; do
-            if BODY="$(curl -fsS "$API_URL")" && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" --arg versionName "$VERSION_NAME" '.version == $version and .versionName == $versionName' > /dev/null; then
-              echo "Verified $API_URL -> $APP_VERSION ($VERSION_NAME)"
+            if BODY="$(aws s3 cp "s3://${R2_META_BUCKET}/${MANIFEST_KEY}" - --endpoint-url "$ENDPOINT" --only-show-errors)" \
+              && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" --arg versionName "$VERSION_NAME" \
+                '.version == $version and .versionName == $versionName and .management.enabled == false' > /dev/null; then
+              echo "Verified ${MANIFEST_KEY} -> ${APP_VERSION} (${VERSION_NAME}); delivery stays disabled until enabled in admin"
               exit 0
             fi
-            echo "Waiting for $API_URL to report $APP_VERSION (attempt $attempt)"
+            echo "Waiting for ${MANIFEST_KEY} to report ${APP_VERSION} (attempt ${attempt})"
             sleep 2
           done
-          echo "::error::The update endpoint did not return $APP_VERSION"
+          echo "::error::The uploaded manifest did not report ${APP_VERSION}"
           exit 1
 
       - name: Keep a workflow copy of the release
