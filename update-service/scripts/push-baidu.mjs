@@ -42,7 +42,8 @@ async function collectUrls() {
 }
 
 async function push(urls) {
-  const endpoint = `http://data.zz.baidu.com/urls?site=${encodeURIComponent(SITE)}&token=${encodeURIComponent(TOKEN)}`;
+  // Baidu rejects a percent-encoded site value with "site init fail".
+  const endpoint = `http://data.zz.baidu.com/urls?site=${SITE}&token=${encodeURIComponent(TOKEN)}`;
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
