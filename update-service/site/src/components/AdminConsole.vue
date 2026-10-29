@@ -6,6 +6,7 @@ type Channel = 'stable' | 'beta';
 type ChannelFilter = 'all' | Channel;
 type Management = {
   enabled: boolean;
+  published?: boolean;
   mode: 'all' | 'percentage' | 'whitelist';
   percentage?: number;
   ids?: string[];

@@ -6,14 +6,16 @@ const params = { appId: "diplay", platform: "android", channel: "beta" };
 const latestKey = "apps/diplay/android/beta/latest.json";
 const snapshots = "apps/diplay/android/beta/releases/";
 
-function release(version: string, versionCode: number, enabled: boolean | undefined, publishedAt: string) {
+function release(version: string, versionCode: number, enabled: boolean | undefined, publishedAt: string, published?: boolean) {
   return {
     schemaVersion: 1,
     version,
     versionName: `${version}_凯美瑞A导航适配版_0.3.1`,
     versionCode,
     publishedAt,
-    ...(enabled === undefined ? {} : { management: { enabled, mode: "all", notes: "" } }),
+    ...(enabled === undefined ? {} : {
+      management: { enabled, ...(published === undefined ? {} : { published }), mode: "all", notes: "" },
+    }),
     artifacts: [{
       name: "DiPlay凯美瑞A导航适配版_0.3.1-beta.apk",
       arch: "universal",
@@ -100,6 +102,18 @@ describe("public release visibility", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json() as { releases: Array<{ versionCode: number }> };
+    expect(body.releases.map((item) => item.versionCode)).toEqual([2001]);
+  });
+
+  it("keeps a published release visible after delivery is turned off", async () => {
+    const disabled = release("0.2.21", 2001, false, "2026-10-26T07:39:36Z", true);
+
+    const latestResponse = await publicLatest(context({ [latestKey]: disabled }));
+    expect(latestResponse.status).toBe(200);
+    expect((await latestResponse.json() as { versionCode: number }).versionCode).toBe(2001);
+
+    const historyResponse = await publicReleases(context({ [`${snapshots}0.2.21.json`]: disabled }));
+    const body = await historyResponse.json() as { releases: Array<{ versionCode: number }> };
     expect(body.releases.map((item) => item.versionCode)).toEqual([2001]);
   });
 });

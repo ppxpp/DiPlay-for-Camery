@@ -107,7 +107,7 @@ describe("admin release management", () => {
     expect(response.status).toBe(200);
 
     expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
-      .toEqual({ enabled: true, mode: "all", notes: "新版本说明" });
+      .toEqual({ enabled: true, published: true, mode: "all", notes: "新版本说明" });
     expect(stored(bucket, `${PREFIX}${OLD_NAME}.json`).management)
       .toEqual({ enabled: false, mode: "all", notes: "" });
     expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
@@ -169,5 +169,27 @@ describe("admin release management", () => {
     expect(body.currentVersion).toBe(OLD_NAME);
     expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
     expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management.enabled).toBe(false);
+  });
+
+  it("keeps a previously enabled release published after delivery is turned off", async () => {
+    const current = { ...manifest(NEW_NAME, 2001), management: { enabled: true, mode: "all", notes: "" } };
+    const bucket = memoryBucket({
+      [LATEST_KEY]: current,
+      [`${PREFIX}${NEW_NAME}.json`]: current,
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: NEW_NAME,
+      version: "0.2.21",
+      management: { enabled: false, mode: "all", notes: "" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
+      .toEqual({ enabled: false, published: true, mode: "all", notes: "" });
+    expect(stored(bucket, LATEST_KEY).management)
+      .toEqual({ enabled: false, published: true, mode: "all", notes: "" });
   });
 });

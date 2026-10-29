@@ -3,17 +3,13 @@ import {
   allReleaseManifests,
   assetUrl,
   isManifest,
+  isPublishedRelease,
   json,
   releasePrefix,
 } from "../../../../../../_shared/management";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
-
-/** Candidates stay invisible until an admin enables delivery for them. */
-function isPublished(manifest: StoredManifest): boolean {
-  return manifest.management?.enabled !== false;
-}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env, params }) => {
   const appId = first(params.appId);
@@ -29,10 +25,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   if (!isManifest(manifest)) return json({ error: "invalid_manifest" }, 502);
 
   let stored: StoredManifest = manifest;
-  if (!isPublished(stored)) {
+  if (!isPublishedRelease(stored)) {
     // Keep the last published release visible while a new candidate waits for review.
     const fallback = (await allReleaseManifests(env.META, releasePrefix(appId, platform, channel)))
-      .filter(({ manifest: release }) => isPublished(release))
+      .filter(({ manifest: release }) => isPublishedRelease(release))
       .sort((left, right) =>
         (right.manifest.publishedAt ?? "").localeCompare(left.manifest.publishedAt ?? "") ||
         right.manifest.versionCode - left.manifest.versionCode,

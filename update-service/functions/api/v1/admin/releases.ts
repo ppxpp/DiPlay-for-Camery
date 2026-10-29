@@ -66,7 +66,11 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const manifest = await readManifest(env.META, releaseKeyPath);
   if (!manifest) return json({ error: "release_not_found" }, 404);
   if (version && manifest.version !== version) return json({ error: "release_not_found" }, 404);
-  manifest.management = management;
+  const wasPublished = manifest.management?.published === true || manifest.management?.enabled === true;
+  const nextManagement = { ...management };
+  delete nextManagement.published;
+  if (wasPublished || management.enabled) nextManagement.published = true;
+  manifest.management = nextManagement;
   await writeManifest(env.META, releaseKeyPath, manifest);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const latest = await readManifest(env.META, latestKey);
