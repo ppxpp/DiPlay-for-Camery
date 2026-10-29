@@ -3,6 +3,10 @@ package com.shilapi.xcertplay.btprobe
 import android.os.Build
 import android.os.IBinder
 import android.os.Parcel
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.ExecutionException
 
 /** 编号仅适用于已分析的先锋固件。回复是原生状态码与输出，没有 Java AIDL 异常头。 */
 internal class PioneerBinder(private val log: (String) -> Unit) {
@@ -10,7 +14,8 @@ internal class PioneerBinder(private val log: (String) -> Unit) {
         const val SERVICE = "jp.pioneer.ceam.Blueforce.manage"
         private const val FIRMWARE =
             "Android/tamago_3T_uart/tamago_3T_uart:7.1.2/2.0.0-rfp-rc6/1:user/release-keys"
-        fun firmwareKnown(): Boolean = Build.FINGERPRINT == FIRMWARE
+        fun firmwareKnown(): Boolean = Build.FINGERPRINT in setOf(FIRMWARE,
+            FIRMWARE.replace("/1:user/", "/5:user/"))
         fun service(name: String): IBinder? = Class.forName("android.os.ServiceManager")
             .getMethod("getService", String::class.java).invoke(null, name) as? IBinder
     }
@@ -24,7 +29,16 @@ internal class PioneerBinder(private val log: (String) -> Unit) {
     }
     fun startCandidate() = transact(133, 0)
     fun stopCandidate() = transact(135, 0)
+    @Volatile private var timedOut = false
     private fun transact(code: Int, vararg args: Int): List<Int> {
+        check(!timedOut) { "本轮 Binder 已超时，不再向可能阻塞的蓝牙服务排队" }
+        val pending = FutureTask { transactDirect(code,*args) }
+        Thread(pending,"blueforce-binder-$code").apply { isDaemon=true;start() }
+        return try { pending.get(3000,TimeUnit.MILLISECONDS) }
+        catch (failure: TimeoutException) { timedOut=true;error("蓝牙 Binder code=$code 超时；停止后续调用，请检查服务") }
+        catch (failure: ExecutionException) { throw (failure.cause ?: failure) }
+    }
+    private fun transactDirect(code: Int, vararg args: Int): List<Int> {
         check(firmwareKnown()) { "固件指纹不同，未发送 Binder 调用" }
         val target = binder()
         val request = Parcel.obtain()

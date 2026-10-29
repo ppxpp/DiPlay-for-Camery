@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">USB ADB 偵錯 · %1$s</string>
+    <string name="settings_camry_usb_adb_on">已開啟</string>
+    <string name="settings_camry_usb_adb_off">已關閉</string>
+    <string name="settings_camry_usb_adb_unknown">未知或切換中</string>
+    <string name="settings_camry_usb_adb_changing">正在切換…</string>
+    <string name="settings_camry_usb_adb_description">僅適用於凱美瑞 A 導航，點擊切換 USB ADB 偵錯開關。</string>
+    <string name="settings_camry_usb_adb_failed">無法確認 ADB 狀態，請稍後重試。</string>
+</resources>

@@ -4,6 +4,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.shilapi.xcertplay.host.R
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,6 +58,12 @@ class PreparationLayoutTest {
             }
         }
         for (height in listOf(200, 240, 320, 400, 479, 480, 720)) layout(height)
-        assertEquals(28f, (panel.getChildAt(1) as TextView).textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
+        val title = (0 until panel.childCount).map(panel::getChildAt).filterIsInstance<TextView>()
+            .first { it.text == activity.getString(R.string.diplay) }
+        assertEquals(28f, title.textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
+        // The licence notice overlays the page; it must not take space in the centred panel.
+        val notice = activity.getString(R.string.home_license_notice)
+        assertTrue((0 until viewport.childCount).map(viewport::getChildAt).filterIsInstance<TextView>().any { it.text == notice })
+        assertFalse((0 until panel.childCount).map(panel::getChildAt).filterIsInstance<TextView>().any { it.text == notice })
     }
 }

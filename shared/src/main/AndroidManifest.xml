@@ -45,6 +45,7 @@
     </queries>
 
     <application android:usesCleartextTraffic="true">
+        <service android:name="com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetentionService" android:exported="false" />
         <!-- Minimum Car API level -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"

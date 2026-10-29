@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_camry_section">تكيّف وحدة سيارة Camry A Navigation</string>
     <string name="settings_camry_title">تفعيل التكيّف مع وحدة سيارة Camry A Navigation</string>
-    <string name="settings_camry_description">عند التفعيل، تتعامل DiPlay مع USB وVPN والصوت والميكروفون وHUD وفق تكامل وحدة سيارة Camry A Navigation. يعتمد الكشف التلقائي على الطراز؛ اختر «فرض التفعيل» عند عدم التعرف، و«عدم التفعيل» في السيارات الأخرى. أعد توصيل CarPlay بعد التغيير.</string>
+    <string name="settings_camry_description">عند التفعيل، تتعامل DiPlay مع USB وVPN والصوت والميكروفون وHUD وفق تكامل وحدة سيارة Camry A Navigation. يعتمد الكشف التلقائي على الطراز؛ اختر «فرض التفعيل» عند عدم التعرف، و«عدم التفعيل» في السيارات الأخرى. أعد توصيل CarPlay بعد التغيير. عند التفعيل تستخدم الاتصالات اللاسلكية الطريقة المخصصة لوحدة السيارة.</string>
     <string name="settings_camry_auto">الكشف التلقائي (الافتراضي)</string>
     <string name="settings_camry_on">فرض التفعيل</string>
     <string name="settings_camry_off">عدم التفعيل</string>

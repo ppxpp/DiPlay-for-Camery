@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">Debug USB ADB · %1$s</string>
+    <string name="settings_camry_usb_adb_on">Attivo</string>
+    <string name="settings_camry_usb_adb_off">Disattivo</string>
+    <string name="settings_camry_usb_adb_unknown">Sconosciuto / in modifica</string>
+    <string name="settings_camry_usb_adb_changing">Modifica…</string>
+    <string name="settings_camry_usb_adb_description">Solo per Camry A. Tocca per cambiare il debug USB ADB.</string>
+    <string name="settings_camry_usb_adb_failed">Impossibile confermare lo stato ADB. Riprova tra poco.</string>
+</resources>

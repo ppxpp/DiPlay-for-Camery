@@ -309,26 +309,11 @@ class PioneerDebugService : Service() {
                 getSharedPreferences("pioneer-debug", MODE_PRIVATE).edit().putBoolean("lwip_diagnostics", PioneerDiagnostics.enabled).apply()
                 send(socket, reply.put("mode", mode).put("message", "聚合计时开关立即生效；连接与错误日志继续保留"))
             }
-            "native-ncm-startup" -> {
-                require(PioneerWiredBackend.selectorVisible) { "Wired backend controls are debug-only" }
-                require(PioneerWiredBackend.nativeNcmIncluded) { "Native NCM is not included in this build" }
-                require(PioneerUsbPolicy.matchesDevice())
-                fun choice(key: String): Boolean? = if (!request.has(key)) null else
-                    request.getString(key).also { require(it == "ON" || it == "OFF") } == "ON"
-                val warm = choice("warmWorker")
-                val prewarm = choice("prewarm")
-                if (warm != null || prewarm != null) PioneerDebugUpdateGuard.withCacheMaintenance {
-                    PioneerNativeNcmStartupPolicy.save(this, warm, prewarm)
-                }
-                send(socket, reply.put("warmWorker", PioneerNativeNcmStartupPolicy.warmWorkerEnabled(this))
-                    .put("prewarm", PioneerNativeNcmStartupPolicy.prewarmEnabled(this))
-                    .put("message", "仅调整NCM启动策略；预热开关须重启应用进程后对比，不重启车机、不切换后端"))
-            }
             "network-backend" -> {
                 require(PioneerWiredBackend.selectorVisible) { "Wired backend controls are debug-only" }
                 val mode = request.getString("mode")
                 val backend = PioneerWiredBackend.Mode.entries.firstOrNull { it.name == mode }
-                require(backend != null) { "mode must be LWIP, NATIVE_NCM, LWIP_OPTIMIZED or VPN" }
+                require(backend != null) { "mode must be LWIP, LWIP_OPTIMIZED or VPN" }
                 val state = PioneerDebugRuntime.snapshot()
                 require(!state.optBoolean("controllerRunning") && !state.optBoolean("backgroundSession") &&
                     !state.optBoolean("hostAttached") && !state.optBoolean("hostStateTimeout") &&
@@ -416,29 +401,6 @@ class PioneerDebugService : Service() {
                 }
             })
 
-    private fun nativeNcmLeaseDiagnostics(): JSONArray {
-        if (!PioneerWiredBackend.nativeNcmIncluded) return JSONArray()
-        val root = File(filesDir, "native-ncm")
-        val records = root.listFiles().orEmpty().filter {
-            it.isDirectory && it.name.matches(Regex("[0-9a-f]{32}"))
-        }.sortedByDescending { File(it, "status.json").lastModified() }.take(8)
-        return JSONArray(records.map { directory ->
-            val summary = JSONObject()
-            runCatching {
-                val file = File(directory, "status.json")
-                check(file.length() in 1..8192) { "Helper status unavailable" }
-                val value = JSONObject(file.readText())
-                for (key in listOf("state", "mode", "updated", "interface", "index")) {
-                    if (value.has(key)) summary.put(key, value.get(key))
-                }
-                summary.put("error", PioneerDebugRuntime.redact(value.optString("error")).orEmpty())
-                summary.put("ageMs", android.os.SystemClock.elapsedRealtime() - value.optLong("updated", 0))
-                summary.put("stopRequested", File(directory, "stop").exists())
-            }.onFailure { summary.put("readError", it.javaClass.simpleName) }
-            summary
-        })
-    }
-
     fun status(compact: Boolean = false): JSONObject {
         if (compact) return JSONObject().put("host", PioneerDebugRuntime.snapshot())
             .put("networkBackend", PioneerWiredBackend.mode(this).name)
@@ -477,14 +439,11 @@ class PioneerDebugService : Service() {
             .put("matchedModel", PioneerUsbPolicy.matchesModel())
             .put("matchedFirmware", PioneerUsbPolicy.matchesDevice()).put("devices", JSONArray(devices))
             .put("lastCommand", PioneerDebugRuntime.lastCommand)
-            .put("networkBackend", if (PioneerWiredBackend.nativeEnabled(this)) "NATIVE_NCM"
-                else if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
+            .put("networkBackend", if (PioneerWiredBackend.optimizedEnabled(this)) "LWIP_OPTIMIZED"
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
             .put("usbLaunchPolicy", PioneerUsbLaunchPolicy.snapshot(this))
             .put("sampledAtMs", System.currentTimeMillis())
-            .put("nativeNcmIncluded", PioneerWiredBackend.nativeNcmIncluded)
             .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
-            .put("nativeNcmLeases", nativeNcmLeaseDiagnostics())
             .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
             .put("vpnPermission", PioneerVpnPermissionGrant.status(this))
              .put("rootInitialization", PioneerRootSession.status())

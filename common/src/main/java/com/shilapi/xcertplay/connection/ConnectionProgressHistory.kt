@@ -19,16 +19,16 @@ internal class ConnectionProgressHistory(context: Context) {
 
     fun create(config: CarPlayRuntimeConfig, previous: ConnectionProgress?): ConnectionProgress {
         val wireless = config.transport == CarPlayTransport.WIRELESS
-        val proxy = wireless && config.wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI && config.remoteRfcommGateway != null
         val channel = when {
+            wireless && config.wirelessHotspotMode == WirelessHotspotMode.PIONEER_VEHICLE ->
+                com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS
             wireless -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.WIRELESS
-            config.nativeNcmEnabled -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.NATIVE_NCM
             config.optimizedLwipEnabled || PioneerLwipRuntime.enabled(context) -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.LWIP
             config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.VPN
             else -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.FRAMEWORK
         }
-        val link = if (wireless) "wireless-${config.wirelessHotspotMode.name}-${if (proxy) "proxy" else "native"}"
-            else "usb-${if (config.nativeNcmEnabled) "native-ncm" else if (config.optimizedLwipEnabled) "lwip-optimized" else if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
+        val link = if (wireless) "wireless-${config.wirelessHotspotMode.name}-native"
+            else "usb-${if (config.optimizedLwipEnabled) "lwip-optimized" else if (PioneerLwipRuntime.enabled(context)) "lwip" else "framework"}"
         val profile = "$link-${channel.name}-${config.mfiTarget.name}"
         val samples = read(profile)
         val baseline = if (samples.isEmpty()) null else ConnectionTiming(
@@ -64,7 +64,7 @@ internal class ConnectionProgressHistory(context: Context) {
         (maxOf(0, json.length() - MAX_SAMPLES) until json.length()).mapNotNull { index ->
             val row = json.optJSONObject(index) ?: return@mapNotNull null
             val total = row.optLong("total", -1)
-            val durations = ConnectionStep.entries.associateWith { row.optLong(it.key, -1) }
+            val durations = ConnectionStep.entries.associateWith { row.optLong(it.key, if(it == ConnectionStep.WIRELESS_BOOTSTRAP || it == ConnectionStep.WIRELESS_JOIN) 0 else -1) }
             if (total !in 1..180_000 || durations.values.any { it < 0 || it > total } || durations.values.sum() != total) null
             else ConnectionTiming(durations, total)
         }

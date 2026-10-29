@@ -61,7 +61,7 @@ public class PioneerRootTaskProtocolTest {
     }
 
     @Test public void leaseMustBeDirectChildWithValidToken() throws Exception {
-        File root = new File(System.getProperty("java.io.tmpdir"), "native-ncm");
+        File root = new File(System.getProperty("java.io.tmpdir"), "root-task");
         String token = "0123456789abcdef0123456789abcdef";
         assertEquals(new File(root, token).getCanonicalFile(),
                 PioneerRootTaskProtocol.resolveLease(root, new File(root, token).getPath()));

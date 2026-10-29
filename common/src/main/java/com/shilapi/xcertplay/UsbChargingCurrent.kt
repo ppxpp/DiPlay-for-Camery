@@ -14,6 +14,6 @@ enum class UsbChargingCurrent(val key: String, val milliAmps: Int) {
     LOW("low", CarPlayRuntimeConfig.DEFAULT_AVAILABLE_CURRENT_MILLI_AMPS);
 
     companion object {
-        fun fromKey(key: String?): UsbChargingCurrent = entries.firstOrNull { it.key == key } ?: LOW
+        fun fromKey(key: String?): UsbChargingCurrent = entries.firstOrNull { it.key == key } ?: REDUCED
     }
 }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_hotspot_retention_title">CarPlay 切断後のホットスポット保持</string>
+    <string name="settings_camry_hotspot_retention_description">カムリ A ナビのみで有効です。CarPlay 切断後、指定時間が経過するとホットスポットをオフにします。その間に再接続するとホットスポットを再利用し、待ち時間を短縮できます。</string>
+    <string name="settings_camry_hotspot_retention_immediate">すぐにオフ</string>
+    <string name="settings_camry_hotspot_retention_seconds">%1$d 秒</string>
+    <string name="waiting_vehicle_bluetooth">iPhone が車の Bluetooth に接続するのを待っています</string>
+    <string name="vehicle_bluetooth_connect_hint">車の Bluetooth に接続してください</string>
+    <string name="vehicle_bluetooth_missing_hint">Bluetooth 未接続。接続して再試行してください</string>
+</resources>

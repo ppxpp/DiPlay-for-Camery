@@ -1,7 +1,6 @@
 package com.shilapi.xcertplay.airplay
 
 import java.io.Closeable
-import java.io.IOException
 import java.math.BigInteger
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -23,9 +22,6 @@ class NtpClock(
     /** The control connection's local address; its family picks the listener's wildcard. */
     private val bindAddress: InetAddress? = null,
     private val exactBindAddress: Boolean = false,
-    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
-    private val expectedPeer: InetAddress? = null,
-    private val onFailure: (Throwable) -> Unit = {},
 ) : Closeable {
     private val lwipSession = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.sessionId
     private var portLease: Closeable? = null
@@ -49,8 +45,7 @@ class NtpClock(
 
     fun listen(): Int {
         check(!running.getAndSet(true)) { "NtpClock is already running" }
-        val bound = if (nativeBinding != null) DatagramSocket(null).also { nativeBinding.bind(it) }
-            else CarFirewallPorts.udpSocket(bindAddress, preferredPorts, exactBindAddress)
+        val bound = CarFirewallPorts.udpSocket(bindAddress, preferredPorts, exactBindAddress)
         synchronized(socketLock) { socket = bound }
         try { portLease = com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPort(bound.localPort, true, lwipSession) }
         catch (error: Throwable) { close(); throw error }
@@ -61,7 +56,7 @@ class NtpClock(
     fun start(peerAddress: InetAddress, port: Int) {
         require(port > 0) { "timing port must be positive" }
         com.shilapi.xcertplay.pioneer.PioneerLwipRuntime.registerPeerUdp(peerAddress, port, lwipSession)
-        peer = nativeBinding?.peerEndpoint(peerAddress, port) ?: InetSocketAddress(peerAddress, port)
+        peer = InetSocketAddress(peerAddress, port)
         sender = Thread(::runSender, "airplay-ntp-tx").apply { isDaemon = true; start() }
     }
 
@@ -89,7 +84,6 @@ class NtpClock(
             } catch (_: InterruptedException) {
                 return
             } catch (error: Exception) {
-                if (nativeBinding != null) { if (running.get()) onFailure(IOException("timing send-request: ${error.message}", error)); return }
                 try {
                     Thread.sleep(REQUEST_INTERVAL_MS)
                 } catch (_: InterruptedException) {
@@ -118,19 +112,13 @@ class NtpClock(
             val packet = DatagramPacket(buffer, buffer.size)
             try {
                 sock.receive(packet)
-                nativeBinding?.validatePeer(packet.address, expectedPeer)
             } catch (error: Exception) {
-                if (nativeBinding != null) { if (running.get()) onFailure(IOException("timing receive-or-validate: ${error.message}", error)); return }
                 if (running.get()) continue else return
             }
             val message = packet.data.copyOf(packet.length)
             val address = packet.address
             if (message.size >= NTP_PACKET_BYTES && address != null) {
-                try { handleMessage(message, nativeBinding?.peerEndpoint(address, packet.port) ?: InetSocketAddress(address, packet.port)) }
-                catch (error: Exception) {
-                    if (nativeBinding != null) { if (running.get()) onFailure(IOException("timing handle-message: ${error.message}", error)); return }
-                    throw error
-                }
+                handleMessage(message, InetSocketAddress(address, packet.port))
             }
         }
     }

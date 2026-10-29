@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">USB ADB debugging · %1$s</string>
+    <string name="settings_camry_usb_adb_on">On</string>
+    <string name="settings_camry_usb_adb_off">Off</string>
+    <string name="settings_camry_usb_adb_unknown">Unknown / changing</string>
+    <string name="settings_camry_usb_adb_changing">Changing…</string>
+    <string name="settings_camry_usb_adb_description">For Camry A navigation only. Tap to switch USB ADB debugging.</string>
+    <string name="settings_camry_usb_adb_failed">Could not confirm ADB state. Try again shortly.</string>
+</resources>
