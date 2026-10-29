@@ -893,7 +893,7 @@
     <string name="connection_help_wifi_direct">Mantén activados el Wi-Fi y el Bluetooth de la unidad y el iPhone desbloqueado y cerca, y reintenta. Si sigue fallando, olvida el coche en el iPhone en Ajustes → General → CarPlay y vuelve a conectarte.</string>
     <string name="connection_help_existing_wifi">Comprueba que la unidad y el iPhone estén en la misma red Wi-Fi y que su nombre y contraseña coincidan con DiPlay, y reintenta.</string>
     <string name="settings_report_on_phone">Obtener el informe en un teléfono</string>
-    <string name="settings_report_on_phone_hint">Escanea el código con la cámara del teléfono para abrir esta página en su navegador y elige Descargar informe. Mantén esta pantalla abierta hasta que termine la descarga.</string>
+    <string name="settings_report_on_phone_hint">Escanee y descargue el informe ZIP con registros, estado del sistema y componentes disponibles. La recopilación puede tardar un minuto. Mantenga esta pantalla abierta hasta que termine la descarga.</string>
     <string name="settings_mfi_target_description">Elige USB/CH341 solo si hay un adaptador de autenticación CH341 conectado a la unidad principal. Sin él, elige Local sin conexión. Se aplica en la próxima conexión.</string>
     <string name="settings_call_speakerphone">Llamadas por el altavoz</string>
     <string name="settings_call_speakerphone_description">Para un teléfono o una tableta Android usados como unidad principal: reproduce las llamadas de CarPlay por su altavoz en lugar del auricular y usa su micrófono manos libres. Déjalo desactivado en la unidad principal de un coche. Se aplica desde la próxima llamada.</string>
@@ -954,4 +954,5 @@
     <string name="disclaimer_page4_l2">Puedes desactivarlo en Ajustes · Diagnóstico; las sesiones y los fallos se detienen tras reiniciar la app.</string>
     <string name="home_build_basis">(Basado en DiPlay %1$s)</string>
     <string name="home_license_notice">Este software es de código abierto y gratuito · Prohibida la reventa o el uso comercial · No usar durante la conducción · Bajo su propio riesgo</string>
+    <string name="diagnostic_same_wifi_required">Importante: el teléfono y la unidad deben estar conectados a la misma red Wi-Fi. Si usa el punto de acceso del coche, conecte el teléfono antes de escanear.</string>
 </resources>

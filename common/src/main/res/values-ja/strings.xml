@@ -994,7 +994,7 @@
     <string name="connection_help_wifi_direct">車載端末のWi-FiとBluetoothをオンにし、iPhoneのロックを解除して近くに置いてから再試行してください。改善しない場合は、iPhoneの［設定］→［一般］→［CarPlay］でこの車の登録を削除してから再接続してください。</string>
     <string name="connection_help_existing_wifi">車載端末とiPhoneが同じWi-Fiネットワークに接続され、その名前とパスワードがDiPlayの設定と一致しているか確認して、再試行してください。</string>
     <string name="settings_report_on_phone">スマートフォンでレポートを取得</string>
-    <string name="settings_report_on_phone_hint">スマートフォンのカメラでQRコードを読み取って、ブラウザーでページを開き、「レポートをダウンロード」を選んでください。ダウンロードが終わるまでこの画面を開いたままにしてください。</string>
+    <string name="settings_report_on_phone_hint">スマートフォンでコードを読み取り、ブラウザーでレポートをダウンロードしてください。ログ、システム状態、読み取り可能なシステム部品を ZIP にまとめます。収集には約1分かかる場合があります。完了までこの画面を開いてください。</string>
     <string name="settings_mfi_target_description">USB/CH341 は、CH341 認証アダプターを車載機に接続しているときだけ選択してください。接続していない場合は「ローカル／オフライン」を選択します。次回の接続から適用されます。</string>
     <string name="settings_call_speakerphone">通話をスピーカーで再生</string>
     <string name="settings_call_speakerphone_description">車載機として使う Android スマートフォンやタブレット向け：CarPlay の通話を受話口ではなくスピーカーで再生し、ハンズフリー用マイクを使います。車の車載機ではオフのままにしてください。次の通話から適用されます。</string>
@@ -1096,4 +1096,5 @@
     <string name="home_build_basis">（DiPlay %1$s をベースにビルド）</string>
     <string name="home_license_notice">本ソフトウェアはオープンソース・無料 · 転売・商用利用禁止 · 実走行での使用禁止 · 自己責任でご利用ください</string>
     <string name="disclaimer_swipe_hint">左右にスワイプ</string>
+    <string name="diagnostic_same_wifi_required">重要：スマートフォンと車載機を同じ Wi-Fi に接続してください。車載機のホットスポットを使う場合は、接続してからコードを読み取ってください。</string>
 </resources>

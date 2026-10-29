@@ -942,7 +942,7 @@
     <string name="connection_help_wifi_direct">أبقِ واي فاي وبلوتوث وحدة السيارة قيد التشغيل وiPhone مفتوح القفل وقريبًا، ثم أعد المحاولة. إذا استمر الفشل، انسَ السيارة على iPhone من الإعدادات ← عام ← CarPlay ثم اتصل مجددًا.</string>
     <string name="connection_help_existing_wifi">تأكد من اتصال وحدة السيارة وiPhone بشبكة Wi-Fi نفسها وأن اسمها وكلمة مرورها يطابقان إعدادات DiPlay، ثم أعد المحاولة.</string>
     <string name="settings_report_on_phone">الحصول على التقرير عبر هاتف</string>
-    <string name="settings_report_on_phone_hint">امسح الرمز بكاميرا الهاتف لفتح هذه الصفحة في متصفحه، ثم اختر «تنزيل التقرير». أبقِ هذه الشاشة مفتوحة حتى يكتمل التنزيل.</string>
+    <string name="settings_report_on_phone_hint">امسح الرمز ونزّل ملف ZIP الذي يحتوي على السجلات وحالة النظام والمكونات المتاحة. قد يستغرق الجمع دقيقة. أبقِ هذه الشاشة مفتوحة حتى يكتمل التنزيل.</string>
     <string name="settings_mfi_target_description">اختر USB/CH341 فقط عندما يكون محوّل مصادقة CH341 متصلًا بوحدة الوسائط. بدونه، اختر «محلي دون اتصال». يُطبَّق عند الاتصال التالي.</string>
     <string name="settings_call_speakerphone">المكالمات عبر مكبّر الصوت</string>
     <string name="settings_call_speakerphone_description">لهاتف أو جهاز لوحي بنظام Android يُستخدم كوحدة وسائط: يشغّل مكالمات CarPlay عبر مكبّر الصوت بدلًا من سمّاعة الأذن ويستخدم ميكروفون التحدث الحر. اتركه متوقفًا في وحدة وسائط السيارة. يُطبَّق من المكالمة التالية.</string>
@@ -1003,4 +1003,5 @@
     <string name="disclaimer_page4_l2">يمكنك إيقاف ذلك في «الإعدادات · التشخيص»؛ تتوقف الجلسات وتقارير الأعطال بعد إعادة تشغيل التطبيق.</string>
     <string name="home_build_basis">(مبني على DiPlay %1$s)</string>
     <string name="home_license_notice">هذا البرنامج مفتوح المصدر ومجاني · يُحظر إعادة البيع أو الاستخدام التجاري · لا تستخدمه أثناء القيادة الفعلية · على مسؤوليتك الخاصة</string>
+    <string name="diagnostic_same_wifi_required">مهم: يجب توصيل الهاتف ووحدة السيارة بشبكة Wi-Fi نفسها. عند استخدام نقطة اتصال السيارة، صِل الهاتف بها قبل مسح الرمز.</string>
 </resources>

@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.backup
 
 import com.shilapi.xcertplay.airplay.RtspMessage
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
@@ -18,6 +19,9 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ScheduledThreadPoolExecutor
 
 data class SettingsBackupEndpoint(val port: Int, val token: String, val code: String = "") {
     fun url(address: String) = "http://$address:$port/b/$token/"
@@ -41,12 +45,17 @@ class SettingsBackupServer(
     private val report: (() -> ByteArray)? = null,
     /** The page that asks for the typed code, or null when the address cannot be typed. */
     private val codePage: ByteArray? = null,
+    /** Built off the UI thread and streamed, never buffered as one HTTP response. */
+    private val reportFile: (() -> File)? = null,
 ) {
     private var server: ServerSocket? = null
     private var thread: Thread? = null
     private var connections: ExecutorService? = null
     private val open: MutableSet<Socket> = Collections.newSetFromMap(ConcurrentHashMap())
     private val answering = Any()
+    private val activeDownloads = AtomicInteger()
+    private var preparedReport: File? = null
+    internal var reportTimeoutMillis = DOWNLOAD_TIMEOUT_MILLIS
     private var token: String = ""
     private var code: String = ""
     @Volatile private var wrongCodes = 0
@@ -90,6 +99,7 @@ class SettingsBackupServer(
         // Not String.format: in some locales it writes other digits than the ones a keyboard types.
         code = SecureRandom().nextInt(CODE_SPACE).toString().padStart(CODE_DIGITS, '0')
         wrongCodes = 0
+        preparedReport = null
         server = bound
         connections = ThreadPoolExecutor(0, MAX_CONNECTIONS, 30L, TimeUnit.SECONDS, SynchronousQueue()) { task ->
             Thread(task, "settings-backup-connection").apply { isDaemon = true }
@@ -124,6 +134,7 @@ class SettingsBackupServer(
             } catch (_: SocketTimeoutException) {
                 // Anyone on the car's network can reach it, so it does not wait for them forever.
                 if (closed) break
+                if (activeDownloads.get() > 0) { lastConnection = System.nanoTime(); continue }
                 if (System.nanoTime() - lastConnection < TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis.toLong())) continue
                 stop()
                 onIdle?.invoke()
@@ -157,6 +168,41 @@ class SettingsBackupServer(
                 it.soTimeout = 10_000
                 it.tcpNoDelay = true
                 val request = readRequest(it.getInputStream()) ?: return
+                val reportPath = "/b/$token/report"
+                val prepareReport = reportFile
+                if (prepareReport != null && request.method == "GET" && request.path.substringBefore('?') == reportPath) {
+                    activeDownloads.incrementAndGet()
+                    val counted = AtomicBoolean(true)
+                    fun release() { if (counted.compareAndSet(true, false)) activeDownloads.decrementAndGet() }
+                    // SO_TIMEOUT covers reads only. Closing the socket also unblocks a stalled write.
+                    val deadline = downloadWatchdog.schedule({
+                        runCatching { socket.close() }
+                        release()
+                    }, reportTimeoutMillis.coerceAtLeast(1), TimeUnit.MILLISECONDS)
+                    try {
+                        val file = synchronized(answering) {
+                            if (closed || socket.isClosed) null
+                            else preparedReport?.takeIf { it.isFile } ?: runCatching { prepareReport.invoke() }
+                                .getOrNull()?.also { preparedReport = it }
+                        }
+                        if (file != null && file.isFile && file.length() > 0) {
+                            file.inputStream().use { input ->
+                                val header = "HTTP/1.1 200 OK\r\nContent-Type: application/zip\r\n" +
+                                    "Content-Disposition: attachment; filename=\"$REPORT_ZIP_FILE\"\r\n" +
+                                    "Content-Length: ${file.length()}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
+                                it.getOutputStream().apply { write(header.toByteArray(Charsets.US_ASCII)); input.copyTo(this); flush() }
+                            }
+                            return
+                        }
+                        // Continue to the existing error response when collection failed.
+                    } finally { deadline.cancel(false); release() }
+                    val (status, headers, body) = failed()
+                    it.getOutputStream().apply {
+                        write(RtspMessage.buildResponse(request, RtspMessage.Response(protocol = "HTTP/1.1", status = status,
+                            headers = headers + ("Connection" to "close"), body = body))); flush()
+                    }
+                    return
+                }
                 // A failure while preparing the answer is told to the browser; without an answer it
                 // would show a connection that opened and then gave nothing.
                 val (status, headers, body) = synchronized(answering) {
@@ -263,6 +309,10 @@ class SettingsBackupServer(
     private fun notFound() = Triple(404, mapOf("Content-Type" to "text/plain", "Cache-Control" to "no-store"), "Not found".toByteArray(Charsets.UTF_8))
 
     companion object {
+        private const val DOWNLOAD_TIMEOUT_MILLIS = 180_000L
+        private val downloadWatchdog = ScheduledThreadPoolExecutor(1) { task ->
+            Thread(task, "diagnostic-download-deadline").apply { isDaemon = true }
+        }.apply { removeOnCancelPolicy = true }
         private const val BACKLOG = 4
         /** More than a browser opens to one host; the rest are refused rather than queued. */
         private const val MAX_CONNECTIONS = 16
@@ -271,6 +321,7 @@ class SettingsBackupServer(
         private const val MAX_REQUEST = 2 shl 20
         const val EXPORT_FILE = "diplay-settings.json"
         const val REPORT_FILE = "diplay-report.txt"
+        const val REPORT_ZIP_FILE = "diplay-diagnostics.zip"
         const val CODE_DIGITS = 6
         private const val CODE_SPACE = 1_000_000
         /** Five tries in a million codes: one page opening is guessed about once in 200,000. */

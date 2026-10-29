@@ -10,6 +10,11 @@ import com.shilapi.xcertplay.transport.BlockingDuplexByteStream
 object PioneerVehicleWireless {
     data class Phone(val name: String, val address: String)
     fun supported(): Boolean = com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled()
+    /** Passive diagnostic snapshot: no adapter initialization, native callbacks or recovery. */
+    fun diagnosticSnapshot(target: String?): String {
+        if (!supported()) return "Camry adaptation disabled"
+        return PioneerBluetoothSnapshot.diagnosticReport(target)
+    }
     fun phones(): List<Phone> {
         PioneerBlueforceNative.verifyRuntime()
         check(supported()) { "Camry A-navigation adaptation is disabled" }

@@ -996,7 +996,7 @@
     <string name="connection_help_wifi_direct">Keep the head unit\'s Wi-Fi and Bluetooth on and the iPhone unlocked nearby, then retry. If it keeps failing, forget the car on the iPhone under Settings → General → CarPlay and connect again.</string>
     <string name="connection_help_existing_wifi">Make sure the head unit and the iPhone are on the same Wi-Fi network and its name and password match DiPlay settings, then retry.</string>
     <string name="settings_report_on_phone">Get the report on a phone</string>
-    <string name="settings_report_on_phone_hint">Scan the code with the phone camera to open this page in its browser, then choose Download report. Keep this screen open until the download has finished.</string>
+    <string name="settings_report_on_phone_hint">Scan with your phone camera and choose “Download report” to get a ZIP containing logs, system status and available system components. Collection may take up to a minute. Keep this screen open until the download finishes.</string>
     <string name="settings_mfi_target_description">Choose USB/CH341 only while a CH341 authentication adapter is connected to the head unit. Without one, choose Local offline. Applies at the next connection.</string>
     <string name="settings_call_speakerphone">Calls on the loudspeaker</string>
     <string name="settings_call_speakerphone_description">For an Android phone or tablet used as the head unit: plays CarPlay calls on its loudspeaker instead of the earpiece and uses its hands-free microphone. Leave off on a car head unit. Applies from the next call.</string>
@@ -1077,4 +1077,5 @@
     <string name="disclaimer_page4_l2">You can turn it off in Settings · Diagnostics; sessions and crash uploads stop after the app restarts.</string>
     <string name="home_build_basis">(Built on DiPlay %1$s)</string>
     <string name="home_license_notice">Open source and free · No resale or commercial use · Do not use while driving · Use at your own risk</string>
+    <string name="diagnostic_same_wifi_required">Important: Your phone and head unit must be connected to the same Wi-Fi network. If using the car hotspot, connect your phone to it before scanning.</string>
 </resources>

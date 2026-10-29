@@ -954,7 +954,7 @@
     <string name="connection_help_wifi_direct">保持車機的 Wi-Fi 與藍牙開啟，iPhone 解鎖並放在附近，再重試。若仍失敗，請在 iPhone 的「設定 → 一般 → CarPlay」中忘記這輛車，再重新連線。</string>
     <string name="connection_help_existing_wifi">請確認車機和 iPhone 連線的是同一個 Wi-Fi 網路，且網路名稱和密碼與 DiPlay 設定相同，再重試。</string>
     <string name="settings_report_on_phone">在手機上取得報告</string>
-    <string name="settings_report_on_phone_hint">用手機相機掃碼，在瀏覽器中開啟此頁面，然後選擇「下載報告」。下載完成前請保持此畫面開啟。</string>
+    <string name="settings_report_on_phone_hint">用手機相機掃碼，在瀏覽器中選擇「下載報告」，取得包含日誌、系統狀態及可讀取系統元件的 ZIP 診斷包。收集可能需要約一分鐘，下載完成前請保持此畫面開啟。</string>
     <string name="settings_mfi_target_description">只有車機上插著 CH341 認證轉接器時才選擇 USB/CH341。沒有轉接器時請選擇「本機離線」。下次連線時生效。</string>
     <string name="settings_call_speakerphone">通話使用揚聲器</string>
     <string name="settings_call_speakerphone_description">適用於當作車機的 Android 手機或平板：CarPlay 通話從揚聲器播放而不是聽筒，並使用免持麥克風。車機上請保持關閉。從下一次通話開始生效。</string>
@@ -1033,4 +1033,5 @@
     <string name="disclaimer_page4_l2">可隨時在「設定 · 診斷」中關閉；重新啟動應用程式後完全停止。</string>
     <string name="home_build_basis">（基於DiPlay%1$s版本構建）</string>
     <string name="home_license_notice">本軟體開源免費 · 禁止轉售商用 · 禁止駕駛場景使用 · 後果自行承擔</string>
+    <string name="diagnostic_same_wifi_required">重要：手機和車機必須連接同一個 Wi-Fi！使用車機熱點時，請先讓手機連接車機熱點，再掃碼下載。</string>
 </resources>
