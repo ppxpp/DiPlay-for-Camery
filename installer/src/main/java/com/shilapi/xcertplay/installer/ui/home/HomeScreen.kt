@@ -23,28 +23,21 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.shilapi.xcertplay.installer.data.DownloadCoordinator
-import com.shilapi.xcertplay.installer.data.model.InstallKit
 import com.shilapi.xcertplay.installer.ui.components.BulletLine
 import com.shilapi.xcertplay.installer.ui.components.InfoCard
-import com.shilapi.xcertplay.installer.ui.components.InfoRow
 import com.shilapi.xcertplay.installer.ui.components.RiskBanner
 import com.shilapi.xcertplay.installer.ui.model.RiskLevel
 import com.shilapi.xcertplay.installer.ui.theme.DiPlayInstallerTheme
@@ -54,10 +47,6 @@ fun HomeScreen(
     onInstall: () -> Unit,
     onRestore: () -> Unit,
     onAdbTest: () -> Unit,
-    installKit: InstallKit? = null,
-    kitLoading: Boolean = false,
-    kitError: String? = null,
-    onRetryLoad: () -> Unit = {},
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -71,7 +60,6 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item { BrandHeader() }
-            item { InstallPackageCard(installKit, kitLoading, kitError, onRetryLoad) }
             item {
                 ModeCard(
                     title = "安装 / 升级",
@@ -149,65 +137,6 @@ private fun BrandHeader() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun InstallPackageCard(
-    installKit: InstallKit?,
-    loading: Boolean,
-    error: String?,
-    onRetry: () -> Unit,
-) {
-    val context = LocalContext.current
-    val profileName = installKit?.deviceProfiles?.firstOrNull()?.name ?: "凯美瑞 A 导航"
-
-    if (loading && installKit == null) {
-        InfoCard(title = "安装包") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = "正在获取安装包信息…",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        return
-    }
-
-    if (installKit == null) {
-        InfoCard(title = "安装包") {
-            Text(
-                text = error ?: "暂时无法获取安装包信息。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onRetry) {
-                Text("重试")
-            }
-        }
-        return
-    }
-
-    val downloads = remember(installKit) {
-        DownloadCoordinator(context.applicationContext, installKit)
-    }
-    val status = when {
-        installKit.apps.all { downloads.isCachedReady(it) } -> "安装包已准备"
-        installKit.apps.any { downloads.isCachedReady(it) } -> "部分安装包已准备"
-        else -> "安装包未下载"
-    }
-
-    InfoCard(title = "安装包") {
-        InfoRow(label = "目标车型", value = profileName)
-        InfoRow(label = "应用数量", value = "${installKit.appCount} 个")
-        InfoRow(label = "安装包大小", value = formatInstallSize(installKit.totalSizeBytes))
-        InfoRow(label = "状态", value = status)
     }
 }
 
@@ -293,9 +222,6 @@ private fun ModeCard(
         }
     }
 }
-
-private fun formatInstallSize(bytes: Long): String =
-    if (bytes <= 0L) "未知" else "${bytes / 1024L / 1024L} MB"
 
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @Composable

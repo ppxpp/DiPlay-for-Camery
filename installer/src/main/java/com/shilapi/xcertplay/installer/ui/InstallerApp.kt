@@ -9,16 +9,11 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import com.shilapi.xcertplay.installer.data.InstallKitRepository
-import com.shilapi.xcertplay.installer.data.model.InstallKit
 import com.shilapi.xcertplay.installer.ui.adb.AdbTestScreen
 import com.shilapi.xcertplay.installer.ui.home.HomeScreen
 import com.shilapi.xcertplay.installer.ui.install.InstallFlowScreen
@@ -33,20 +28,6 @@ private const val SCREEN_ADB_TEST = 3
 fun InstallerApp() {
     var screen by rememberSaveable { mutableIntStateOf(SCREEN_HOME) }
     val stateHolder = rememberSaveableStateHolder()
-
-    var installKit by remember { mutableStateOf<InstallKit?>(null) }
-    var kitLoading by remember { mutableStateOf(true) }
-    var kitError by remember { mutableStateOf<String?>(null) }
-    var reloadToken by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(reloadToken) {
-        kitLoading = true
-        kitError = null
-        InstallKitRepository.load()
-            .onSuccess { installKit = it }
-            .onFailure { kitError = it.message ?: "无法获取安装包信息" }
-        kitLoading = false
-    }
 
     AnimatedContent(
         targetState = screen,
@@ -72,17 +53,10 @@ fun InstallerApp() {
     ) { targetScreen ->
         stateHolder.SaveableStateProvider(targetScreen) {
             when (targetScreen) {
-                SCREEN_INSTALL -> InstallFlowScreen(
-                    installKit = installKit,
-                    onExit = { screen = SCREEN_HOME },
-                )
+                SCREEN_INSTALL -> InstallFlowScreen(onExit = { screen = SCREEN_HOME })
                 SCREEN_RESTORE -> RestoreScreen(onExit = { screen = SCREEN_HOME })
                 SCREEN_ADB_TEST -> AdbTestScreen(onExit = { screen = SCREEN_HOME })
                 else -> HomeScreen(
-                    installKit = installKit,
-                    kitLoading = kitLoading,
-                    kitError = kitError,
-                    onRetryLoad = { reloadToken++ },
                     onInstall = { screen = SCREEN_INSTALL },
                     onRestore = { screen = SCREEN_RESTORE },
                     onAdbTest = { screen = SCREEN_ADB_TEST },

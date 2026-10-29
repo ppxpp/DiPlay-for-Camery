@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -51,6 +54,7 @@ import com.shilapi.xcertplay.installer.data.AppDownloadState
 import com.shilapi.xcertplay.installer.data.DownloadCoordinator
 import com.shilapi.xcertplay.installer.data.DownloadStatus
 import com.shilapi.xcertplay.installer.data.DownloadUiState
+import com.shilapi.xcertplay.installer.data.InstallKitRepository
 import com.shilapi.xcertplay.installer.data.model.InstallApp
 import com.shilapi.xcertplay.installer.data.model.InstallKit
 import com.shilapi.xcertplay.installer.install.AppInstallState
@@ -127,7 +131,6 @@ private val installSteps = listOf(
 
 @Composable
 fun InstallFlowScreen(
-    installKit: InstallKit?,
     onExit: () -> Unit,
 ) {
     var step by remember { mutableIntStateOf(0) }
@@ -136,6 +139,20 @@ fun InstallFlowScreen(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    var installKit by remember { mutableStateOf<InstallKit?>(null) }
+    var kitLoading by remember { mutableStateOf(true) }
+    var kitError by remember { mutableStateOf<String?>(null) }
+    var kitReloadToken by remember { mutableIntStateOf(0) }
+    LaunchedEffect(kitReloadToken) {
+        kitLoading = true
+        kitError = null
+        InstallKitRepository.load()
+            .onSuccess { installKit = it }
+            .onFailure { kitError = it.message ?: "无法获取安装包信息" }
+        kitLoading = false
+    }
+
     val isDebuggable =
         (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     val adb = rememberAdbConnectionController(includeLocalTarget = isDebuggable)
@@ -157,10 +174,11 @@ fun InstallFlowScreen(
         downloadState.apps[it.id]?.status == DownloadStatus.Ready
     } ?: 0
     val connectionReady = adb.session != null
-    val backupCoordinator = remember(adb.session, installKit) {
+    val kit = installKit
+    val backupCoordinator = remember(adb.session, kit) {
         val session = adb.session
-        if (session != null && installKit != null) {
-            BackupCoordinator(context.applicationContext, session, installKit)
+        if (session != null && kit != null) {
+            BackupCoordinator(context.applicationContext, session, kit)
         } else {
             null
         }
@@ -177,10 +195,10 @@ fun InstallFlowScreen(
                 it.status == BackupStatus.Done || it.status == BackupStatus.Missing
             }
         )
-    val installCoordinator = remember(adb.session, installKit, downloader) {
+    val installCoordinator = remember(adb.session, kit, downloader) {
         val session = adb.session
-        if (session != null && installKit != null && downloader != null) {
-            InstallCoordinator(session, installKit, downloader)
+        if (session != null && kit != null && downloader != null) {
+            InstallCoordinator(session, kit, downloader)
         } else {
             null
         }
@@ -209,6 +227,7 @@ fun InstallFlowScreen(
         primaryAction = WizardAction(
             label = when {
                 step == installSteps.lastIndex -> "完成"
+                step == 0 && installKit == null -> if (kitLoading) "正在获取安装包信息…" else "重试"
                 step == 0 && !allRequiredReady -> when {
                     downloadState.isRunning -> "正在准备安装包..."
                     readyCount > 0 -> "继续下载"
@@ -233,6 +252,7 @@ fun InstallFlowScreen(
                 else -> "下一步"
             },
             enabled = when {
+                step == 0 && installKit == null -> !kitLoading
                 step == 0 && !allRequiredReady -> downloader != null && !downloadState.isRunning
                 step == 2 -> connectionReady
                 step == 3 -> connectionReady && !backupState.running && backupReady
@@ -244,6 +264,7 @@ fun InstallFlowScreen(
             onClick = {
                 when {
                     step == installSteps.lastIndex -> onExit()
+                    step == 0 && installKit == null -> if (!kitLoading) kitReloadToken++
                     step == 0 && !allRequiredReady -> scope.launch { downloader?.downloadAll() }
                     step == 2 && !connectionReady -> Unit
                     step == 3 && !backupReady -> Unit
@@ -293,6 +314,9 @@ fun InstallFlowScreen(
                 when (targetStep) {
                     0 -> DownloadStepContent(
                         installKit = installKit,
+                        loading = kitLoading,
+                        error = kitError,
+                        onRetry = { kitReloadToken++ },
                         downloadState = downloadState,
                     )
                     1 -> AdbGuideStepContent()
@@ -345,14 +369,35 @@ fun InstallFlowScreen(
 @Composable
 private fun DownloadStepContent(
     installKit: InstallKit?,
+    loading: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
     downloadState: DownloadUiState,
 ) {
     if (installKit == null) {
-        InfoCard(title = "安装包信息不可用") {
-            Text(
-                text = "暂时无法读取安装包信息，请稍后重试。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
+        if (loading) {
+            InfoCard(title = "安装包") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "正在获取安装包信息…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            InfoCard(title = "安装包") {
+                Text(
+                    text = error ?: "暂时无法获取安装包信息。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
         return
     }
@@ -915,6 +960,6 @@ private fun CompleteStepContent() {
 @Composable
 private fun InstallFlowPreview() {
     DiPlayInstallerTheme {
-        InstallFlowScreen(installKit = null, onExit = {})
+        InstallFlowScreen(onExit = {})
     }
 }
