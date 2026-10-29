@@ -137,30 +137,29 @@ jobs:
           BUILD_CHANNEL="$("$AAPT" dump xmltree "$APK" AndroidManifest.xml \
             | awk '/com.shilapi.xcertplay.UPDATE_CHANNEL/{seen=1; next} seen && /android:value/{print; exit}' \
             | sed -n 's/.*="\([^"]*\)".*/\1/p')"
-          APP_VERSION="$(printf '%s' "$VERSION_NAME" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
           test -n "$VERSION_NAME" || { echo "::error::Could not read versionName"; exit 1; }
           case "$VERSION_NAME" in
             .|..|*/*) echo "::error::versionName cannot be used as an object key: $VERSION_NAME"; exit 1 ;;
           esac
-          test -n "$VERSION_CODE" || { echo "::error::Could not read versionCode"; exit 1; }
+          case "$VERSION_CODE" in
+            ''|*[!0-9]*) echo "::error::Could not read a numeric versionCode: '$VERSION_CODE'"; exit 1 ;;
+          esac
           test "$BUILD_CHANNEL" = "$CHANNEL" || {
             echo "::error::APK update channel '$BUILD_CHANNEL' does not match publishing channel '$CHANNEL'"
             exit 1
           }
-          test -n "$APP_VERSION" || { echo "::error::versionName must start with x.y.z: $VERSION_NAME"; exit 1; }
+          # The release version comes from versionCode (0.MM.PPP); versionName stays a human-readable label.
+          APP_VERSION="0.$((VERSION_CODE / 1000)).$((VERSION_CODE % 1000))"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             case "${GITHUB_REF_NAME}" in
               "v${APP_VERSION}"|"v${APP_VERSION}"-*) ;;
               *)
-                echo "::error::Tag ${GITHUB_REF_NAME} does not match versionName ${VERSION_NAME}"
+                echo "::error::Tag ${GITHUB_REF_NAME} does not match version ${APP_VERSION} (versionCode ${VERSION_CODE})"
                 exit 1
                 ;;
             esac
           fi
-          ADAPTATION_VERSION="$(printf '%s' "$VERSION_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)"
-          test -n "$ADAPTATION_VERSION" || ADAPTATION_VERSION="$APP_VERSION"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
-          echo "ADAPTATION_VERSION=$ADAPTATION_VERSION" >> "$GITHUB_ENV"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "Built $VERSION_NAME ($VERSION_CODE) as $APP_VERSION"
@@ -198,9 +197,7 @@ jobs:
         run: |
           RELEASE_DIR="$RUNNER_TEMP/release"
           mkdir -p "$RELEASE_DIR"
-          CHANNEL_SUFFIX=""
-          if [ "$CHANNEL" = "beta" ]; then CHANNEL_SUFFIX="-beta"; fi
-          APK_NAME="DiPlay凯美瑞A导航适配版_${ADAPTATION_VERSION}${CHANNEL_SUFFIX}.apk"
+          APK_NAME="${VERSION_NAME}.apk"
           cp mobile/build/outputs/apk/release/mobile-release.apk "$RELEASE_DIR/$APK_NAME"
           (
             cd "$RELEASE_DIR"
