@@ -1,9 +1,16 @@
 export interface ReleaseManagement {
   enabled: boolean;
+  /** Set once an admin first enables delivery; stays true so history keeps every published version. */
+  published?: boolean;
   mode: "all" | "percentage" | "whitelist";
   percentage?: number;
   ids?: string[];
   notes: string;
+}
+
+/** Published releases stay visible after delivery is turned off; candidates never were published. */
+export function isPublishedRelease(manifest: StoredManifest): boolean {
+  return manifest.management?.published === true || manifest.management?.enabled !== false;
 }
 
 export interface StoredArtifact {
@@ -29,6 +36,7 @@ export interface StoredManifest {
 
 export interface Env {
   META: R2Bucket;
+  RELEASE_ASSETS: R2Bucket;
   ASSET_BASE_URL: string;
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD_HASH: string;
@@ -65,6 +73,7 @@ export function isManifest(value: unknown): value is StoredManifest {
   if (manifest.management !== undefined) {
     const management = manifest.management as Record<string, unknown> | null;
     if (!management || typeof management !== "object" || typeof management.enabled !== "boolean" ||
+      (management.published !== undefined && typeof management.published !== "boolean") ||
       !["all", "percentage", "whitelist"].includes(String(management.mode)) ||
       typeof management.notes !== "string" || management.notes.length > 10000) return false;
     if (management.mode === "percentage" && (!Number.isInteger(management.percentage) || Number(management.percentage) < 0 || Number(management.percentage) > 100)) return false;
@@ -129,6 +138,7 @@ export function parseManagement(value: unknown): ReleaseManagement | null {
   if (input.mode === "whitelist" && (!Array.isArray(input.ids) || input.ids.length > 50000 || input.ids.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)))) return null;
   return {
     enabled: input.enabled,
+    ...(typeof input.published === "boolean" ? { published: input.published } : {}),
     mode: input.mode as ReleaseManagement["mode"],
     ...(input.mode === "percentage" ? { percentage: Number(input.percentage) } : {}),
     ...(input.mode === "whitelist" ? { ids: [...new Set(input.ids as string[])] } : {}),

@@ -43,9 +43,10 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           DIPLAY_IDENTITY_PK8_BASE64: ${{ secrets.DIPLAY_IDENTITY_PK8_BASE64 }}
           DIPLAY_CERTIFICATE_P7B_BASE64: ${{ secrets.DIPLAY_CERTIFICATE_P7B_BASE64 }}
+          UMENG_APP_KEY: ${{ secrets.UMENG_APP_KEY }}
         run: |
           missing=0
-          for name in SIGNING_KEYSTORE_BASE64 SIGNING_KEYSTORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD DIPLAY_IDENTITY_PK8_BASE64 DIPLAY_CERTIFICATE_P7B_BASE64; do
+          for name in SIGNING_KEYSTORE_BASE64 SIGNING_KEYSTORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD DIPLAY_IDENTITY_PK8_BASE64 DIPLAY_CERTIFICATE_P7B_BASE64 UMENG_APP_KEY; do
             if [ -z "${!name}" ]; then
               echo "::error::Set $name before publishing a release."
               missing=1
@@ -121,6 +122,7 @@ jobs:
           :pioneer-adapter:lintDebug
           :mobile:assembleRelease
           -PdiplayUpdateChannel="${CHANNEL}"
+          -Pdiplay.analytics=umeng
           --stacktrace
 
       - name: Read and verify the built version
@@ -135,22 +137,24 @@ jobs:
           BUILD_CHANNEL="$("$AAPT" dump xmltree "$APK" AndroidManifest.xml \
             | awk '/com.shilapi.xcertplay.UPDATE_CHANNEL/{seen=1; next} seen && /android:value/{print; exit}' \
             | sed -n 's/.*="\([^"]*\)".*/\1/p')"
-          APP_VERSION="$(printf '%s' "$VERSION_NAME" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
           test -n "$VERSION_NAME" || { echo "::error::Could not read versionName"; exit 1; }
           case "$VERSION_NAME" in
             .|..|*/*) echo "::error::versionName cannot be used as an object key: $VERSION_NAME"; exit 1 ;;
           esac
-          test -n "$VERSION_CODE" || { echo "::error::Could not read versionCode"; exit 1; }
+          case "$VERSION_CODE" in
+            ''|*[!0-9]*) echo "::error::Could not read a numeric versionCode: '$VERSION_CODE'"; exit 1 ;;
+          esac
           test "$BUILD_CHANNEL" = "$CHANNEL" || {
             echo "::error::APK update channel '$BUILD_CHANNEL' does not match publishing channel '$CHANNEL'"
             exit 1
           }
-          test -n "$APP_VERSION" || { echo "::error::versionName must start with x.y.z: $VERSION_NAME"; exit 1; }
+          # The release version comes from versionCode (0.MM.PPP); versionName stays a human-readable label.
+          APP_VERSION="0.$((VERSION_CODE / 1000)).$((VERSION_CODE % 1000))"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             case "${GITHUB_REF_NAME}" in
               "v${APP_VERSION}"|"v${APP_VERSION}"-*) ;;
               *)
-                echo "::error::Tag ${GITHUB_REF_NAME} does not match versionName ${VERSION_NAME}"
+                echo "::error::Tag ${GITHUB_REF_NAME} does not match version ${APP_VERSION} (versionCode ${VERSION_CODE})"
                 exit 1
                 ;;
             esac
@@ -189,7 +193,7 @@ jobs:
               ;;
           esac
 
-      - name: Prepare release manifest
+      - name: Prepare release snapshot
         run: |
           RELEASE_DIR="$RUNNER_TEMP/release"
           mkdir -p "$RELEASE_DIR"
@@ -228,12 +232,13 @@ jobs:
                 sha256: $sha256,
                 size: $size
               }]
-            }' > "$RELEASE_DIR/latest.json"
+            }' > "$RELEASE_DIR/${VERSION_NAME}.json"
           echo "RELEASE_DIR=$RELEASE_DIR" >> "$GITHUB_ENV"
+          echo "RELEASE_MANIFEST=${VERSION_NAME}.json" >> "$GITHUB_ENV"
           echo "APK_NAME=$APK_NAME" >> "$GITHUB_ENV"
           echo "ASSET_PREFIX=$ASSET_PREFIX" >> "$GITHUB_ENV"
 
-      - name: Upload assets and update latest pointer
+      - name: Upload release snapshot
         if: github.event_name == 'workflow_dispatch'
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -260,33 +265,38 @@ jobs:
             --content-type "text/plain; charset=utf-8" \
             --cache-control "public, max-age=31536000, immutable" \
             --only-show-errors
-          aws s3 cp "$RELEASE_DIR/latest.json" \
-            "s3://${R2_META_BUCKET}/${META_PREFIX}/releases/${VERSION_NAME}.json" \
+          aws s3 cp "$RELEASE_DIR/$RELEASE_MANIFEST" \
+            "s3://${R2_META_BUCKET}/${META_PREFIX}/releases/$RELEASE_MANIFEST" \
             --endpoint-url "$ENDPOINT" \
             --content-type "application/json; charset=utf-8" \
             --cache-control "no-store" \
             --only-show-errors
-          # The pointer is written last so clients never see a manifest before its files exist.
-          aws s3 cp "$RELEASE_DIR/latest.json" \
-            "s3://${R2_META_BUCKET}/${META_PREFIX}/latest.json" \
-            --endpoint-url "$ENDPOINT" \
-            --content-type "application/json; charset=utf-8" \
-            --cache-control "no-store" \
-            --only-show-errors
+          # CI never moves the delivered version; an admin selects and enables it in /admin/.
 
-      - name: Verify the public update endpoint
+      - name: Verify the uploaded release manifest
         if: github.event_name == 'workflow_dispatch'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: "true"
         run: |
-          API_URL="${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          MANIFEST_KEY="apps/${APP_ID}/${PLATFORM}/${CHANNEL}/releases/${RELEASE_MANIFEST}"
           for attempt in 1 2 3 4 5; do
-            if BODY="$(curl -fsS "$API_URL")" && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" --arg versionName "$VERSION_NAME" '.version == $version and .versionName == $versionName' > /dev/null; then
-              echo "Verified $API_URL -> $APP_VERSION ($VERSION_NAME)"
+            if BODY="$(aws s3 cp "s3://${R2_META_BUCKET}/${MANIFEST_KEY}" - --endpoint-url "$ENDPOINT" --only-show-errors)" \
+              && printf '%s' "$BODY" | jq -e --arg version "$APP_VERSION" --arg versionName "$VERSION_NAME" \
+                '.version == $version and .versionName == $versionName and .management.enabled == false' > /dev/null; then
+              echo "Verified ${MANIFEST_KEY} -> ${APP_VERSION} (${VERSION_NAME}); waiting for an admin to publish it"
               exit 0
             fi
-            echo "Waiting for $API_URL to report $APP_VERSION (attempt $attempt)"
+            echo "Waiting for ${MANIFEST_KEY} to report ${APP_VERSION} (attempt ${attempt})"
             sleep 2
           done
-          echo "::error::The update endpoint did not return $APP_VERSION"
+          echo "::error::The uploaded manifest did not report ${APP_VERSION}"
           exit 1
 
       - name: Keep a workflow copy of the release
@@ -296,7 +306,7 @@ jobs:
           path: |
             ${{ env.RELEASE_DIR }}/${{ env.APK_NAME }}
             ${{ env.RELEASE_DIR }}/SHA256SUMS.txt
-            ${{ env.RELEASE_DIR }}/latest.json
+            ${{ env.RELEASE_DIR }}/${{ env.RELEASE_MANIFEST }}
           if-no-files-found: error
           retention-days: 14
 

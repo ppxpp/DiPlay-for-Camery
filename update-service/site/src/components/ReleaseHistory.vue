@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { fetchReleases, type ChannelKey, type Release } from '../data/releases.ts';
+import { fetchReleases, releaseDisplayName, type ChannelKey, type Release } from '../data/releases.ts';
 
 const props = withDefaults(
   defineProps<{
@@ -148,7 +148,7 @@ onMounted(() => {
             </span>
             <div class="release-title">
               <div class="release-title-row">
-                <h2>{{ release.versionName || release.version }}</h2>
+                <h2>{{ releaseDisplayName(release) }}</h2>
                 <span class="tag tag--brand">{{ channel === 'stable' ? '正式版' : '内测版' }}</span>
               </div>
               <p class="release-meta">
