@@ -17,6 +17,9 @@ interface AnalyticsTracker {
     fun start(context: Context)
 
     fun event(name: String, attributes: Map<String, String> = emptyMap())
+
+    /** One integer observation; attributes remain bounded categorical dimensions. */
+    fun metric(name: String, value: Long, attributes: Map<String, String> = emptyMap()) {}
 }
 
 /** Linked before consent, and permanently in a `-Pdiplay.analytics=none` build. */

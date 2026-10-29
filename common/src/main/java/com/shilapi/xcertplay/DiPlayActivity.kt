@@ -209,11 +209,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var disconnectButton: Button? = null
     private var lastRunning: Boolean? = null
     private var pendingWireless = false
+    private var pendingWirelessAnalyticsSource = "manual"
     private var bluetoothSettingsVisited = false
     private var initialLaunch = true
     private var forwardingToProjection = false
     private var disclaimerAcknowledged = false
     private var notificationTransport = true
+    private var notificationAnalyticsSource = "manual"
     private var exportInProgress = false
     private var usbPermissionOperation: UsbPermissionSetup.Operation? = null
     private var usbPermissionDialog: AlertDialog? = null
@@ -312,7 +314,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val savedFieldsReadable: Boolean = false,
     )
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        connect(notificationTransport)
+        connect(notificationTransport, notificationAnalyticsSource)
     }
     private val tick = object : Runnable {
         override fun run() { refreshStatus(); handler.postDelayed(this, 1000) }
@@ -468,7 +470,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 initialLaunch = false
                 startCarHotspotOnLaunch()
             }
-            handler.post { connect(true) }
+            handler.post { connect(true, "bluetooth_auto") }
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -515,7 +517,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 initialLaunch = false
                 startCarHotspotOnLaunch()
             }
-            handler.post { connect(true) }
+            handler.post { connect(true, "bluetooth_auto") }
         }
     }
     private fun consumeBluetoothAutoConnectIntent(intent: Intent): Boolean {
@@ -629,7 +631,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             startCarHotspotOnLaunch()
             if (setupError == null && !CarPlayBackgroundSession.hasSession() &&
                 DiPlayPreferences.autoConnect(this) && intent.getStringExtra("page") == null && page != "setup") {
-                handler.post { connect(DiPlayPreferences.autoConnectWireless(this)) }
+                handler.post { connect(DiPlayPreferences.autoConnectWireless(this),
+                    if (intent.getStringExtra(com.shilapi.xcertplay.analytics.ConnectionAnalytics.SOURCE_EXTRA) == "boot_auto") "boot_auto" else "app_auto") }
             }
         }
     }
@@ -3519,7 +3522,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else -> R.string.hotspot_control_failed
     })
 
-    private fun carHotspotOffDialog() {
+    private fun carHotspotOffDialog(analyticsSource: String = "manual") {
         appDialogBuilder().setTitle(getString(R.string.car_hotspot_is_off))
             .setMessage(getString(R.string.msg_car_hotspot_connect, AirPlayPersistence.loadManualHotspotSsid(this)))
             .setPositiveButton(getString(R.string.open_car_settings)) { _, _ -> openCarWifiSettings() }
@@ -3527,7 +3530,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 // The driver sees the hotspot on: trust that over Android's report, or this dialog would
                 // come back on every tap (#604).
                 CarHotspotSettings.setOffReportIgnored(this, true)
-                connect(true)
+                connect(true, analyticsSource)
             }
             .setNegativeButton(getString(R.string.cancel), null).show()
     }
@@ -6000,7 +6003,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         parent.addView(space(12))
     }
 
-    private fun connect(wireless: Boolean) {
+    private fun connect(wireless: Boolean, analyticsSource: String = "manual") {
         startupHotspotCancelled = true
         if (wireless && pendingCarHotspotSetup) { toast(getString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
         if (setupError != null) { toast(setupError!!); return }
@@ -6012,19 +6015,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             toast(getString(R.string.save_the_name_and_password_from_the_car_s_hotspot_settings))
             return
         }
-        if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
+        if (wireless && carHotspotOff()) { carHotspotOffDialog(analyticsSource); return }
         if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
-            pendingWireless = true; choosePhone(); return
+            pendingWireless = true; pendingWirelessAnalyticsSource = analyticsSource; choosePhone(); return
         }
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !preferences.getBoolean("notification_asked", false)) {
             preferences.edit().putBoolean("notification_asked", true).apply()
             notificationTransport = wireless
+            notificationAnalyticsSource = analyticsSource
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         val open = {
             AirPlayPersistence.saveWirelessEnabled(this, wireless)
+            com.shilapi.xcertplay.analytics.ConnectionAnalytics.accept(applicationContext, wireless, analyticsSource)
             openProjection()
         }
         if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop { runOnUiThread { open() } }
@@ -6080,7 +6085,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 DiPlayPreferences.savePhone(this, device.address, device.name ?: "iPhone")
                 val start = pendingWireless; pendingWireless = false
                 render()
-                if (start) connect(true)
+                if (start) connect(true, pendingWirelessAnalyticsSource)
             }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> openBluetoothSettings() }
             .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
     }
@@ -6101,7 +6106,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         val phone=phones[index]
                         DiPlayPreferences.savePhone(this,phone.address,phone.name.ifBlank { "iPhone" })
                         val start=pendingWireless;pendingWireless=false;render()
-                        if(start)connect(true)
+                        if(start)connect(true, pendingWirelessAnalyticsSource)
                     }.setNegativeButton(getString(R.string.cancel)) { _,_ -> pendingWireless=false }.show()
             }
         },"pioneer-paired-phones").apply { isDaemon=true;start() }

@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.analytics.ConnectionAnalytics
+
 import android.app.AlertDialog
 import android.Manifest
 import android.content.ActivityNotFoundException
@@ -690,6 +692,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private val activeScreenStreamTypes = mutableSetOf<Int>()
     private var handshakeResetInProgress = false
     private var startAfterHandshakeReset = false
+    private var connectionAnalyticsProgress: com.shilapi.xcertplay.orchestration.progress.ConnectionProgress? = null
     private var restartGeneration = 0
     private var reconnectScheduled = false
     // How often the current controller reached its control loop, and whether a loss came after the
@@ -910,6 +913,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.shilapi.xcertplay.analytics.Analytics.startIfAllowed(applicationContext)
         val startupNs = System.nanoTime()
         com.shilapi.xcertplay.pioneer.PioneerConnectionTrace.appStart()
         if (!AirPlayPersistence.loadWirelessEnabled(this) &&
@@ -1025,6 +1029,9 @@ class CarPlayHostActivity : ComponentActivity() {
                 "transport=${if (wirelessEnabled) "wireless" else "wired"}",
         )
         val reusedBackgroundSession = adoptBackgroundSession()
+        if (!reusedBackgroundSession) ConnectionAnalytics.accept(applicationContext, wirelessEnabled,
+            if (intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) "usb_attach"
+            else intent.getStringExtra(ConnectionAnalytics.SOURCE_EXTRA) ?: "external_entry")
         microphoneAvailable =
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         microphonePermissionResolved = microphoneAvailable
@@ -2257,7 +2264,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 startupRetryStopped = false
                 reconnectAttempts = 0
                 visibility = View.GONE
-                restartCarPlay(getString(R.string.connecting_to_your_iphone))
+                restartCarPlay(getString(R.string.connecting_to_your_iphone), analyticsSource = "manual_retry")
                 if (!wirelessEnabled && !vpnReady) {
                     vpnRootAttempted = false
                     requestStartupPrerequisites()
@@ -5667,6 +5674,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     startupRetryBudget.disconnected()
                     if (message.contains("VPN_PERMISSION_REVOKED")) {
                         startupRetryStopped = true
+                        ConnectionAnalytics.failed(connectionAnalyticsProgress)
                         vpnReady = false
                         vpnRootAttempted = false
                         startupRetryButton?.visibility = View.VISIBLE
@@ -5747,6 +5755,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (status is CarPlayStatus.Failed) showConnectionHelp(status)
         when (status) {
             is CarPlayStatus.Failed -> if (status.wifiResetRequired) {
+                ConnectionAnalytics.failed(connectionAnalyticsProgress, "wifi_reset_required")
                 wifiRecoveryButton?.visibility = View.VISIBLE
             } else {
                 wifiRecoveryButton?.visibility = View.GONE
@@ -5814,6 +5823,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
 
         connectionProgressPanel.bind(snapshot.controller.connectionProgress)
+        connectionAnalyticsProgress = snapshot.controller.connectionProgress
         val generation = restartGeneration
         snapshot.controller.attachUi(
             createSessionListener(generation),
@@ -5887,6 +5897,7 @@ class CarPlayHostActivity : ComponentActivity() {
         } catch (e: IllegalArgumentException) {
             appendLog("CarPlay start aborted: ${e.message}")
             Log.e(TAG, "invalid CarPlay runtime configuration", e)
+            ConnectionAnalytics.failed(connectionAnalyticsProgress, "invalid_configuration")
             startupRetryStopped = true
             connectionProgressPanel.failed()
             startupRetryButton?.visibility = View.VISIBLE
@@ -5894,6 +5905,10 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         val progress = connectionProgressPanel.begin(config)
+        connectionAnalyticsProgress = progress
+        ConnectionAnalytics.attach(applicationContext, config, progress,
+            if (intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) "usb_attach"
+            else intent.getStringExtra(ConnectionAnalytics.SOURCE_EXTRA) ?: "external_entry")
         val effectiveSize = if (isMultiWindowActive() && !AirPlayPersistence.loadAdaptPipResolution(this) &&
             maximumDetectedWidthPixels >= size.width && maximumDetectedHeightPixels >= size.height &&
             (maximumDetectedWidthPixels > size.width || maximumDetectedHeightPixels > size.height)) {
@@ -6323,6 +6338,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun stopPioneerRecovery(reason: String) {
         connectionProgressPanel.failed()
         startupRetryStopped = true
+        ConnectionAnalytics.failed(connectionAnalyticsProgress)
         startupRetryButton?.visibility = View.VISIBLE
         setConnectionStage("$reason\nUSB CarPlay recovery stopped after $pioneerRecoveryAttempts retries; tap Retry to start again.")
         appendLog("PIONEER_RECOVERY_EXHAUSTED attempts=$pioneerRecoveryAttempts reason=$reason")
@@ -6366,6 +6382,7 @@ class CarPlayHostActivity : ComponentActivity() {
             startupRetryBudget.nextDelayMillis() else null
         if (startupFailure != null && startupDelay == null) {
             startupRetryStopped = true
+            ConnectionAnalytics.failed(connectionAnalyticsProgress)
             connectionProgressPanel.failed()
             startupRetryButton?.visibility = View.VISIBLE
             if (startupFailure == WirelessStartupFailure.HOTSPOT_CONFIGURATION) {
@@ -6382,6 +6399,7 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         reconnectScheduled = true
+        ConnectionAnalytics.retry(connectionAnalyticsProgress)
         connectionProgressPanel.retrying()
         callPopupSessionReady = false
         updateCallPopupGuard()
@@ -6415,17 +6433,18 @@ class CarPlayHostActivity : ComponentActivity() {
                     appendLog("Not reconnecting after $reason: the same attempt is running again")
                     return@postDelayed
                 }
-                restartCarPlay("Reconnecting after $reason")
+                restartCarPlay("Reconnecting after $reason", automaticRetry = true)
             },
             delayMillis,
         )
     }
 
     /** Full-stack fallback when an AirPlay-only reconnect is unavailable. */
-    private fun restartCarPlay(reason: String) {
+    private fun restartCarPlay(reason: String, automaticRetry: Boolean = false, analyticsSource: String = "configuration_change") {
         if (!CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress) return
         val size = activeDisplaySize ?: return
+        ConnectionAnalytics.restart(applicationContext, wirelessEnabled, connectionAnalyticsProgress, automaticRetry, analyticsSource)
         connectionProgressPanel.retrying()
         startupRetryBudget.disconnected()
         startupRetryButton?.visibility = View.GONE
@@ -6469,6 +6488,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     handshakeResetInProgress = false
                     if (!completed && oldController?.requiresCompleteTeardownBeforeRestart == true) {
                         startupRetryStopped = true
+                        ConnectionAnalytics.failed(connectionAnalyticsProgress, "teardown_incomplete")
                         appendLog("Vehicle wireless teardown incomplete; keeping the previous lease protected instead of starting an overlapping session")
                         connectionProgressPanel.failed()
                         if (wirelessEnabled) startupRetryButton?.visibility = View.VISIBLE
@@ -6735,6 +6755,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun shutdown(terminateProcess: Boolean, reason: String, completion: () -> Unit = {}) {
         if (!shuttingDown.compareAndSet(false, true)) { completion(); return }
+        ConnectionAnalytics.cancel(connectionAnalyticsProgress)
         connectionProgressPanel.cancelled()
         callPopupSessionReady = false
         updateCallPopupGuard()

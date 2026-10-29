@@ -56,4 +56,10 @@ internal class UmengAnalyticsTracker : AnalyticsTracker {
         val context = application ?: return
         MobclickAgent.onEvent(context, name, attributes)
     }
+    override fun metric(name: String, value: Long, attributes: Map<String, String>) {
+        val context = application ?: return
+        val clipped = value.coerceIn(0, Int.MAX_VALUE.toLong())
+        val dimensions = if (clipped != value) attributes + ("value_clamped" to "true") else attributes
+        MobclickAgent.onEventValue(context, name, dimensions, clipped.toInt())
+    }
 }
