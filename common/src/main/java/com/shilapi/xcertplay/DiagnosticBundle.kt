@@ -44,7 +44,8 @@ internal object DiagnosticBundle {
                 val components = libraries.flatMap { File(it).listFiles()?.filter { f -> f.isFile && names.matches(f.name) }.orEmpty() }
                     .toMutableList()
                 listOf("/system/lib/libblueforce.so", "/system/lib/libbluetooth_jni.so", "/system/framework/framework.jar", "/system/framework/services.jar", "/system/bin/hostapd",
-                    "/system/bin/wpa_supplicant", "/system/bin/dnsmasq", "/system/bin/blueforce").forEach { components += File(it) }
+                    "/system/bin/wpa_supplicant", "/system/bin/dnsmasq", "/system/bin/blueforce",
+                    "/system/bin/blueforcemanage").forEach { components += File(it) }
                 @Suppress("DEPRECATION")
                 val packages = runCatching { app.packageManager.getInstalledApplications(0) }
                 packages.onSuccess { installed ->
