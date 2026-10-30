@@ -1996,7 +1996,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
             card.addView(button(getString(R.string.settings_report_on_phone), false) { openBackup(SettingsCategory.DIAGNOSTICS) }, matchButton(10, 60))
-            card.addView(label(getString(R.string.diagnostic_same_wifi_required), 17, TEXT, true).apply {
+            card.addView(label(getString(R.string.diagnostic_same_wifi_required), 17, WARNING, true).apply {
                 setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
             })
             val destination = getString(R.string.reports_save_to_downloads_diplay)
@@ -2769,7 +2769,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         // The same page serves both; opened from Diagnostics, it says what the driver came for.
         val forReport = backupOpenedFrom == SettingsCategory.DIAGNOSTICS
         content.addView(label(getString(if (forReport) R.string.settings_report_on_phone else R.string.backup_title), 40, TEXT, true))
-        if (forReport) content.addView(label(getString(R.string.diagnostic_same_wifi_required), 20, TEXT, true))
+        if (forReport) content.addView(label(getString(R.string.diagnostic_same_wifi_required), 20, WARNING, true))
         var endpoint = backupEndpoint
         if ((backupServer == null || endpoint == null) && addresses.isEmpty()) {
             content.addView(space(SETTINGS_BLOCK_GAP_DP))
@@ -6106,7 +6106,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         .setMessage(getString(R.string.settings_pioneer_pair_original))
                         .setPositiveButton(getString(R.string.got_it),null).show()
                 } else appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
-                    .setItems(phones.map { it.name.ifBlank { getString(R.string.paired_device) } }.toTypedArray()) { _,index ->
+                    .setItems(phones.map { phone ->
+                        val name=phone.name.ifBlank { getString(R.string.paired_device) }
+                        if(phones.count { it.name==phone.name }>1) "$name · ${phone.address.takeLast(5)}" else name
+                    }.toTypedArray()) { _,index ->
                         val phone=phones[index]
                         DiPlayPreferences.savePhone(this,phone.address,phone.name.ifBlank { "iPhone" })
                         val start=pendingWireless;pendingWireless=false;render()

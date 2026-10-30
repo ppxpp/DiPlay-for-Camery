@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless
 import android.content.Context
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
+import android.net.wifi.SupplicantState
 import android.os.SystemClock
 import android.system.Os
 import com.shilapi.xcertplay.network.WirelessHotspotManager
@@ -23,6 +24,8 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
     private var log: (String) -> Unit) : WirelessHotspotManager {
     @Volatile private var onTiming: (String, Long, String) -> Unit = { _, _, _ -> }
     fun bindTiming(observer: (String, Long, String) -> Unit) { onTiming = observer }
+    private var onPreparation: (String) -> Unit = {}
+    fun bindPreparation(observer: (String) -> Unit) { onPreparation=observer }
     private val token=UUID.randomUUID().toString().replace("-","")
     private val journal=File(context.filesDir,"pioneer-wireless-hotspot.json")
     private val lockFile=File(context.filesDir,"pioneer-wireless-hotspot.lock")
@@ -94,11 +97,32 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
                 File(context.filesDir,PioneerLocalOnlyPolicy.DISABLE_FILE).exists())
             log("Vehicle AP localOnly=$localOnly owned=${initial==11} phoneCellular=UNVERIFIED")
             state=JSONObject().put("localOnly",localOnly).put("token",token).put("boot",boot()).put("created",initial==11)
-                .put("creationStarted",false).put("ssid",config.SSID).put("wifiWasEnabled",wifi.isWifiEnabled).put("index",0).put("mac","")
+                .put("creationStarted",false).put("ssid",config.SSID)
+                .put("wifiWasEnabled",wifi.wifiState in listOf(WifiManager.WIFI_STATE_ENABLED,WifiManager.WIFI_STATE_ENABLING)).put("index",0).put("mac","")
             save()
             if(initial==11) {
-                commands.run(if(localOnly) HotspotProbeAction.PREPARE_LOCAL_ONLY else HotspotProbeAction.PREPARE)
-                state!!.put("creationStarted",true)
+                var recoveries=0
+                while(true) {
+                    awaitWifiReady(if(recoveries==0)1_500 else 3_000)
+                    onPreparation("")
+                    try {
+                        commands.run(if(localOnly) HotspotProbeAction.PREPARE_LOCAL_ONLY else HotspotProbeAction.PREPARE)
+                        state!!.put("creationStarted",true)
+                        break
+                    } catch(failure: Throwable) {
+                        if(failure.message?.contains("AP_START_INTERRUPTED")!=true || recoveries>=2)throw failure
+                        checkCurrent()
+                        recoveries++
+                        log("Vehicle AP startup interrupted; recovering within network node recovery=$recoveries")
+                        onPreparation("vehicle_wifi_wait")
+                        // Helper has exited and detached the frequency gate. Release only
+                        // this lease's rules/AP before reusing the same Bluetooth session.
+                        commands.run(HotspotProbeAction.STOP_OWNED)
+                        checkCurrent()
+                        state!!.put("creationStarted",false).remove("creationRejected")
+                        save()
+                    }
+                }
             }
             commands.cancelPrewarm() // A borrowed AP never authorizes the prepared request.
             checkCurrent()
@@ -124,6 +148,54 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
             commands.cancelPrewarm()
             try { cleanup() } catch(cleanup: Throwable) { failure.addSuppressed(cleanup) }
             runCatching { releaseLock() }.onFailure { failure.addSuppressed(it) };throw failure
+        }
+    }
+    private fun awaitWifiReady(quietMillis: Long=1_500) {
+        val started=SystemClock.elapsedRealtime()
+        val deadline=minOf(startupDeadline,started+45_000)
+        var stableSince=0L
+        var previous=""
+        var enableRequested=false
+        var completed=false
+        try {
+            while(SystemClock.elapsedRealtime()<deadline) {
+                checkCurrent()
+                val stateNow=wifi.wifiState
+                if(stateNow==WifiManager.WIFI_STATE_DISABLED && !enableRequested) {
+                    // Persist before changing the switch, including for startup cancellation.
+                    state!!.put("wifiReadinessEnabled",true);save()
+                    onPreparation("vehicle_wifi_enabling")
+                    check(wifi.setWifiEnabled(true)) { "车机 Wi-Fi 开启未受理" }
+                    enableRequested=true
+                    log("Vehicle Wi-Fi readiness requested enable; originalEnabled=${state!!.getBoolean("wifiWasEnabled")}")
+                }
+                onPreparation(if(stateNow==WifiManager.WIFI_STATE_ENABLING ||
+                    (stateNow==WifiManager.WIFI_STATE_DISABLED && enableRequested)) "vehicle_wifi_enabling" else "vehicle_wifi_wait")
+                @Suppress("DEPRECATION")
+                val supplicant=wifi.connectionInfo?.supplicantState
+                val phase=when(supplicant) {
+                    SupplicantState.COMPLETED -> "connected"
+                    SupplicantState.DISCONNECTED,SupplicantState.INACTIVE,SupplicantState.SCANNING,
+                    SupplicantState.DORMANT -> "idle"
+                    else -> "changing"
+                }
+                val sample="$stateNow/$phase"
+                if(sample!=previous) { previous=sample;stableSince=0;log("Vehicle Wi-Fi readiness state=$stateNow phase=$phase supplicant=$supplicant") }
+                if(stateNow==WifiManager.WIFI_STATE_ENABLED && phase!="changing") {
+                    val now=SystemClock.elapsedRealtime()
+                    if(stableSince==0L)stableSince=now
+                    if(now-stableSince>=quietMillis) {
+                        completed=true
+                        log("Vehicle Wi-Fi ready elapsedMs=${now-started} phase=$phase quietMs=${now-stableSince}")
+                        return
+                    }
+                } else stableSince=0
+                Thread.sleep(200)
+            }
+            throw com.shilapi.xcertplay.network.WirelessStartupException(
+                com.shilapi.xcertplay.network.WirelessStartupFailure.HOTSPOT_NOT_READY,"Wi-Fi 未就绪，请重试",45_000)
+        } finally {
+            runCatching { onTiming("hotspot_wifi_readiness",SystemClock.elapsedRealtime()-started,if(completed) "complete" else "failed") }
         }
     }
     private data class Radio(val index: Int,val type: Int,val frequency: Int)
@@ -197,13 +269,22 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
                 // Re-read creation proof under the root operation lock. A late PREPARE can
                 // still be finishing; app-side state alone cannot decide whether AP is ours.
                 val result=runner.run(HotspotProbeAction.STOP_OWNED,true)
-                if(result.contains("localOnly=AP_NOT_ACQUIRED")) return
+                if(result.contains("localOnly=AP_NOT_ACQUIRED")) {
+                    if(apState()==11)restoreWifiSwitch(saved)
+                    return
+                }
             } else runner.run(HotspotProbeAction.RELEASE,true)
             // STOP_OWNED confirms AP-off and removes all lease rules under the root lock.
-            if(saved.getBoolean("created") && saved.optBoolean("wifiWasEnabled") && !wifi.isWifiEnabled) {
-                @Suppress("DEPRECATION")
-                check(wifi.setWifiEnabled(true)) { "Vehicle Wi-Fi restore rejected" }
-            }
+            if(saved.getBoolean("created"))restoreWifiSwitch(saved)
+        }
+    }
+    private fun restoreWifiSwitch(saved: JSONObject) {
+        val original=saved.optBoolean("wifiWasEnabled")
+        val currentlyEnabled=wifi.wifiState in listOf(WifiManager.WIFI_STATE_ENABLED,WifiManager.WIFI_STATE_ENABLING)
+        if((original || saved.optBoolean("wifiReadinessEnabled")) && currentlyEnabled!=original) {
+            @Suppress("DEPRECATION")
+            check(wifi.setWifiEnabled(original)) { "Vehicle Wi-Fi switch restore rejected" }
+            log("Vehicle Wi-Fi switch restore requested enabled=$original")
         }
     }
     private fun recoverPrevious() {

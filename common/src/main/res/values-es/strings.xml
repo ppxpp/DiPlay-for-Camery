@@ -953,6 +953,6 @@
     <string name="disclaimer_page4_l1">Al continuar aceptas enviar datos de uso y fallos. Nunca enviamos ubicación ni rutas, información que te identifique, códigos de la unidad o información del vehículo.</string>
     <string name="disclaimer_page4_l2">Puedes desactivarlo en Ajustes · Diagnóstico; las sesiones y los fallos se detienen tras reiniciar la app.</string>
     <string name="home_build_basis">(Basado en DiPlay %1$s)</string>
-    <string name="home_license_notice">Este software es de código abierto y gratuito · Prohibida la reventa o el uso comercial · No usar durante la conducción · Bajo su propio riesgo</string>
+    <string name="home_license_notice">Este software es de código abierto y gratuito · Solo para aprendizaje e intercambio · Prohibida la reventa o el uso comercial · No usar durante la conducción · Evalúe y asuma usted mismo los riesgos</string>
     <string name="diagnostic_same_wifi_required">Importante: el teléfono y la unidad deben estar conectados a la misma red Wi-Fi. Si usa el punto de acceso del coche, conecte el teléfono antes de escanear.</string>
 </resources>

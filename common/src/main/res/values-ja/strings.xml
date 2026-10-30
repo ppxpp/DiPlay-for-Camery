@@ -1094,7 +1094,7 @@
     <string name="disclaimer_page4_l1">続行すると、利用状況とクラッシュデータの送信に同意したものとみなされます。位置情報や走行履歴、個人を特定できる情報、車載機のコード、車両情報は送信しません。</string>
     <string name="disclaimer_page4_l2">「設定 · 診断」でいつでもオフにできます。再起動後は完全に停止します。</string>
     <string name="home_build_basis">（DiPlay %1$s をベースにビルド）</string>
-    <string name="home_license_notice">本ソフトウェアはオープンソース・無料 · 転売・商用利用禁止 · 実走行での使用禁止 · 自己責任でご利用ください</string>
+    <string name="home_license_notice">本ソフトウェアはオープンソース・無料 · 学習・情報交換のみ · 転売・商用利用禁止 · 運転中の使用禁止 · 使用前にリスクをご自身で評価してください</string>
     <string name="disclaimer_swipe_hint">左右にスワイプ</string>
     <string name="diagnostic_same_wifi_required">重要：スマートフォンと車載機を同じ Wi-Fi に接続してください。車載機のホットスポットを使う場合は、接続してからコードを読み取ってください。</string>
 </resources>

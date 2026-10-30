@@ -25,6 +25,10 @@ class PioneerVehicleHotspot(context: Context, private var isCancelled: () -> Boo
         onTiming = observer
         delegate?.bindTiming(observer)
     }
+    private var onPreparation: (String) -> Unit = {}
+    @Synchronized fun bindPreparation(observer: (String) -> Unit) {
+        onPreparation=observer;delegate?.bindPreparation(observer)
+    }
     private var closed=false
     private var started=false
     var startMode: String = "unknown"
@@ -46,10 +50,10 @@ class PioneerVehicleHotspot(context: Context, private var isCancelled: () -> Boo
             throw failure
         }
         retained.bindLog(log);retained.bindCancellation { isCancelled() }
-        retained.bindTiming(onTiming)
+        retained.bindTiming(onTiming);retained.bindPreparation(onPreparation)
         delegate=retained;reused=true
     }
-    private fun current(): OwnedPioneerHotspot = delegate ?: OwnedPioneerHotspot(app,{ isCancelled() },log).also { it.bindTiming(onTiming);delegate=it }
+    private fun current(): OwnedPioneerHotspot = delegate ?: OwnedPioneerHotspot(app,{ isCancelled() },log).also { it.bindTiming(onTiming);it.bindPreparation(onPreparation);delegate=it }
     @Synchronized override fun start(timeoutMillis: Long): WirelessHotspotInfo {
         check(!closed && !isCancelled()) { "Vehicle hotspot cancelled" }
         check(!started) { "Vehicle hotspot already started" }
@@ -76,6 +80,7 @@ class PioneerVehicleHotspot(context: Context, private var isCancelled: () -> Boo
         delegate=null
         owned.bindCancellation { false }
         owned.bindTiming { _, _, _ -> }
+        owned.bindPreparation {}
         if(owned.retainable() && PioneerVehicleWireless.supported()) {
             owned.bindLog { android.util.Log.i("PioneerHotspot",it) }
             PioneerHotspotRetention.retain(app,owned)

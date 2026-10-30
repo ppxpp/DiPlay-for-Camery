@@ -22,13 +22,88 @@ object HotspotProbeHelper {
     private const val MAX_OUTPUT = 30_000
     private var ruleTag = ""
     private var leaseToken = ""
-    private var cancellation: File? = null
+    @Volatile private var cancellation: File? = null
     private lateinit var commandRunner: File
     private lateinit var commandGuard: File
-    private fun checkCancelled() { check(cancellation?.exists()!=true) { "Vehicle hotspot cancelled" } }
+    private var workerOwnerAlive: (() -> Boolean)? = null
+    private fun checkCancelled() { check(workerOwnerAlive?.invoke()!=false && cancellation?.exists()!=true) { "Vehicle hotspot cancelled" } }
 
     @JvmStatic
     fun main(args: Array<String>) {
+        try {
+            if(args.getOrNull(0)=="WORKER")worker(args) else execute(args)
+        } finally { System.exit(0) }
+    }
+
+    private fun worker(args: Array<String>) {
+        check(Process.myUid()==0 && !Process.is64Bit() && args.getOrNull(6)=="camry-enabled")
+        val output=File(args[2])
+        val owner=Os.stat(output.path).st_uid
+        check(android.system.OsConstants.S_ISREG(Os.lstat(output.path).st_mode) && Os.lstat(output.path).st_nlink==1L)
+        val files=output.canonicalFile.parentFile!!
+        val inbox=File(output.path+".inbox")
+        check(inbox.canonicalFile.parentFile==files && Os.stat(inbox.path).st_uid==owner)
+        val ownerIdentity=output.readText().trim()
+        val parts=ownerIdentity.split(':')
+        check(parts.size==2 && parts[0].toInt()>1)
+        val appPid=parts[0].toInt()
+        fun ownerAlive()=runCatching {
+            Os.stat("/proc/$appPid").st_uid==owner && processStart(appPid)==parts[1]
+        }.getOrDefault(false)
+        fun ownedWrite(file: File, text: String) {
+            val temp=File(file.path+".tmp")
+            temp.writeText(text);Os.chmod(temp.path,384);Os.chown(temp.path,owner,-1)
+            check(temp.renameTo(file))
+        }
+        ownedWrite(File(output.path+".running"),"${Process.myPid()}:${processStart(Process.myPid())}")
+        workerOwnerAlive=::ownerAlive
+        val running=java.util.concurrent.atomic.AtomicBoolean(true)
+        val watcher=Thread({
+            while(running.get()) {
+                if(!ownerAlive()) { cancellation?.let { runCatching { it.writeText("owner exited") } };break }
+                Thread.sleep(200)
+            }
+        },"hotspot-owner-watch").apply { isDaemon=true;start() }
+        try {
+            // Read-only initialization; no lease or Wi-Fi mutation until a queued action.
+            wifi();connectivity();PioneerLocalOnlyPolicy.rules()
+            ownedWrite(File(output.path+".ready"),Process.myPid().toString())
+            var lastOperation=android.os.SystemClock.elapsedRealtime()
+            var operated=false
+            while(ownerAlive()) {
+                val request=inbox.listFiles().orEmpty().filter { it.name.endsWith(".request") }.sortedBy { it.name }.firstOrNull()
+                if(request==null) {
+                    val idle=android.os.SystemClock.elapsedRealtime()-lastOperation
+                    if(!File(files,"pioneer-wireless-hotspot.json").exists() && idle>(if(operated)5_000 else 45_000))break
+                    Thread.sleep(50);continue
+                }
+                try {
+                    val info=Os.lstat(request.path)
+                    check(info.st_uid==owner && info.st_nlink==1L && android.system.OsConstants.S_ISREG(info.st_mode))
+                    val json=org.json.JSONArray(request.readText())
+                    check(json.length()==8)
+                    val command=Array(8) { json.getString(it) }
+                    val action=HotspotProbeAction.valueOf(command[0])
+                    val result=File(command[2])
+                    val token=command[3]
+                    check(token.matches(Regex("[0-9a-f]{32}")) && command[1]==args[1] && command[5]=="immediate" && command[6]==args[6] && command[7]==args[7])
+                    check(result.canonicalFile.parentFile==files && result.name.startsWith("pioneer-hotspot-$token-") && result.name.endsWith(".txt"))
+                    val resultInfo=Os.lstat(result.path)
+                    check(resultInfo.st_uid==owner && resultInfo.st_nlink==1L && android.system.OsConstants.S_ISREG(resultInfo.st_mode))
+                    if(command[4]!="-")check(action in setOf(HotspotProbeAction.PREPARE,HotspotProbeAction.PREPARE_LOCAL_ONLY) &&
+                        File(command[4]).canonicalFile==File(files.parentFile,"code_cache/pioneer-ap-frequency-gate").canonicalFile)
+                    execute(command)
+                    operated=true
+                    lastOperation=android.os.SystemClock.elapsedRealtime()
+                } finally { request.delete() }
+            }
+        } finally {
+            running.set(false);watcher.interrupt()
+            ownedWrite(File(output.path+".exited"),"exited")
+        }
+    }
+
+    private fun execute(args: Array<String>) {
         val helperEntered = android.os.SystemClock.elapsedRealtime()
         val lines = mutableListOf<String>()
         val log: (String) -> Unit = { message ->
@@ -57,6 +132,7 @@ object HotspotProbeHelper {
                 "Invalid hotspot command runner identity"
             }
             commandGuard=File(output.parentFile,"pioneer-hotspot-command.lock")
+            log("localOnly=worker pid=${Process.myPid()} action=${action.name}")
             val requestHeader=output.readText()
             val requestedAt=requestHeader.lineSequence().firstOrNull { it.startsWith("REQUESTED_AT=") }
                 ?.substringAfter('=')?.toLongOrNull()
@@ -143,12 +219,23 @@ object HotspotProbeHelper {
             write(output, lines, "OK")
         } catch (failure: Throwable) {
             if(deferred && !prewarmCompleted) log("localOnly=prewarm_failed_without_execution")
-            log("ERROR ${failure.javaClass.simpleName}: ${failure.message}")
+            val interrupted=runCatching {
+                val preparing=args.getOrNull(0) in listOf("PREPARE","PREPARE_LOCAL_ONLY")
+                val saved=org.json.JSONObject(File(checkNotNull(output).parentFile,"pioneer-wireless-hotspot.json").readText())
+                val manager=wifi()
+                preparing && saved.getString("token")==args.getOrNull(3) &&
+                    saved.getString("boot")==File("/proc/sys/kernel/random/boot_id").readText().trim() &&
+                    saved.optBoolean("created") && saved.optBoolean("creationStarted") &&
+                    !saved.optBoolean("creationRejected") && apState(manager)==11 &&
+                    (manager.javaClass.getMethod("getWifiEnabledState").invoke(manager) as Int) in 2..3
+            }.getOrDefault(false)
+            log("localOnly=failure cause=${failure.javaClass.simpleName}:${failure.message} at=${failure.stackTrace.take(4).joinToString(" <- ")}")
+            if(interrupted)log("ERROR AP_START_INTERRUPTED: owned hotspot lost while station Wi-Fi resumed; original=${failure.javaClass.simpleName}:${failure.message}")
+            else log("ERROR ${failure.javaClass.simpleName}: ${failure.message}")
             if (output != null) runCatching { write(output, lines, "ERROR") }
         } finally {
             operationChannel?.close()
         }
-        System.exit(0)
     }
 
     private inline fun timed(phase: String, log: (String) -> Unit, action: () -> Unit) {
@@ -175,6 +262,11 @@ object HotspotProbeHelper {
     }
 
     private fun prepare(packageName: String, output: File, gatePath: String?, log: (String) -> Unit) {
+        check(apState(wifi())==11) { "Vehicle AP state changed before preparation" }
+        val readySocket=Supplicant.open(log) ?: error("Wi-Fi control service is not ready")
+        try { check(readySocket.command("PING")=="PONG") { "Wi-Fi control service did not confirm readiness" } }
+        finally { readySocket.close() }
+        log("localOnly=wifi_ready supplicant=responsive")
         if(gatePath==null) { verifyCreation(output,leaseToken,requestStart=true);start(packageName,log);return }
         val binary=File(gatePath)
         val owner=Os.stat(output.parentFile!!.path).st_uid
@@ -499,14 +591,24 @@ object HotspotProbeHelper {
             for (chain in listOf("CARNET_IN", "CARNET_OUT")) {
                 val direction = if (chain == "CARNET_IN") "-i" else "-o"
                 val comment = "$ruleTag-$chain"
-                val rule = "$binary -t filter -D $chain $direction $iface " +
+                val rule = "$binary -w -t filter -D $chain $direction $iface " +
                     "-m comment --comment $comment -j ACCEPT"
-                val present=sh(rule.replace(" -D "," -C "))
-                if(present.contains("[exit=0]")) {
-                    val removed=sh(rule)
-                    log("$rule\n$removed")
-                    check(removed.contains("[exit=0]")) { "Vehicle AP firewall cleanup failed" }
+                var confirmed=false
+                repeat(3) { attempt ->
+                    if(!confirmed) {
+                        val snapshot=sh("$binary -w -t filter -S")
+                        check(snapshot.endsWith("[exit=0]")) { "Vehicle AP firewall cleanup inspection failed: $snapshot" }
+                        if(!snapshot.contains(comment))confirmed=true else {
+                            val removed=sh(rule)
+                            if(!removed.endsWith("[exit=0]"))
+                                log("localOnly=firewall_cleanup_retry chain=$chain attempt=$attempt detail=${removed.replace("\n"," ")}")
+                            val after=sh("$binary -w -t filter -S")
+                            confirmed=after.endsWith("[exit=0]") && !after.contains(comment)
+                            if(!confirmed)Thread.sleep(100)
+                        }
+                    }
                 }
+                check(confirmed) { "Vehicle AP firewall cleanup failed; tagged rule still present: $comment" }
             }
         }
     }
@@ -527,6 +629,8 @@ object HotspotProbeHelper {
     private fun awaitApState(wifi: Any, target: Int, timeoutMillis: Long, log: (String) -> Unit) {
         val deadline = android.os.SystemClock.elapsedRealtime() + timeoutMillis
         var last = -1
+        var enablingSeen=false
+        var interruptedSince=0L
         while (android.os.SystemClock.elapsedRealtime() < deadline) {
             if(target==13) checkCancelled()
             val state = runCatching { apState(wifi) }.getOrDefault(-1)
@@ -535,6 +639,20 @@ object HotspotProbeHelper {
                 last = state
             }
             if (state == target) return
+            if(target==13) {
+                if(state==12)enablingSeen=true
+                val stationState=runCatching {
+                    wifi.javaClass.getMethod("getWifiEnabledState").invoke(wifi) as Int
+                }.getOrDefault(-1)
+                // Only fail early after observing our AP startup, followed by AP-off
+                // and normal Wi-Fi returning. Slow AP startup keeps its full timeout.
+                if(enablingSeen && state==11 && stationState in 2..3) {
+                    val now=android.os.SystemClock.elapsedRealtime()
+                    if(interruptedSince==0L)interruptedSince=now
+                    if(now-interruptedSince>=1_000)
+                        error("AP_START_INTERRUPTED: hotspot disabled while station Wi-Fi resumed")
+                } else interruptedSince=0L
+            }
             Thread.sleep(200)
         }
         error("Vehicle AP state did not reach $target; last=$last")

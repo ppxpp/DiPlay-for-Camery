@@ -38,11 +38,13 @@ object PioneerAdbDebug {
             val deadline=SystemClock.elapsedRealtime()+15_000
             while(SystemClock.elapsedRealtime()<deadline) {
                 val result=output.readText()
-                check(!result.contains("DIPLAY_ADB_RESULT=ERROR")) { "原厂 ADB 切换失败" }
+                check(!result.contains("DIPLAY_ADB_RESULT=ERROR")) {
+                    "原厂 ADB 切换失败 enable=$enable state=${enabled()} result=${result.takeLast(512)}"
+                }
                 if(result.contains("DIPLAY_ADB_RESULT=OK") && enabled()==enable)return
                 Thread.sleep(250)
             }
-            error("ADB 状态未确认，请稍后刷新")
+            error("ADB 状态未确认 enable=$enable state=${enabled()} result=${output.readText().takeLast(512)}")
         } finally { output.delete() }
     }
 }

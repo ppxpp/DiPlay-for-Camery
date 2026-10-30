@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.connection
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -13,7 +14,10 @@ import com.shilapi.xcertplay.orchestration.CarPlayRuntimeConfig
 import com.shilapi.xcertplay.orchestration.progress.ConnectionOutcome
 import com.shilapi.xcertplay.orchestration.progress.ConnectionProgress
 import com.shilapi.xcertplay.orchestration.progress.ConnectionStep
+import com.shilapi.xcertplay.orchestration.progress.ConnectionTask
+import com.shilapi.xcertplay.orchestration.progress.ConnectionTaskState
 import java.text.NumberFormat
+import kotlin.math.ceil
 
 /** A self-contained waiting-screen widget. Transport events go to the model, never this view. */
 internal class ConnectionProgressPanel(context: Context) : LinearLayout(context) {
@@ -26,7 +30,8 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
     private val summary = text(15f, true)
     private val nodes = LinearLayout(context).apply { orientation = VERTICAL }
     private val estimate = text(12f)
-    private val cells = mutableListOf<Pair<TextView, TextView>>()
+    private data class Cell(val label: TextView, val time: TextView, val hint: TextView)
+    private val cells = mutableListOf<Cell>()
     private var layoutKey: Pair<Int, List<ConnectionStep>>? = null
     private var tickerPosted = false
     private var initialized = false
@@ -117,14 +122,32 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 group.forEach { _ ->
                     val label = text(13f, true)
                     val time = text(12f)
+                    time.setSingleLine(true)
+                    time.fontFeatureSettings = "tnum"
+                    // Reserve the same localized time column for every tick and hint change.
+                    val timeWidth = ceil(listOf(
+                        context.getString(R.string.connect_progress_seconds, seconds(TIME_COLUMN_SAMPLE_MILLIS)),
+                        context.getString(R.string.connect_progress_pending),
+                        context.getString(R.string.connect_progress_skipped),
+                    ).maxOf { time.paint.measureText(it).toDouble() }).toInt() + dp(2)
+                    val hint = text(12f).apply {
+                        setSingleLine(true)
+                        ellipsize = TextUtils.TruncateAt.END
+                        visibility = GONE
+                    }
+                    val timingRow = LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(time, LayoutParams(timeWidth, -2))
+                        addView(hint, LayoutParams(0, -2, 1f).apply { marginStart = dp(TIME_HINT_GAP_DP) })
+                    }
                     val cell = LinearLayout(context).apply {
                         orientation = VERTICAL
                         setPadding(dp(3), dp(4), dp(3), dp(4))
                         addView(label, LayoutParams(-1, -2))
-                        addView(time, LayoutParams(-1, -2))
+                        addView(timingRow, LayoutParams(-1, -2))
                     }
                     row.addView(cell, LayoutParams(0, -2, 1f))
-                    cells += label to time
+                    cells += Cell(label, time, hint)
                 }
                 nodes.addView(row, LayoutParams(-1, -2))
             }
@@ -165,7 +188,7 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 else -> palette.secondaryText
             }
             val marker = when { current -> "●"; finished -> "✓"; else -> "○" }
-            val (label, time) = cells[index]
+            val (label, time, hint) = cells[index]
             label.text = "$marker ${context.getString(title(step))}"
             label.setTextColor(color)
             time.text = when {
@@ -173,15 +196,27 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 state?.outcome == ConnectionOutcome.COMPLETE -> context.getString(R.string.connect_progress_skipped)
                 else -> context.getString(R.string.connect_progress_pending)
             }
-            val bluetoothHint=if(displayedChannel==com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS && step==ConnectionStep.DEVICE) {
-                when(state?.tasks?.firstOrNull { it.task==com.shilapi.xcertplay.orchestration.progress.ConnectionTask.WIRELESS_LINK }?.detail) {
+            val hintResource=if(displayedChannel==com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS) {
+                when(step) {
+                ConnectionStep.DEVICE -> when(state?.tasks?.firstOrNull { it.task==ConnectionTask.WIRELESS_LINK }?.detail) {
                     "vehicle_bluetooth_wait" -> R.string.vehicle_bluetooth_connect_hint
                     "vehicle_bluetooth_not_connected" -> R.string.vehicle_bluetooth_missing_hint
                     else -> null
                 }
+                ConnectionStep.NETWORK -> state?.tasks?.firstOrNull {
+                    it.task==ConnectionTask.WIRELESS_NETWORK && it.state==ConnectionTaskState.RUNNING
+                }?.let { task -> when(task.detail) {
+                    "vehicle_wifi_enabling" -> R.string.connect_progress_wifi_enabling
+                    "vehicle_wifi_wait" -> R.string.connect_progress_wifi_wait
+                    else -> null
+                } }
+                else -> null
+                }
             } else null
-            if(bluetoothHint!=null) time.text="${time.text}\n${context.getString(bluetoothHint)}"
-            time.setTextColor(if(bluetoothHint==R.string.vehicle_bluetooth_missing_hint) palette.danger else palette.secondaryText)
+            hint.text = hintResource?.let(context::getString).orEmpty()
+            hint.visibility = if(hintResource==null) GONE else VISIBLE
+            time.setTextColor(palette.secondaryText)
+            hint.setTextColor(if(hintResource==R.string.vehicle_bluetooth_missing_hint) palette.danger else palette.secondaryText)
         }
     }
 
@@ -222,6 +257,8 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
     private companion object {
         const val VEHICLE_WIRELESS_WIDE_COLUMNS=4
         const val VEHICLE_WIRELESS_COMPACT_COLUMNS=2
+        const val TIME_COLUMN_SAMPLE_MILLIS=9_999_900L
+        const val TIME_HINT_GAP_DP=6
 
     }
 }

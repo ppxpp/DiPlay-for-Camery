@@ -1043,6 +1043,6 @@
     <string name="disclaimer_page4_l1">Continuando acconsenti all\'invio di dati di utilizzo e crash. Non inviamo mai posizione o percorsi, informazioni che ti identificano, codici dell\'unità o informazioni del veicolo.</string>
     <string name="disclaimer_page4_l2">Puoi disattivarlo in Impostazioni · Diagnostica; sessioni e crash si fermano dopo il riavvio dell\'app.</string>
     <string name="home_build_basis">(Basato su DiPlay %1$s)</string>
-    <string name="home_license_notice">Questo software è open source e gratuito · Vietata la rivendita o l\'uso commerciale · Non usare durante la guida · A proprio rischio</string>
+    <string name="home_license_notice">Questo software è open source e gratuito · Solo per apprendimento e confronto · Vietata la rivendita o l\'uso commerciale · Non usare durante la guida · Valuti e si assuma personalmente i rischi</string>
     <string name="diagnostic_same_wifi_required">Importante: telefono e unità devono essere connessi alla stessa rete Wi-Fi. Se usi l’hotspot dell’auto, collega prima il telefono e poi scansiona il codice.</string>
 </resources>
