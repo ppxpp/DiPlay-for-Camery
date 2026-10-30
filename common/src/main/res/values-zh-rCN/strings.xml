@@ -1031,6 +1031,6 @@
     <string name="disclaimer_page4_l1">继续即表示同意发送使用统计与崩溃数据。我们不会上传位置轨迹、个人身份信息、车机编码或车辆信息。</string>
     <string name="disclaimer_page4_l2">可随时在「设置 · 诊断」中关闭；重启应用后完全停止。</string>
     <string name="home_build_basis">（基于DiPlay%1$s版本构建）</string>
-    <string name="home_license_notice">本软件开源免费 · 禁止转售商用 · 禁止驾驶场景使用 · 后果自行承担</string>
+    <string name="home_license_notice">本软件开源免费 · 仅供学习交流 · 请勿转售商用 · 请勿在驾驶时使用 · 请自行评估并承担使用风险</string>
     <string name="diagnostic_same_wifi_required">重要：手机和车机必须连接同一个 Wi-Fi！使用车机热点时，请先让手机连接车机热点，再扫码下载。</string>
 </resources>

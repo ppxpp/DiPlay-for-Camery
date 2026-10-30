@@ -1076,6 +1076,6 @@
     <string name="disclaimer_page4_l1">Continuing agrees to send usage and crash data. We never upload location or routes, personal identity, head-unit codes or vehicle information.</string>
     <string name="disclaimer_page4_l2">You can turn it off in Settings · Diagnostics; sessions and crash uploads stop after the app restarts.</string>
     <string name="home_build_basis">(Built on DiPlay %1$s)</string>
-    <string name="home_license_notice">Open source and free · No resale or commercial use · Do not use while driving · Use at your own risk</string>
+    <string name="home_license_notice">Open source and free · For learning and exchange only · No resale or commercial use · Do not use while driving · Please assess and accept the risks before use</string>
     <string name="diagnostic_same_wifi_required">Important: Your phone and head unit must be connected to the same Wi-Fi network. If using the car hotspot, connect your phone to it before scanning.</string>
 </resources>

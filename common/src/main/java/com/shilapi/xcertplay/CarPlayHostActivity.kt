@@ -43,6 +43,7 @@ import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.PixelCopy
@@ -2188,7 +2189,15 @@ class CarPlayHostActivity : ComponentActivity() {
         val licenseNotice = TextView(this).apply {
             text = getString(R.string.home_license_notice)
             gravity = Gravity.START
-            maxWidth = dp(if (vehicleDisplay) 600 else 360)
+            maxLines = 1
+            includeFontPadding = false
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+                this,
+                if (vehicleDisplay) 14 else 10,
+                if (vehicleDisplay) 26 else 18,
+                1,
+                TypedValue.COMPLEX_UNIT_SP,
+            )
             isFocusable = false
         }
         val icon = ImageView(this).apply {
@@ -2308,7 +2317,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         viewport.addView(preparationScroll, FrameLayout.LayoutParams(-1, -1))
         // Pinned over the page instead of inside the centred panel, so it never pushes the logo down.
-        viewport.addView(licenseNotice, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
+        viewport.addView(licenseNotice, FrameLayout.LayoutParams(-1, -2, Gravity.TOP or Gravity.START).apply {
             if (vehicleDisplay) setMargins(dp(16), dp(28), dp(32), 0) else setMargins(dp(16), dp(12), dp(16), 0)
         })
         root.addView(viewport, FrameLayout.LayoutParams(-1, -1))
@@ -2343,7 +2352,6 @@ class CarPlayHostActivity : ComponentActivity() {
             if (preparationHeight == height) return
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
-            licenseNotice.textSize = if (vehicleDisplay) size(22f, 28f) else size(10.5f, 12f)
             val iconSize = spacing(32f, 48f)
             icon.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             title.textSize = size(22f, 28f)

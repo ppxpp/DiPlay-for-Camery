@@ -63,7 +63,9 @@ class PreparationLayoutTest {
         assertEquals(28f, title.textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
         // The licence notice overlays the page; it must not take space in the centred panel.
         val notice = activity.getString(R.string.home_license_notice)
-        assertTrue((0 until viewport.childCount).map(viewport::getChildAt).filterIsInstance<TextView>().any { it.text == notice })
+        val noticeView = (0 until viewport.childCount).map(viewport::getChildAt).filterIsInstance<TextView>()
+            .first { it.text == notice }
+        assertEquals(1, noticeView.lineCount)
         assertFalse((0 until panel.childCount).map(panel::getChildAt).filterIsInstance<TextView>().any { it.text == notice })
     }
 }
