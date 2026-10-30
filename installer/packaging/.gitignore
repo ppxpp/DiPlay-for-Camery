@@ -1,0 +1,7 @@
+.cache/
+.signing/
+resources/windows/platform-tools/
+resources/macos/platform-tools/
+*.pfx
+*.cer
+password.txt

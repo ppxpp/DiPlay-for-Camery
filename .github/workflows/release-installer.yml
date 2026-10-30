@@ -82,7 +82,7 @@ jobs:
 
       - name: Read the built version
         run: |
-          APK="installer/build/outputs/apk/release/installer-release.apk"
+          APK="installer/android/build/outputs/apk/release/installer-release.apk"
           test -f "$APK" || { echo "::error::Release APK was not produced"; exit 1; }
           AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
           test -n "$AAPT" || { echo "::error::aapt was not found"; exit 1; }
@@ -150,7 +150,7 @@ jobs:
             --version "$APP_VERSION" \
             --version-code "$VERSION_CODE" \
             --version-name "$VERSION_NAME" \
-            --artifact "installer/build/outputs/apk/release/installer-release.apk" \
+            --artifact "installer/android/build/outputs/apk/release/installer-release.apk" \
             --arch universal \
             --enable-delivery \
             --verify-url "${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
@@ -158,7 +158,7 @@ jobs:
       - name: Verify the delivered release
         run: |
           API_URL="${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
-          APK_SHA="$(sha256sum installer/build/outputs/apk/release/installer-release.apk | awk '{print $1}')"
+          APK_SHA="$(sha256sum installer/android/build/outputs/apk/release/installer-release.apk | awk '{print $1}')"
           for attempt in 1 2 3 4 5; do
             if BODY="$(curl -sS "$API_URL")" \
               && printf '%s' "$BODY" | jq -e --arg version "$VERSION_NAME" --argjson versionCode "$VERSION_CODE" --arg sha "$APK_SHA" \
@@ -177,6 +177,6 @@ jobs:
         with:
           name: DiPlay-installer-${{ env.VERSION_NAME }}
           path: |
-            installer/build/outputs/apk/release/installer-release.apk
+            installer/android/build/outputs/apk/release/installer-release.apk
           if-no-files-found: error
           retention-days: 14
