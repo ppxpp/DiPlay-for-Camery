@@ -1,0 +1,76 @@
+name: Build installer (Windows portable)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+      WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Fetch bundled platform-tools
+        shell: bash
+        run: bash installer/packaging/fetch-platform-tools.sh
+
+      - name: Build portable app image
+        shell: bash
+        run: ./gradlew --configure-on-demand :installer-desktop:createDistributable --stacktrace
+
+      - name: Sign portable launcher
+        if: env.WINDOWS_SIGNING_PFX_BASE64 != ''
+        shell: powershell
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
+          $secure = ConvertTo-SecureString $env:WINDOWS_SIGNING_PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure -Exportable
+          try {
+            $exe = "installer/desktop/build/compose/binaries/main/app/DiPlayInstaller/DiPlayInstaller.exe"
+            Set-ItemProperty -Path $exe -Name IsReadOnly -Value $false
+            $sig = Set-AuthenticodeSignature -FilePath $exe -Certificate $cert `
+              -TimestampServer http://timestamp.digicert.com -HashAlgorithm SHA256
+            if (-not $sig.SignerCertificate) { throw "Signing failed: $($sig.StatusMessage)" }
+          } finally {
+            Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
+          }
+
+      - name: Export signing certificate
+        if: env.WINDOWS_SIGNING_PFX_BASE64 != ''
+        shell: powershell
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pfx, $env:WINDOWS_SIGNING_PFX_PASSWORD)
+          $out = "installer/desktop/build/portable"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $out "DiPlayInstaller-Signing.cer"), $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+      - name: Package portable ZIP
+        shell: bash
+        run: |
+          rm -f installer/desktop/build/portable/*.zip
+          ./gradlew --configure-on-demand :installer-desktop:packagePortableZip -x :installer-desktop:createDistributable --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DiPlayInstaller-windows-x64
+          path: installer/desktop/build/portable/
+          if-no-files-found: error
