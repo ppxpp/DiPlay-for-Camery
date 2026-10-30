@@ -76,8 +76,10 @@ object PioneerVehicleWireless {
         leases.prepare { it.close() }
         val adapter=PioneerAdapter().apply { initialize() }
         val phones=adapter.paired()
-        val device=if(target.isNullOrBlank()) phones.singleOrNull() else phones.singleOrNull {
-            PioneerBlueforceNative.sameAddress(it.address,target)
+        val resolvedTarget=target?.takeIf { it.isNotBlank() }
+            ?: PioneerBluetoothSnapshot(log).connectedAddress(null)
+        val device=phones.singleOrNull {
+            resolvedTarget!=null && PioneerBlueforceNative.sameAddress(it.address,resolvedTarget)
         }
         checkNotNull(device) { "Select an iPhone paired in the original vehicle Bluetooth settings" }
         PioneerBluetoothLink.requireConnected(adapter,device)

@@ -24,6 +24,7 @@ internal class PioneerSerialConnection(
     private var changedProfile=false
     private var original: Int?=null
     private var temporary: Int?=null
+    private var peerProfiles: Map<String,Int> = emptyMap()
     private var bootstrapReleased=false
     private var released=false
     private var closed=false
@@ -41,12 +42,17 @@ internal class PioneerSerialConnection(
             val paired = adapter.paired()
             check(paired.any { it.handle == device.handle && it.address == device.address }) { "目标配对已变化" }
             original = binder.output(81, device.handle) ?: error("无法读取目标配置")
+            peerProfiles=PioneerProfilePeers.read(binder,device.address)
             if(journal.contains(device.address)) {
                 val saved=journal.getInt(device.address,-1)
                 when(PioneerProfileRecovery.decide(saved,checkNotNull(original),
-                    journal.getString(profileBootKey,null),PioneerCallbackRepair.boot(),paired.size)) {
+                    journal.getString(profileBootKey,null),PioneerCallbackRepair.boot(),paired.size,
+                    PioneerProfilePeers.recordedMatches(journal,device.address,peerProfiles) &&
+                        PioneerProfilePeers.compatible(peerProfiles,saved or 128))) {
                     PioneerProfileRecovery.Action.RESTORE_SAVED -> {
                         if(original!=saved) {
+                            PioneerProfilePeers.requireUnchanged(binder,device.address,peerProfiles)
+                            PioneerProfilePeers.requireCompatible(peerProfiles,saved)
                             check(adapter.connectProfiles(device,saved)) { "Previous Pioneer profile restore rejected" }
                             waitFor("Previous Pioneer profile recovery",10000) { binder.output(81,device.handle)==saved }
                             original=saved
@@ -58,21 +64,24 @@ internal class PioneerSerialConnection(
                         com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_CONFIGURATION_CONFLICT,
                         "车机蓝牙配置发生变化，无法安全恢复；请检查原厂蓝牙设置后重试")
                 }
-                check(journal.edit().remove(device.address).remove(profileBootKey).commit())
+                check(journal.edit().remove(device.address).remove(profileBootKey).remove("peers:"+device.address).commit())
             }
             if (original!! and 128 == 0) {
-                // Firmware connectProfile updates other devices' overlapping settings.
-                // Restrict this experiment to one paired device instead of guessing rollback.
-                check(paired.size == 1) { "临时配置实验要求仅有一台已配对设备；不会自动删除其他配对" }
+                // Firmware removes overlapping profile bits on peers; verify disjointness
+                // before writing and preserve every peer configuration verbatim.
+                PioneerProfilePeers.requireCompatible(peerProfiles,original!! or 128)
+                log("Pioneer profile peer guard verified pairedCount=${paired.size} peerProfiles=${peerProfiles.values}")
                 check(original!! and 0xff.inv() == 0) { "配置含未知位，不能无损恢复" }
                 check((binder.output(79, device.handle) ?: 0) and 128 != 0) { "目标不支持 0x80 配置位" }
                 temporary = original!! or 128
                 if (temporary != original) {
                     // Record before the mutation: even a rejected IPC may have changed state.
-                    check(journal.edit().putInt(device.address,checkNotNull(original)).putString(profileBootKey,PioneerCallbackRepair.boot()).commit()) { "无法保存原配置，未执行变更" }
+                    check(PioneerProfilePeers.save(journal.edit(),device.address,peerProfiles)
+                        .putInt(device.address,checkNotNull(original)).putString(profileBootKey,PioneerCallbackRepair.boot()).commit()) { "无法保存原配置，未执行变更" }
                     changedProfile = true
                     log("临时 connectProfile mask=$temporary；原配置=$original。此操作会触发连接状态机")
                     owned = true
+                    PioneerProfilePeers.requireUnchanged(binder,device.address,peerProfiles)
                     check(adapter.connectProfiles(device, checkNotNull(temporary))) { "connectProfile 未受理；将回读并尝试恢复" }
                     Thread.sleep(2000)
                     waitFor("临时配置完成", 30000) {
@@ -89,6 +98,7 @@ internal class PioneerSerialConnection(
                     owned = false
                 }
             }
+            PioneerProfilePeers.requireUnchanged(binder,device.address,peerProfiles)
             val mask = binder.output(81, device.handle) ?: error("配置回读失败")
             check(mask and 0xf0 != 0) { "目标没有串口配置位；使用单设备临时配置测试" }
             check(paired.filter { it.handle != device.handle }.all {
@@ -162,11 +172,14 @@ internal class PioneerSerialConnection(
         if(now!=temporary && now!=original) throw com.shilapi.xcertplay.network.WirelessStartupException(
             com.shilapi.xcertplay.network.WirelessStartupFailure.BLUETOOTH_CONFIGURATION_CONFLICT,
             "车机蓝牙配置发生变化，已保留恢复记录；请检查原厂蓝牙设置后重试")
+        PioneerProfilePeers.requireUnchanged(binder,device.address,peerProfiles)
+        PioneerProfilePeers.requireCompatible(peerProfiles,checkNotNull(original))
         if(now!=original) {
             check(adapter.connectProfiles(device,checkNotNull(original)))
             waitFor("Pioneer profile restore",10000,true) { binder.output(81,device.handle)==original && adapter.query("isConnecting")==false }
         }
-        check(journal.edit().remove(device.address).remove(profileBootKey).commit())
+        PioneerProfilePeers.requireUnchanged(binder,device.address,peerProfiles)
+        check(journal.edit().remove(device.address).remove(profileBootKey).remove("peers:"+device.address).commit())
         changedProfile=false
         log("Pioneer Bluetooth bootstrap profile restored; Wi-Fi session independent")
     }

@@ -12,5 +12,15 @@ class PioneerProfileRecoveryTest {
     @Test fun knownTemporaryProfileCanStillBeRolledBack() { assertEquals(PioneerProfileRecovery.Action.RESTORE_SAVED,action(131,"old-boot")) }
     @Test fun unknownSerialProfileIsNeverAdopted() { assertEquals(PioneerProfileRecovery.Action.BLOCK,action(130,null)) }
     @Test fun multiplePairedDevicesRemainProtected() { assertEquals(PioneerProfileRecovery.Action.BLOCK,PioneerProfileRecovery.decide(3,2,null,"new-boot",2)) }
+    @Test fun disjointPeerProfilesAllowTheSelectedPhoneToRecover() {
+        assertEquals(PioneerProfileRecovery.Action.RESTORE_SAVED,
+            PioneerProfileRecovery.decide(3,131,"old-boot","new-boot",2,true))
+        assertEquals(PioneerProfileRecovery.Action.ADOPT_CURRENT,
+            PioneerProfileRecovery.decide(3,2,"old-boot","new-boot",2,true))
+    }
+    @Test fun changedOrOverlappingPeerProfilesStillBlockRecovery() {
+        assertEquals(PioneerProfileRecovery.Action.BLOCK,
+            PioneerProfileRecovery.decide(3,131,"old-boot","new-boot",2,false))
+    }
     @Test fun conflictDoesNotRetry() { assertFalse(WirelessStartupFailure.BLUETOOTH_CONFIGURATION_CONFLICT.retryable) }
 }

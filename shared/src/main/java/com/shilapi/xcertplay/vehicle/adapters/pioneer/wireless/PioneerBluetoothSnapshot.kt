@@ -114,21 +114,27 @@ internal class PioneerBluetoothSnapshot(private val log: (String) -> Unit = {},
     fun connectedAddress(target: String?): String? {
         // Re-read handles each time: the OEM can recreate them during boot/reconnection.
         val devices=devices()
-        val selected=if(target.isNullOrBlank()) devices.singleOrNull() else devices.singleOrNull {
+        val candidates=if(target.isNullOrBlank()) devices else devices.filter {
             PioneerBlueforceNative.sameAddress(it.address,target)
         }
-        if(selected==null) {
-            record("targetAvailable=false pairedCount=${devices.size}")
+        if(candidates.isEmpty()) {
+            record("targetAvailable=false targetConfigured=${!target.isNullOrBlank()} pairedCount=${devices.size}")
             return null
         }
-        val connected=read(65,selected.handle) { reply ->
-            check(reply.dataAvail()==4) { "先锋蓝牙连接状态回复不完整" }
-            reply.readInt().also { check(it in 0..1) { "先锋蓝牙连接状态无效" } }==1
-        } ?: false
-        val connectedProfiles=read(80,selected.handle) { reply ->
-            check(reply.dataAvail()==4) { "先锋蓝牙已连接配置回复不完整" }
-            reply.readInt()
-        } ?: 0
+        // A paired record is not a connected phone. Inspect every candidate, but
+        // never substitute another phone when the driver explicitly selected one.
+        val states=candidates.map { device ->
+            val connected=read(65,device.handle) { reply ->
+                check(reply.dataAvail()==4) { "先锋蓝牙连接状态回复不完整" }
+                reply.readInt().also { check(it in 0..1) { "先锋蓝牙连接状态无效" } }==1
+            } ?: false
+            val profiles=read(80,device.handle) { reply ->
+                check(reply.dataAvail()==4) { "先锋蓝牙已连接配置回复不完整" }
+                reply.readInt()
+            } ?: 0
+            Triple(device,connected,profiles)
+        }
+        val selected=states.singleOrNull { ready(it.second,it.third) }?.first
         val autoConnect=read(44) { reply ->
             check(reply.dataAvail()==4) { "先锋蓝牙自动连接状态回复不完整" }
             reply.readInt()
@@ -137,9 +143,9 @@ internal class PioneerBluetoothSnapshot(private val log: (String) -> Unit = {},
             check(reply.dataAvail()==4) { "先锋蓝牙连接进行状态回复不完整" }
             reply.readInt()
         }
-        record("targetAvailable=true handle=${selected.handle} deviceConnected=$connected connectedProfiles=$connectedProfiles autoConnect=$autoConnect connecting=$connecting")
-        // HFP=0x01, A2DP=0x02. Either is sufficient; never force HFP on an
-        // audio-only phone, or accept a residual temporary SPP/ACL link as readiness.
-        return selected.address.takeIf { ready(connected, connectedProfiles) }
+        record("targetConfigured=${!target.isNullOrBlank()} pairedCount=${devices.size} " +
+            "candidates=${states.map { "handle=${it.first.handle}:connected=${it.second}:profiles=${it.third}" }} " +
+            "readyCount=${states.count { ready(it.second,it.third) }} autoConnect=$autoConnect connecting=$connecting")
+        return selected?.address
     }
 }

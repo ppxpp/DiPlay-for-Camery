@@ -28,16 +28,20 @@ internal class PioneerBootProfileRecovery(
         // The OEM may not yet have published its paired list during boot. Keep waiting,
         // rather than retiring the journal or initializing its SDK without a target.
         if(devices.isEmpty())return false
-        if(records.size!=1 || devices.size!=1)conflict("重启后蓝牙设备归属不明确，已保留恢复记录")
+        if(records.size!=1)conflict("重启后蓝牙设备归属不明确，已保留恢复记录")
         val (address,value)=records.entries.single()
-        val device=devices.single()
+        val device=devices.singleOrNull { PioneerBlueforceNative.sameAddress(it.address,address) }
+            ?: conflict("重启后目标蓝牙设备已变化，已保留恢复记录")
         if(!PioneerBlueforceNative.sameAddress(device.address,address))conflict("重启后蓝牙配对设备已变化，已保留恢复记录")
         val saved=value as Int
         val binder=PioneerBinder(log)
         // Do not initialize the vendor SDK or write profiles before OEM HFP/A2DP.
         if(snapshot.connectedAddress(address)==null)return false
         val current=binder.output(81,device.handle) ?: return false
-        val action=PioneerProfileRecovery.decide(saved,current,journal.getString("boot:$address",null),boot,devices.size)
+        val peers=PioneerProfilePeers.read(binder,address)
+        val compatible=PioneerProfilePeers.recordedMatches(journal,address,peers) &&
+            PioneerProfilePeers.compatible(peers,saved or 128)
+        val action=PioneerProfileRecovery.decide(saved,current,journal.getString("boot:$address",null),boot,devices.size,compatible)
         if(action==PioneerProfileRecovery.Action.BLOCK)conflict("重启后蓝牙配置不符合上次临时变更，已保留恢复记录")
         if(action==PioneerProfileRecovery.Action.RESTORE_SAVED && current!=saved) {
             // A previous boot cannot own a live port in this boot. Never disconnect a
@@ -63,11 +67,13 @@ internal class PioneerBootProfileRecovery(
             val adapter=PioneerAdapter().apply { initialize() }
             val paired=adapter.paired()
             val selected=paired.singleOrNull { PioneerBlueforceNative.sameAddress(it.address,address) }
-            if(paired.size!=1 || selected==null || binder.output(81,selected.handle)!=current)
+            if(selected==null || binder.output(81,selected.handle)!=current)
                 conflict("恢复前蓝牙设备或配置再次变化，已保留恢复记录")
             if(active.isNotEmpty())repair.prepareBaseline(selected,binder)
             if(cancelled.get())throw InterruptedIOException("Pioneer boot recovery cancelled")
             PioneerBluetoothLink.requireConnected(adapter,selected)
+            PioneerProfilePeers.requireUnchanged(binder,address,peers)
+            PioneerProfilePeers.requireCompatible(peers,saved)
             check(adapter.connectProfiles(selected,saved)) { "Pioneer boot profile restore rejected" }
             // Once the write is issued, finish confirming/retiring it even if the
             // connection request is cancelled. A timeout always retains the journal.
@@ -77,7 +83,8 @@ internal class PioneerBootProfileRecovery(
                 Thread.sleep(250)
             }
         }
-        check(journal.edit().remove(address).remove("boot:$address").commit()) { "Cannot retire boot profile rollback" }
+        PioneerProfilePeers.requireUnchanged(binder,address,peers)
+        check(journal.edit().remove(address).remove("boot:$address").remove("peers:$address").commit()) { "Cannot retire boot profile rollback" }
         log("Pioneer interrupted boot profile recovery confirmed action=$action; rechecking OEM Bluetooth")
         completed=true
         return true
