@@ -45,4 +45,20 @@ class VehicleBluetoothHintTest {
         val panel=ConnectionProgressPanel(app).apply { bind(p) }
         assertFalse(texts(panel).any { it.contains(app.getString(R.string.vehicle_bluetooth_missing_hint)) })
     }
+    @Test fun wifiReadinessHintTracksTheNetworkPreparationTask() {
+        val p=progress()
+        p.task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.RUNNING,"vehicle_wifi_enabling")
+        val panel=ConnectionProgressPanel(app).apply { bind(p) }
+        val enabling=app.getString(R.string.connect_progress_wifi_enabling)
+        val waiting=app.getString(R.string.connect_progress_wifi_wait)
+        assertTrue(texts(panel).any { it.contains(enabling) })
+
+        p.task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.RUNNING,"vehicle_wifi_wait")
+        panel.bind(p)
+        assertTrue(texts(panel).any { it.contains(waiting) })
+
+        p.task(ConnectionTask.WIRELESS_NETWORK,ConnectionTaskState.COMPLETE)
+        panel.bind(p)
+        assertFalse(texts(panel).any { it.contains(enabling) || it.contains(waiting) })
+    }
 }

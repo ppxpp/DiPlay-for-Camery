@@ -3092,6 +3092,11 @@ class CarPlayController(
                     appContext,{ isStaleWirelessRun(generation) || cancelled.get() },::connectionDiagnostic)).also {
                     it.bindCancellation { isStaleWirelessRun(generation) || cancelled.get() }
                     it.bindTiming(hotspotTimingObserver())
+                    it.bindPreparation { detail ->
+                        if(!isStaleWirelessRun(generation) && !cancelled.get())
+                            connectionProgress?.task(com.shilapi.xcertplay.orchestration.progress.ConnectionTask.WIRELESS_NETWORK,
+                                com.shilapi.xcertplay.orchestration.progress.ConnectionTaskState.RUNNING,detail)
+                    }
                 }
             }
             WirelessHotspotMode.WIFI_P2P -> WifiP2pGroupManager(appContext, ::debugLog,

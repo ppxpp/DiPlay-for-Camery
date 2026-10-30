@@ -6106,7 +6106,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         .setMessage(getString(R.string.settings_pioneer_pair_original))
                         .setPositiveButton(getString(R.string.got_it),null).show()
                 } else appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
-                    .setItems(phones.map { it.name.ifBlank { getString(R.string.paired_device) } }.toTypedArray()) { _,index ->
+                    .setItems(phones.map { phone ->
+                        val name=phone.name.ifBlank { getString(R.string.paired_device) }
+                        if(phones.count { it.name==phone.name }>1) "$name · ${phone.address.takeLast(5)}" else name
+                    }.toTypedArray()) { _,index ->
                         val phone=phones[index]
                         DiPlayPreferences.savePhone(this,phone.address,phone.name.ifBlank { "iPhone" })
                         val start=pendingWireless;pendingWireless=false;render()

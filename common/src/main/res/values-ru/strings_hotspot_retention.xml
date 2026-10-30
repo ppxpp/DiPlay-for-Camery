@@ -5,6 +5,8 @@
     <string name="settings_camry_hotspot_retention_immediate">Выключить сразу</string>
     <string name="settings_camry_hotspot_retention_seconds">%1$d сек.</string>
     <string name="waiting_vehicle_bluetooth">Ожидание подключения iPhone к Bluetooth автомобиля</string>
-    <string name="vehicle_bluetooth_connect_hint">Сначала подключите Bluetooth автомобиля</string>
+    <string name="vehicle_bluetooth_connect_hint">Ожидание Bluetooth</string>
     <string name="vehicle_bluetooth_missing_hint">Bluetooth не подключён. Подключите и повторите.</string>
+    <string name="connect_progress_wifi_enabling">Включение Wi-Fi</string>
+    <string name="connect_progress_wifi_wait">Ожидание готовности Wi-Fi</string>
 </resources>
