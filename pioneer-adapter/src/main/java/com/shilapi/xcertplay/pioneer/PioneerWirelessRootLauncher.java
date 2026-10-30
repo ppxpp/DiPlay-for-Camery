@@ -35,10 +35,10 @@ public final class PioneerWirelessRootLauncher {
         PioneerRootDispatcher.INSTANCE.dispatch(command);
     }
     public static void launchHotspot(Context context, String classpath, File result, String action, String token, File gate, File commandRunner, boolean deferred, boolean adaptationAuthorized) throws Exception {
-        boolean cleanup=action.equals("STOP_OWNED") || action.equals("RELEASE");
+        boolean cleanup=action.equals("STOP_OWNED") || action.equals("RELEASE") || action.equals("WORKER");
         if (!adaptationAuthorized || Process.is64Bit() || (!cleanup && !CamryAdaptation.INSTANCE.enabled()))
             throw new IllegalStateException("Camry ARM32 adaptation is required");
-        if (!java.util.Arrays.asList("PREPARE","PREPARE_LOCAL_ONLY","RESUME_LOCAL_ONLY","START","FIVE_GHZ","FIREWALL","STATUS","STOP","STOP_OWNED","RELEASE").contains(action) || !token.matches("[0-9a-f]{32}"))
+        if (!java.util.Arrays.asList("WORKER","PREPARE","PREPARE_LOCAL_ONLY","RESUME_LOCAL_ONLY","START","FIVE_GHZ","FIREWALL","STATUS","STOP","STOP_OWNED","RELEASE").contains(action) || !token.matches("[0-9a-f]{32}"))
             throw new SecurityException("Unknown vehicle hotspot action");
         if(deferred && !action.equals("PREPARE") && !action.equals("PREPARE_LOCAL_ONLY"))
             throw new SecurityException("Only hotspot preparation can be deferred");
