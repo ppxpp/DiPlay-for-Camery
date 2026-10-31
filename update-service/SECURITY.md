@@ -43,9 +43,20 @@ entry in the token editor), plus Zone → Zone → Read. The token must be scope
 
 Manual console steps that cannot be scripted:
 
-1. **Cloudflare Access** (Zero Trust → Access → Applications): protect
-   `diplay.mgulu.com/admin` and `diplay.mgulu.com/api/v1/admin` with a policy
-   limited to your email/IdP group. This removes the brute-force surface entirely.
+1. **Cloudflare Access** — configured for this zone (team domain
+   `zhouhao3207.cloudflareaccess.com`):
+
+   | Application | Domain/path | Policy |
+   | --- | --- | --- |
+   | update-service admin | `diplay.mgulu.com/admin` | allow `Zhouhao3207@gmail.com` (one-time PIN), 8h session |
+   | update-service admin api | `diplay.mgulu.com/api/v1/admin` | allow `Zhouhao3207@gmail.com` (one-time PIN), 8h session |
+
+   Unauthenticated requests to those paths return 302 to the Access login page;
+   public endpoints are unaffected. To add another administrator, add the email
+   to both applications' allow policies (Zero Trust → Access → Applications).
+   Scripts that need the admin API must use an Access **service token**
+   (Zero Trust → Access → Service Auth) and send `CF-Access-Client-Id` /
+   `CF-Access-Client-Secret` headers.
 2. **Bot Fight Mode** (Security → Bots): enable.
 3. **WAF managed rules** (Security → WAF): enable the free managed ruleset.
 4. **Alerts** (Notifications): alert on 4xx/5xx spikes for `/api/*`, on R2
