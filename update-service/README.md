@@ -12,7 +12,10 @@ dist/                                                          generated Pages o
 schema/                                                        v1 manifest and response contracts
 scripts/build-site.mjs                                         build site and assemble dist
 scripts/publish-update.mjs                                     generic publisher
+scripts/derived.mjs                                            rebuild releases-index/latest-any read models
+scripts/apply-edge-security.mjs                                WAF rate limiting + cache rules (dry-run by default)
 scripts/restore-release-snapshot.mjs                           restore a history snapshot from an existing artifact
+SECURITY.md                                                    threat model, edge/app controls, rotation runbook
 test/                                                          Function tests
 wrangler.toml                                                  Pages project + R2 binding
 ```
@@ -33,6 +36,8 @@ The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (inst
 `DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
 
 A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
+
+Public `latest`, `public-latest`, `releases` (with `?limit=`, default 100, max 500) and `install-kits` responses carry `Cache-Control: public, max-age=60, s-maxage=60` plus a weak `ETag`; per-client manifests and admin data stay `no-store`. `releases` serves the derived `releases-index.json` and the legacy no-id `latest` serves `latest-any.json`, so each request costs one bucket read; both are rebuilt by the publisher and by admin mutations. See `SECURITY.md` for edge rate limiting, caching and the secrets runbook.
 
 The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 

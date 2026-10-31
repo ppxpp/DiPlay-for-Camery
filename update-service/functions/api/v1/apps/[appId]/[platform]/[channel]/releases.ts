@@ -63,7 +63,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
         size: artifact.size,
       })),
     }));
-    return jsonWithEtag(request, { releases });
+    return jsonWithEtag(request, { releases }, 200, { cacheTtl: 60 });
   }
 
   // Unpublished candidates stay out of the public history; published versions keep their entry.
@@ -83,5 +83,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
       sha256: artifact.sha256,
       size: artifact.size,
     })),
-  })) });
+  })) }, 200, { cacheTtl: 60 });
 };

@@ -54,5 +54,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   if (artifacts.some((artifact) => !artifact.url || !artifact.checksumsUrl)) return jsonWithEtag(request, { error: "invalid_manifest" }, 502);
   return jsonWithEtag(request, { schemaVersion: stored.schemaVersion, appId, platform, channel, version: stored.version,
     versionName: stored.versionName ?? stored.version, versionCode: stored.versionCode, publishedAt: stored.publishedAt,
-    mandatory: stored.mandatory ?? false, artifacts });
+    mandatory: stored.mandatory ?? false, artifacts }, 200, { cacheTtl: 60 });
 };
