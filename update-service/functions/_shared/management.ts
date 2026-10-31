@@ -44,11 +44,27 @@ export interface Env {
   RATE_KV?: KVNamespace;
 }
 
-export function json(body: unknown, status = 200, options: { cors?: boolean } = {}): Response {
+interface JsonOptions {
+  cors?: boolean;
+  // Public endpoints pass a TTL so the edge may cache the response; everything
+  // else stays no-store (per-client manifests and admin data must not be shared).
+  cacheTtl?: number;
+}
+
+function cacheHeaders(ttl?: number): Record<string, string> {
+  if (ttl !== undefined && ttl > 0) {
+    return {
+      "cache-control": `public, max-age=${ttl}, s-maxage=${ttl}`,
+      "cdn-cache-control": `public, max-age=${ttl}`,
+    };
+  }
+  return { "cache-control": "no-store", "cdn-cache-control": "no-store" };
+}
+
+export function json(body: unknown, status = 200, options: JsonOptions = {}): Response {
   const headers: Record<string, string> = {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "cdn-cache-control": "no-store",
+    ...cacheHeaders(options.cacheTtl),
     "x-content-type-options": "nosniff",
   };
   if (options.cors !== false) headers["access-control-allow-origin"] = "*";
@@ -61,7 +77,7 @@ export async function jsonWithEtag(
   request: Request,
   body: unknown,
   status = 200,
-  options: { cors?: boolean } = {},
+  options: JsonOptions = {},
 ): Promise<Response> {
   const text = JSON.stringify(body);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -69,7 +85,7 @@ export async function jsonWithEtag(
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, {
       status: 304,
-      headers: { etag, "cache-control": "no-store", "cdn-cache-control": "no-store" },
+      headers: { etag, ...cacheHeaders(options.cacheTtl) },
     });
   }
   const response = json(body, status, options);

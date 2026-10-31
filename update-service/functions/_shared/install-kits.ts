@@ -285,5 +285,5 @@ export async function buildInstallKitResponse(
     deviceProfiles: config.deviceProfiles,
     apps,
   };
-  return json(body);
+  return json(body, 200, { cacheTtl: 60 });
 }
