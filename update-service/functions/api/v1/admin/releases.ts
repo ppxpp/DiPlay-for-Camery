@@ -1,4 +1,5 @@
 import { isAdmin } from "../../../_shared/admin-auth";
+import { rebuildDerived } from "../../../_shared/derived";
 import type { Env, StoredManifest } from "../../../_shared/management";
 import { allReleaseManifests, isPublishedRelease, json, parseManagement, readManifest, releasePrefix, writeManifest } from "../../../_shared/management";
 
@@ -75,6 +76,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const latest = await readManifest(env.META, latestKey);
   if (latest && releaseKeyOf(latest) === releaseKey) await writeManifest(env.META, latestKey, manifest);
+  await rebuildDerived(env, app, platform, channel);
   return json({ ok: true, releaseKey, release: manifest }, 200, { cors: false });
 };
 
@@ -113,6 +115,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   };
   await writeManifest(env.META, targetKey, delivered);
   await writeManifest(env.META, latestKey, delivered);
+  await rebuildDerived(env, app, platform, channel);
   return json({ ok: true, currentVersion: releaseKey, previousVersion: previous ? releaseKeyOf(previous) : null }, 200, { cors: false });
 };
 
@@ -162,5 +165,6 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     assetsRemoved = false;
   }
+  await rebuildDerived(env, app, platform, channel);
   return json({ ok: true, deleted: releaseKey, currentVersion: fallback ? releaseKeyOf(fallback) : (deletingCurrent ? null : (latest ? releaseKeyOf(latest) : null)), assetsRemoved }, 200, { cors: false });
 };

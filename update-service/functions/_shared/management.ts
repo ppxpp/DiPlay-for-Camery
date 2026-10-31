@@ -126,10 +126,14 @@ export async function readManifest(bucket: R2Bucket, key: string): Promise<Store
   }
 }
 
-export async function writeManifest(bucket: R2Bucket, key: string, manifest: StoredManifest): Promise<void> {
-  await bucket.put(key, `${JSON.stringify(manifest, null, 2)}\n`, {
+export async function putJson(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
+  await bucket.put(key, `${JSON.stringify(value, null, 2)}\n`, {
     httpMetadata: { contentType: "application/json; charset=utf-8", cacheControl: "no-store" },
   });
+}
+
+export async function writeManifest(bucket: R2Bucket, key: string, manifest: StoredManifest): Promise<void> {
+  await putJson(bucket, key, manifest);
 }
 
 export async function allReleaseManifests(
