@@ -33,6 +33,8 @@ interface StoredManifest {
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const CLIENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const ARCH = /^[a-z0-9_-]{1,32}$/;
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -128,7 +130,15 @@ export async function latestManifestResponse(
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return json({ error: "asset_base_url_not_configured" }, 500);
 
-  const clientId = new URL(request.url).searchParams.get("id")?.trim() || null;
+  const clientIdParam = new URL(request.url).searchParams.get("id")?.trim() || null;
+  if (clientIdParam !== null && !CLIENT_ID.test(clientIdParam)) {
+    return json({ error: "invalid_client_id" }, 400);
+  }
+  const clientId = clientIdParam;
+  const archParam = new URL(request.url).searchParams.get("arch")?.trim() || null;
+  if (archParam !== null && !ARCH.test(archParam)) {
+    return json({ error: "invalid_arch" }, 400);
+  }
   // The historical versionCode 1000 client queried stable without an id or a
   // channel choice. New clients always send their client id, including the
   // persisted fallback when Android ID is unavailable.
@@ -200,7 +210,7 @@ export async function latestManifestResponse(
     }
   }
 
-  const arch = new URL(request.url).searchParams.get("arch")?.trim() || null;
+  const arch = archParam;
   const selected = arch
     ? stored.artifacts.filter((artifact) => !artifact.arch || artifact.arch === "universal" || artifact.arch === arch)
     : stored.artifacts;

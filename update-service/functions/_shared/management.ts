@@ -41,19 +41,40 @@ export interface Env {
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD_HASH: string;
   ADMIN_SESSION_SECRET: string;
+  RATE_KV?: KVNamespace;
 }
 
-export function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      "cdn-cache-control": "no-store",
-      "access-control-allow-origin": "*",
-      "x-content-type-options": "nosniff",
-    },
-  });
+export function json(body: unknown, status = 200, options: { cors?: boolean } = {}): Response {
+  const headers: Record<string, string> = {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "cdn-cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+  };
+  if (options.cors !== false) headers["access-control-allow-origin"] = "*";
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+// Serves a JSON body with a weak ETag so conditional clients and edge caches
+// can revalidate instead of re-downloading the whole payload.
+export async function jsonWithEtag(
+  request: Request,
+  body: unknown,
+  status = 200,
+  options: { cors?: boolean } = {},
+): Promise<Response> {
+  const text = JSON.stringify(body);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  const etag = `W/"${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}"`;
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, {
+      status: 304,
+      headers: { etag, "cache-control": "no-store", "cdn-cache-control": "no-store" },
+    });
+  }
+  const response = json(body, status, options);
+  response.headers.set("etag", etag);
+  return response;
 }
 
 export function releasePrefix(appId: string, platform: string, channel: string): string {
