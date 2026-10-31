@@ -1,7 +1,7 @@
 import type { Env } from "./management";
 
 const COOKIE = "diplay_admin_session";
-const SESSION_SECONDS = 8 * 60 * 60;
+const SESSION_SECONDS = 4 * 60 * 60;
 // Cloudflare Workers WebCrypto rejects PBKDF2 iteration counts above 100,000.
 const ITERATIONS = 100_000;
 

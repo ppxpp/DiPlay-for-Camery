@@ -4,6 +4,7 @@ import { createReadStream, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { rebuildDerived } from "./derived.mjs";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const VERSION = /^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$/;
@@ -234,6 +235,8 @@ console.log("Uploaded the release snapshot.");
 // The latest pointer is written last so clients never see a manifest before its artifacts exist.
 await put(client, metaBucket, latestKey, manifestBody, "application/json; charset=utf-8", METADATA_CACHE);
 console.log("Updated the latest pointer.");
+
+await rebuildDerived({ client, metaBucket, appId: app, platform, channel });
 
 if (values["verify-url"]) {
   let lastError;

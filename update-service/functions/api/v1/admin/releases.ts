@@ -1,4 +1,5 @@
 import { isAdmin } from "../../../_shared/admin-auth";
+import { rebuildDerived } from "../../../_shared/derived";
 import type { Env, StoredManifest } from "../../../_shared/management";
 import { allReleaseManifests, isPublishedRelease, json, parseManagement, readManifest, releasePrefix, writeManifest } from "../../../_shared/management";
 
@@ -32,12 +33,12 @@ async function snapshotKeyFor(bucket: R2Bucket, prefix: string, manifest: Stored
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401, { cors: false });
   const url = new URL(request.url);
   const app = url.searchParams.get("app") ?? "diplay";
   const platform = url.searchParams.get("platform") ?? "android";
   const channel = url.searchParams.get("channel") ?? "stable";
-  if (![app, platform, channel].every((part) => SEGMENT.test(part))) return json({ error: "invalid_path" }, 400);
+  if (![app, platform, channel].every((part) => SEGMENT.test(part))) return json({ error: "invalid_path" }, 400, { cors: false });
   const prefix = releasePrefix(app, platform, channel);
   const current = await readManifest(env.META, `apps/${app}/${platform}/${channel}/latest.json`);
   const releases = await allReleaseManifests(env.META, prefix);
@@ -48,24 +49,24 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
-  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401, { cors: false });
   let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "invalid_request" }, 400); }
-  if (!body || typeof body !== "object") return json({ error: "invalid_request" }, 400);
+  try { body = await request.json(); } catch { return json({ error: "invalid_request" }, 400, { cors: false }); }
+  if (!body || typeof body !== "object") return json({ error: "invalid_request" }, 400, { cors: false });
   const input = body as Record<string, unknown>;
   const app = typeof input.app === "string" ? input.app : "diplay";
   const platform = typeof input.platform === "string" ? input.platform : "android";
   const channel = typeof input.channel === "string" ? input.channel : "stable";
   const version = typeof input.version === "string" ? input.version : "";
   const releaseKey = requestedReleaseKey(input);
-  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400);
+  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400, { cors: false });
   const management = parseManagement(input.management);
-  if (!management) return json({ error: "invalid_management" }, 400);
+  if (!management) return json({ error: "invalid_management" }, 400, { cors: false });
   const releaseKeyPath = await findSnapshotKey(env.META, releasePrefix(app, platform, channel), releaseKey);
-  if (!releaseKeyPath) return json({ error: "release_not_found" }, 404);
+  if (!releaseKeyPath) return json({ error: "release_not_found" }, 404, { cors: false });
   const manifest = await readManifest(env.META, releaseKeyPath);
-  if (!manifest) return json({ error: "release_not_found" }, 404);
-  if (version && manifest.version !== version) return json({ error: "release_not_found" }, 404);
+  if (!manifest) return json({ error: "release_not_found" }, 404, { cors: false });
+  if (version && manifest.version !== version) return json({ error: "release_not_found" }, 404, { cors: false });
   const wasPublished = manifest.management?.published === true || manifest.management?.enabled === true;
   const nextManagement = { ...management };
   delete nextManagement.published;
@@ -75,30 +76,31 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const latest = await readManifest(env.META, latestKey);
   if (latest && releaseKeyOf(latest) === releaseKey) await writeManifest(env.META, latestKey, manifest);
-  return json({ ok: true, releaseKey, release: manifest });
+  await rebuildDerived(env, app, platform, channel);
+  return json({ ok: true, releaseKey, release: manifest }, 200, { cors: false });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401, { cors: false });
   let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "invalid_request" }, 400); }
-  if (!body || typeof body !== "object") return json({ error: "invalid_request" }, 400);
+  try { body = await request.json(); } catch { return json({ error: "invalid_request" }, 400, { cors: false }); }
+  if (!body || typeof body !== "object") return json({ error: "invalid_request" }, 400, { cors: false });
   const input = body as Record<string, unknown>;
   const app = typeof input.app === "string" ? input.app : "diplay";
   const platform = typeof input.platform === "string" ? input.platform : "android";
   const channel = typeof input.channel === "string" ? input.channel : "stable";
   const version = typeof input.version === "string" ? input.version : "";
   const releaseKey = requestedReleaseKey(input);
-  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400);
+  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400, { cors: false });
 
   const prefix = releasePrefix(app, platform, channel);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const previous = await readManifest(env.META, latestKey);
   const targetKey = await findSnapshotKey(env.META, prefix, releaseKey);
-  if (!targetKey) return json({ error: "release_not_found" }, 404);
+  if (!targetKey) return json({ error: "release_not_found" }, 404, { cors: false });
   const target = await readManifest(env.META, targetKey);
-  if (!target) return json({ error: "release_not_found" }, 404);
-  if (version && target.version !== version) return json({ error: "release_not_found" }, 404);
+  if (!target) return json({ error: "release_not_found" }, 404, { cors: false });
+  if (version && target.version !== version) return json({ error: "release_not_found" }, 404, { cors: false });
   if (previous && releaseKeyOf(previous) !== releaseKey) {
     const previousSnapshot: StoredManifest = { ...previous, management: { ...(previous.management ?? { enabled: false, mode: "all", notes: "" }), enabled: false } };
     await writeManifest(env.META, await snapshotKeyFor(env.META, prefix, previous), previousSnapshot);
@@ -113,26 +115,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   };
   await writeManifest(env.META, targetKey, delivered);
   await writeManifest(env.META, latestKey, delivered);
-  return json({ ok: true, currentVersion: releaseKey, previousVersion: previous ? releaseKeyOf(previous) : null });
+  await rebuildDerived(env, app, platform, channel);
+  return json({ ok: true, currentVersion: releaseKey, previousVersion: previous ? releaseKeyOf(previous) : null }, 200, { cors: false });
 };
 
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
-  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+  if (!await isAdmin(request, env)) return json({ error: "unauthorized" }, 401, { cors: false });
   const url = new URL(request.url);
   const app = url.searchParams.get("app") ?? "diplay";
   const platform = url.searchParams.get("platform") ?? "android";
   const channel = url.searchParams.get("channel") ?? "stable";
   const releaseKey = requestedReleaseKey(Object.fromEntries(url.searchParams));
   const version = url.searchParams.get("version") ?? "";
-  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400);
+  if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400, { cors: false });
 
   const prefix = releasePrefix(app, platform, channel);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const targetKey = await findSnapshotKey(env.META, prefix, releaseKey);
-  if (!targetKey) return json({ error: "release_not_found" }, 404);
+  if (!targetKey) return json({ error: "release_not_found" }, 404, { cors: false });
   const target = await readManifest(env.META, targetKey);
-  if (!target) return json({ error: "release_not_found" }, 404);
-  if (version && target.version !== version) return json({ error: "release_not_found" }, 404);
+  if (!target) return json({ error: "release_not_found" }, 404, { cors: false });
+  if (version && target.version !== version) return json({ error: "release_not_found" }, 404, { cors: false });
 
   const latest = await readManifest(env.META, latestKey);
   const deletingCurrent = latest !== null && releaseKeyOf(latest) === releaseKey;
@@ -162,5 +165,6 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     assetsRemoved = false;
   }
-  return json({ ok: true, deleted: releaseKey, currentVersion: fallback ? releaseKeyOf(fallback) : (deletingCurrent ? null : (latest ? releaseKeyOf(latest) : null)), assetsRemoved });
+  await rebuildDerived(env, app, platform, channel);
+  return json({ ok: true, deleted: releaseKey, currentVersion: fallback ? releaseKeyOf(fallback) : (deletingCurrent ? null : (latest ? releaseKeyOf(latest) : null)), assetsRemoved }, 200, { cors: false });
 };
