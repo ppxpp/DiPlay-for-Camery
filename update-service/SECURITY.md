@@ -43,20 +43,15 @@ entry in the token editor), plus Zone → Zone → Read. The token must be scope
 
 Manual console steps that cannot be scripted:
 
-1. **Cloudflare Access** — configured for this zone (team domain
-   `zhouhao3207.cloudflareaccess.com`):
-
-   | Application | Domain/path | Policy |
-   | --- | --- | --- |
-   | update-service admin | `diplay.mgulu.com/admin` | allow `Zhouhao3207@gmail.com` (one-time PIN), 8h session |
-   | update-service admin api | `diplay.mgulu.com/api/v1/admin` | allow `Zhouhao3207@gmail.com` (one-time PIN), 8h session |
-
-   Unauthenticated requests to those paths return 302 to the Access login page;
-   public endpoints are unaffected. To add another administrator, add the email
-   to both applications' allow policies (Zero Trust → Access → Applications).
-   Scripts that need the admin API must use an Access **service token**
-   (Zero Trust → Access → Service Auth) and send `CF-Access-Client-Id` /
-   `CF-Access-Client-Secret` headers.
+1. **Cloudflare Access** (optional; currently **not enabled** — it was tried and
+   removed because the extra login step was considered too heavy for a single
+   operator). To enable it: Zero Trust → Access → Applications → Add a
+   self-hosted application for `diplay.mgulu.com/admin` and another for
+   `diplay.mgulu.com/api/v1/admin`, each with an allow policy limited to your
+   email (one-time PIN). Unauthenticated requests then redirect to the Access
+   login page while public endpoints stay open. Scripts that need the admin API
+   would require an Access service token (`CF-Access-Client-Id` /
+   `CF-Access-Client-Secret`).
 2. **Bot Fight Mode** (Security → Bots): enable.
 3. **WAF managed rules** (Security → WAF): enable the free managed ruleset.
 4. **Alerts** (Notifications): alert on 4xx/5xx spikes for `/api/*`, on R2
