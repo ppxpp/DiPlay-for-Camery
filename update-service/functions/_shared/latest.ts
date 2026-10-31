@@ -113,6 +113,26 @@ async function loadManifest(env: Env, key: string): Promise<ManifestLoad> {
   return { kind: "ok", stored };
 }
 
+// One derived object keeps the legacy cross-channel lookup at a single read.
+async function readLatestAny(
+  env: Env,
+  appId: string,
+  platform: string,
+): Promise<{ stable: StoredManifest | null; beta: StoredManifest | null } | null> {
+  const object = await env.META.get(`apps/${appId}/${platform}/latest-any.json`);
+  if (!object) return null;
+  try {
+    const value = await object.json<Record<string, unknown>>();
+    if (!value || value.schemaVersion !== 1) return null;
+    return {
+      stable: isManagedManifest(value.stable) ? value.stable : null,
+      beta: isManagedManifest(value.beta) ? value.beta : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function latestManifestResponse(
   request: Request,
   env: Env,
@@ -150,10 +170,18 @@ export async function latestManifestResponse(
   if (legacyStable) {
     // The legacy client cannot choose a channel, so serve whichever published
     // channel carries the newer version. Equal versions keep stable first.
-    const [stable, beta] = await Promise.all([
-      loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
-      loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
-    ]);
+    let stable: ManifestLoad;
+    let beta: ManifestLoad;
+    const snapshot = await readLatestAny(env, appId, platform);
+    if (snapshot) {
+      stable = snapshot.stable ? { kind: "ok", stored: snapshot.stable } : { kind: "missing" };
+      beta = snapshot.beta ? { kind: "ok", stored: snapshot.beta } : { kind: "missing" };
+    } else {
+      [stable, beta] = await Promise.all([
+        loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
+        loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
+      ]);
+    }
     const candidates: Array<{ channel: string; stored: StoredManifest }> = [];
     for (const [candidateChannel, loaded] of [
       ["stable", stable],
