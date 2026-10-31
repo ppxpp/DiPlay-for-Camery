@@ -1,40 +1,58 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { fetchReleases, releaseDisplayName, type ChannelKey, type Release } from '../data/releases.ts';
 
-type Release = {
-  version: string;
-  versionName: string;
-  versionCode: number;
-  publishedAt: string | null;
-  notes: string;
-  artifacts: Array<{ name: string; url: string | null; size?: number }>;
-};
+const props = withDefaults(
+  defineProps<{
+    initialStable?: Release[];
+    initialBeta?: Release[];
+  }>(),
+  { initialStable: () => [], initialBeta: () => [] },
+);
 
-const channel = ref<'stable' | 'beta'>('stable');
-const releases = ref<Release[]>([]);
+const initialChannel: ChannelKey =
+  props.initialStable.length === 0 && props.initialBeta.length > 0 ? 'beta' : 'stable';
+const channel = ref<ChannelKey>(initialChannel);
+const releases = ref<Release[]>(
+  initialChannel === 'stable' ? props.initialStable : props.initialBeta,
+);
 const error = ref('');
-const loading = ref(true);
+const loading = ref(releases.value.length === 0);
+let requestId = 0;
 
-async function load() {
-  loading.value = true;
+async function load(
+  next: ChannelKey = channel.value,
+  fallbackWhenEmpty = false,
+  silent = false,
+) {
+  const id = ++requestId;
+  channel.value = next;
+  if (!silent) loading.value = true;
   error.value = '';
   try {
-    const response = await fetch(`/api/v1/apps/diplay/android/${channel.value}/releases`, {
-      cache: 'no-store',
-    });
-    if (!response.ok) throw new Error(`请求失败（${response.status}）`);
-    releases.value = (await response.json()).releases ?? [];
+    let target = next;
+    let list = await fetchReleases(target);
+    if (id !== requestId) return;
+    if (fallbackWhenEmpty && list.length === 0) {
+      target = 'beta';
+      channel.value = target;
+      list = await fetchReleases(target);
+    }
+    if (id !== requestId) return;
+    releases.value = list;
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '加载失败';
+    if (id === requestId) {
+      releases.value = [];
+      error.value = cause instanceof Error ? cause.message : '加载失败';
+    }
   } finally {
-    loading.value = false;
+    if (id === requestId) loading.value = false;
   }
 }
 
-function setChannel(next: 'stable' | 'beta') {
+function setChannel(next: ChannelKey) {
   if (channel.value === next) return;
-  channel.value = next;
-  load();
+  void load(next);
 }
 
 function formatPublishedAt(value: string | null) {
@@ -43,7 +61,9 @@ function formatPublishedAt(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-onMounted(load);
+onMounted(() => {
+  void load(channel.value, true, releases.value.length > 0);
+});
 </script>
 
 <template>
@@ -103,7 +123,11 @@ onMounted(load);
     </div>
 
     <div v-else class="release-list">
-      <article v-for="release in releases" :key="release.version" class="release-card">
+      <article
+        v-for="release in releases"
+        :key="`${release.versionName || release.version}-${release.versionCode}`"
+        class="release-card"
+      >
         <div class="release-card-head">
           <div class="release-identity">
             <span class="release-icon" aria-hidden="true">
@@ -124,7 +148,7 @@ onMounted(load);
             </span>
             <div class="release-title">
               <div class="release-title-row">
-                <h2>{{ release.versionName || release.version }}</h2>
+                <h2>{{ releaseDisplayName(release) }}</h2>
                 <span class="tag tag--brand">{{ channel === 'stable' ? '正式版' : '内测版' }}</span>
               </div>
               <p class="release-meta">
@@ -156,6 +180,12 @@ onMounted(load);
               </a>
               <span v-else class="btn primary btn--compact" aria-disabled="true">下载 APK</span>
             </template>
+            <a
+              class="btn secondary btn--compact"
+              :href="`/releases/${channel}/${release.versionCode}/`"
+            >
+              详情
+            </a>
           </div>
         </div>
 

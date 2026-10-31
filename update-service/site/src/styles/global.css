@@ -362,6 +362,38 @@ code {
   line-height: 1.75;
 }
 
+.value-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -12px 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.value-points li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--color-brand-border);
+  border-radius: 999px;
+  background: var(--color-brand-light);
+  color: var(--color-brand-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.value-points li::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  flex: none;
+}
+
 .download-panel {
   width: 100%;
   max-width: 480px;
@@ -496,6 +528,17 @@ a.btn:hover {
 .btn.secondary:hover {
   background: #f8fafc;
   border-color: #cbd5e1;
+}
+
+.btn.danger {
+  background: var(--color-surface);
+  border-color: #f3c4c4;
+  color: #b42318;
+}
+
+.btn.danger:hover {
+  background: #fff5f5;
+  border-color: #e79a9a;
 }
 
 .btn:disabled,
@@ -1242,6 +1285,10 @@ dialog::backdrop {
     margin-bottom: 26px;
     font-size: 0.9375rem;
     line-height: 1.65;
+  }
+
+  .value-points {
+    margin: -10px 0 20px;
   }
 
   .actions-primary {

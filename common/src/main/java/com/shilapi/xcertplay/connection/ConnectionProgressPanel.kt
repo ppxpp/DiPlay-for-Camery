@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.connection
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -13,17 +14,24 @@ import com.shilapi.xcertplay.orchestration.CarPlayRuntimeConfig
 import com.shilapi.xcertplay.orchestration.progress.ConnectionOutcome
 import com.shilapi.xcertplay.orchestration.progress.ConnectionProgress
 import com.shilapi.xcertplay.orchestration.progress.ConnectionStep
+import com.shilapi.xcertplay.orchestration.progress.ConnectionTask
+import com.shilapi.xcertplay.orchestration.progress.ConnectionTaskState
 import java.text.NumberFormat
+import kotlin.math.ceil
 
 /** A self-contained waiting-screen widget. Transport events go to the model, never this view. */
 internal class ConnectionProgressPanel(context: Context) : LinearLayout(context) {
     private val history = ConnectionProgressHistory(context)
     private var model: ConnectionProgress? = null
+    private var pendingWireless = false
+    private var pendingChannel = com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.FRAMEWORK
+    private val displayedChannel get() = model?.channel ?: pendingChannel
     private var palette = DiPlayPalette.DARK
     private val summary = text(15f, true)
     private val nodes = LinearLayout(context).apply { orientation = VERTICAL }
     private val estimate = text(12f)
-    private val cells = mutableListOf<Pair<TextView, TextView>>()
+    private data class Cell(val label: TextView, val time: TextView, val hint: TextView)
+    private val cells = mutableListOf<Cell>()
     private var layoutKey: Pair<Int, List<ConnectionStep>>? = null
     private var tickerPosted = false
     private var initialized = false
@@ -46,6 +54,17 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
         setNight(true)
         render()
         initialized = true
+    }
+
+    /** Select the waiting layout before a controller exists, without starting attempt timing. */
+    fun pendingTransport(wireless: Boolean, vehicleWireless: Boolean) {
+        pendingWireless = wireless
+        pendingChannel = when {
+            wireless && vehicleWireless -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS
+            wireless -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.WIRELESS
+            else -> com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.FRAMEWORK
+        }
+        render()
     }
 
     fun begin(config: CarPlayRuntimeConfig): ConnectionProgress = history.create(config, model).also(::bind)
@@ -89,8 +108,10 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
 
     private fun render() {
         val state = model?.snapshot()
-        val steps = state?.steps ?: DEFAULT_STEPS
-        val columns = if (width >= dp(560)) 6 else 3
+        val steps = state?.steps ?: ConnectionProgress.stepsFor(pendingWireless, pendingChannel)
+        val columns = if(displayedChannel == com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS)
+            if(width>=dp(560)) VEHICLE_WIRELESS_WIDE_COLUMNS else VEHICLE_WIRELESS_COMPACT_COLUMNS
+            else if (width >= dp(560)) 6 else 3
         val key = columns to steps
         if (layoutKey != key) {
             layoutKey = key
@@ -101,14 +122,32 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 group.forEach { _ ->
                     val label = text(13f, true)
                     val time = text(12f)
+                    time.setSingleLine(true)
+                    time.fontFeatureSettings = "tnum"
+                    // Reserve the same localized time column for every tick and hint change.
+                    val timeWidth = ceil(listOf(
+                        context.getString(R.string.connect_progress_seconds, seconds(TIME_COLUMN_SAMPLE_MILLIS)),
+                        context.getString(R.string.connect_progress_pending),
+                        context.getString(R.string.connect_progress_skipped),
+                    ).maxOf { time.paint.measureText(it).toDouble() }).toInt() + dp(2)
+                    val hint = text(12f).apply {
+                        setSingleLine(true)
+                        ellipsize = TextUtils.TruncateAt.END
+                        visibility = GONE
+                    }
+                    val timingRow = LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(time, LayoutParams(timeWidth, -2))
+                        addView(hint, LayoutParams(0, -2, 1f).apply { marginStart = dp(TIME_HINT_GAP_DP) })
+                    }
                     val cell = LinearLayout(context).apply {
                         orientation = VERTICAL
                         setPadding(dp(3), dp(4), dp(3), dp(4))
                         addView(label, LayoutParams(-1, -2))
-                        addView(time, LayoutParams(-1, -2))
+                        addView(timingRow, LayoutParams(-1, -2))
                     }
                     row.addView(cell, LayoutParams(0, -2, 1f))
-                    cells += label to time
+                    cells += Cell(label, time, hint)
                 }
                 nodes.addView(row, LayoutParams(-1, -2))
             }
@@ -149,7 +188,7 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 else -> palette.secondaryText
             }
             val marker = when { current -> "●"; finished -> "✓"; else -> "○" }
-            val (label, time) = cells[index]
+            val (label, time, hint) = cells[index]
             label.text = "$marker ${context.getString(title(step))}"
             label.setTextColor(color)
             time.text = when {
@@ -157,11 +196,43 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
                 state?.outcome == ConnectionOutcome.COMPLETE -> context.getString(R.string.connect_progress_skipped)
                 else -> context.getString(R.string.connect_progress_pending)
             }
+            val hintResource=if(displayedChannel==com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS) {
+                when(step) {
+                ConnectionStep.DEVICE -> when(state?.tasks?.firstOrNull { it.task==ConnectionTask.WIRELESS_LINK }?.detail) {
+                    "vehicle_bluetooth_wait" -> R.string.vehicle_bluetooth_connect_hint
+                    "vehicle_bluetooth_not_connected" -> R.string.vehicle_bluetooth_missing_hint
+                    else -> null
+                }
+                ConnectionStep.NETWORK -> state?.tasks?.firstOrNull {
+                    it.task==ConnectionTask.WIRELESS_NETWORK && it.state==ConnectionTaskState.RUNNING
+                }?.let { task -> when(task.detail) {
+                    "vehicle_wifi_enabling" -> R.string.connect_progress_wifi_enabling
+                    "vehicle_wifi_wait" -> R.string.connect_progress_wifi_wait
+                    else -> null
+                } }
+                else -> null
+                }
+            } else null
+            hint.text = hintResource?.let(context::getString).orEmpty()
+            hint.visibility = if(hintResource==null) GONE else VISIBLE
             time.setTextColor(palette.secondaryText)
+            hint.setTextColor(if(hintResource==R.string.vehicle_bluetooth_missing_hint) palette.danger else palette.secondaryText)
         }
     }
 
-    private fun title(step: ConnectionStep) = when (step) {
+    private fun title(step: ConnectionStep): Int {
+        if(displayedChannel == com.shilapi.xcertplay.orchestration.progress.ConnectionChannel.PIONEER_WIRELESS) return when(step) {
+            ConnectionStep.NETWORK -> R.string.connect_progress_vehicle_hotspot
+            ConnectionStep.DEVICE -> R.string.connect_progress_vehicle_bluetooth
+            ConnectionStep.CONTROL -> R.string.connect_progress_vehicle_auth
+            ConnectionStep.SESSION -> R.string.connect_progress_vehicle_session
+            else -> ordinaryTitle(step)
+        }
+        return ordinaryTitle(step)
+    }
+    private fun ordinaryTitle(step: ConnectionStep) = when (step) {
+        ConnectionStep.WIRELESS_BOOTSTRAP -> R.string.connect_progress_vehicle_bootstrap
+        ConnectionStep.WIRELESS_JOIN -> R.string.connect_progress_vehicle_join
         ConnectionStep.PERMISSIONS -> R.string.connect_progress_permissions
         ConnectionStep.CHANNEL -> R.string.connect_progress_channel
         ConnectionStep.PREPARATION -> R.string.connect_progress_preparation
@@ -184,9 +255,10 @@ internal class ConnectionProgressPanel(context: Context) : LinearLayout(context)
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
 
     private companion object {
-        val DEFAULT_STEPS = listOf(
-            ConnectionStep.PREPARATION, ConnectionStep.DEVICE, ConnectionStep.CONTROL,
-            ConnectionStep.NETWORK, ConnectionStep.SESSION, ConnectionStep.VIDEO,
-        )
+        const val VEHICLE_WIRELESS_WIDE_COLUMNS=4
+        const val VEHICLE_WIRELESS_COMPACT_COLUMNS=2
+        const val TIME_COLUMN_SAMPLE_MILLIS=9_999_900L
+        const val TIME_HINT_GAP_DP=6
+
     }
 }

@@ -25,7 +25,12 @@ dependencyResolutionManagement {
 rootProject.name = "xcertplay"
 include(":common")
 include(":mobile")
-include(":bt-proxy-android")
+include(":installer")
+project(":installer").projectDir = file("installer/android")
+include(":installer-shared")
+project(":installer-shared").projectDir = file("installer/shared")
+include(":installer-desktop")
+project(":installer-desktop").projectDir = file("installer/desktop")
 include(":automotive")
 include(":shared")
 include(":maphost")

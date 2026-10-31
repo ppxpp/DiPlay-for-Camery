@@ -760,16 +760,6 @@
             column="24"/>
     </issue>
 
-    <issue
-        id="PrivateApi"
-        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
-        errorLine1="            Class.forName(&quot;android.os.ServiceManager&quot;).getMethod(&quot;checkService&quot;, String::class.java)"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/shilapi/xcertplay/network/NativeNcmLease.kt"
-            line="491"
-            column="13"/>
-    </issue>
 
     <issue
         id="PrivateApi"

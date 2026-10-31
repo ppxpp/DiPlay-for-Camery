@@ -142,7 +142,8 @@ class CarPlayVpnScopeTest {
         val constructor = attemptType.declaredConstructors.first { it.parameterCount == 3 }
             as java.lang.reflect.Constructor<Any>
         constructor.isAccessible = true
-        val attempt = constructor.newInstance(owner, java.util.concurrent.CountDownLatch(0), null)
+        val attempt = constructor.newInstance(
+            java.lang.ref.WeakReference(owner), java.util.concurrent.CountDownLatch(0), null)
         runtime.getDeclaredField("attempt").apply { isAccessible = true }
             .set(runtime.getField("INSTANCE").get(null), attempt)
     }
@@ -229,7 +230,11 @@ class CarPlayVpnScopeTest {
                 assertEquals(listOf("allow:${service.packageName}", "establish"), VpnScopeBoundary.calls)
                 assertNull(VpnScopeBoundary.backendAtEstablish)
                 assertReleased(service)
-            } finally { service.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }
+            } finally {
+                service.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit()
+                com.shilapi.xcertplay.pioneer.CamryAdaptation.useRequestMode(
+                    org.json.JSONObject().put("camryAdaptation", "AUTO"))
+            }
         }
     }
 

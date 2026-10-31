@@ -1,0 +1,182 @@
+name: Publish installer update
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-installer-android
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: release
+    env:
+      APP_ID: installer
+      PLATFORM: android
+      CHANNEL: stable
+      R2_ASSETS_BUCKET: ${{ vars.R2_ASSETS_BUCKET }}
+      R2_META_BUCKET: ${{ vars.R2_META_BUCKET }}
+      UPDATE_API_BASE: ${{ vars.UPDATE_API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check publishing configuration
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          missing=0
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ASSETS_BUCKET R2_META_BUCKET UPDATE_API_BASE \
+            SIGNING_KEYSTORE_BASE64 SIGNING_KEYSTORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Set $name before publishing an installer release."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0
+
+      - name: Provision shared signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          mkdir -p .signing
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 -d > .signing/repack.keystore
+          {
+            echo "storeFile=.signing/repack.keystore"
+            echo "storePassword=$SIGNING_KEYSTORE_PASSWORD"
+            echo "keyAlias=$SIGNING_KEY_ALIAS"
+            echo "keyPassword=$SIGNING_KEY_PASSWORD"
+          } > .signing/signing.properties
+          chmod 600 .signing/signing.properties
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed release
+        run: >-
+          ./gradlew
+          :installer:assembleRelease
+          -Pdiplay.analytics=none
+          --stacktrace
+
+      - name: Read the built version
+        run: |
+          APK="installer/android/build/outputs/apk/release/installer-release.apk"
+          test -f "$APK" || { echo "::error::Release APK was not produced"; exit 1; }
+          AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT" || { echo "::error::aapt was not found"; exit 1; }
+          BADGING="$("$AAPT" dump badging "$APK")"
+          VERSION_NAME="$(printf '%s\n' "$BADGING" | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" | head -n 1)"
+          VERSION_CODE="$(printf '%s\n' "$BADGING" | sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" | head -n 1)"
+          test -n "$VERSION_NAME" || { echo "::error::Could not read versionName"; exit 1; }
+          case "$VERSION_NAME" in
+            .|..|*/*) echo "::error::versionName cannot be used as an object key: $VERSION_NAME"; exit 1 ;;
+          esac
+          case "$VERSION_CODE" in
+            ''|*[!0-9]*) echo "::error::Could not read a numeric versionCode: '$VERSION_CODE'"; exit 1 ;;
+          esac
+          echo "APP_VERSION=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "Built $VERSION_NAME ($VERSION_CODE)"
+
+      - name: Ensure versionCode is newer than the published release
+        run: |
+          API_URL="${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
+          HTTP_CODE="$(curl -sS -o "$RUNNER_TEMP/current-release.json" -w '%{http_code}' "$API_URL" || true)"
+          case "$HTTP_CODE" in
+            404)
+              echo "No published release for ${APP_ID}/${PLATFORM}/${CHANNEL} yet; this becomes the first one."
+              ;;
+            200)
+              CURRENT_VERSION_CODE="$(jq -r '.versionCode // empty' "$RUNNER_TEMP/current-release.json")"
+              case "$CURRENT_VERSION_CODE" in
+                ''|*[!0-9]*)
+                  echo "::error::The published manifest has no numeric versionCode"
+                  exit 1
+                  ;;
+              esac
+              if [ "$VERSION_CODE" -le "$CURRENT_VERSION_CODE" ]; then
+                echo "::error::versionCode $VERSION_CODE must be greater than the published versionCode $CURRENT_VERSION_CODE"
+                exit 1
+              fi
+              echo "versionCode $CURRENT_VERSION_CODE -> $VERSION_CODE"
+              ;;
+            *)
+              echo "::error::Could not read the published release (HTTP $HTTP_CODE)"
+              exit 1
+              ;;
+          esac
+
+      - name: Set up Node for the publish script
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: update-service/package-lock.json
+
+      - name: Publish to R2 with delivery enabled
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          npm ci --prefix update-service
+          node update-service/scripts/publish-update.mjs \
+            --app "$APP_ID" \
+            --platform "$PLATFORM" \
+            --channel "$CHANNEL" \
+            --version "$APP_VERSION" \
+            --version-code "$VERSION_CODE" \
+            --version-name "$VERSION_NAME" \
+            --artifact "installer/android/build/outputs/apk/release/installer-release.apk" \
+            --arch universal \
+            --enable-delivery \
+            --verify-url "${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
+
+      - name: Verify the delivered release
+        run: |
+          API_URL="${UPDATE_API_BASE%/}/api/v1/apps/${APP_ID}/${PLATFORM}/${CHANNEL}/public-latest"
+          APK_SHA="$(sha256sum installer/android/build/outputs/apk/release/installer-release.apk | awk '{print $1}')"
+          for attempt in 1 2 3 4 5; do
+            if BODY="$(curl -sS "$API_URL")" \
+              && printf '%s' "$BODY" | jq -e --arg version "$VERSION_NAME" --argjson versionCode "$VERSION_CODE" --arg sha "$APK_SHA" \
+                '.versionCode == $versionCode and .artifacts[0].sha256 == $sha' > /dev/null; then
+              echo "Delivered ${APP_ID}/${PLATFORM}/${CHANNEL} -> $(printf '%s' "$BODY" | jq -r '.versionName') ($VERSION_CODE)"
+              exit 0
+            fi
+            echo "Waiting for the public endpoint to report $VERSION_NAME ($VERSION_CODE) (attempt ${attempt})"
+            sleep 2
+          done
+          echo "::error::The published release did not report $VERSION_NAME ($VERSION_CODE)"
+          exit 1
+
+      - name: Keep a workflow copy of the release
+        uses: actions/upload-artifact@v4
+        with:
+          name: DiPlay-installer-${{ env.VERSION_NAME }}
+          path: |
+            installer/android/build/outputs/apk/release/installer-release.apk
+          if-no-files-found: error
+          retention-days: 14

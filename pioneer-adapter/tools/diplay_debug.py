@@ -80,9 +80,6 @@ def main():
     playback_channels.add_argument("--stereo-playback", dest="stereoPlayback", action="store_true", default=None)
     playback_channels.add_argument("--mono-playback", dest="stereoPlayback", action="store_false", default=None)
     mic_test.add_argument("--standard-playback", dest="standardPlayback", action="store_true", default=None)
-    ncm_startup = commands.add_parser("native-ncm-startup", help="空闲时设置NCM预热/复用对照；预热开关重启应用后生效")
-    ncm_startup.add_argument("--warm-worker", dest="warmWorker", choices=["ON", "OFF"])
-    ncm_startup.add_argument("--prewarm", choices=["ON", "OFF"])
     vpn_permission = commands.add_parser("vpn-permission", help="先锋VPN授权状态、只读检查或root授权；写任务须先停止会话")
     vpn_permission.add_argument("--action", choices=["STATUS", "INSPECT", "GRANT"], default="STATUS")
     commands.add_parser("vpn-native", help="读取当前 VPN native 数据面和批量分布")
@@ -135,7 +132,7 @@ def main():
     toast = commands.add_parser("toast", help="在车机提示操作，实际显示为异步")
     toast.add_argument("--text", default="DiPlay 调试：请执行一次交互（滑动/点击）")
     backend = commands.add_parser("network-backend", help="完全停止后手动选择有线路径，下一次连接生效")
-    backend.add_argument("--mode", choices=["LWIP", "NATIVE_NCM", "LWIP_OPTIMIZED", "VPN"], required=True)
+    backend.add_argument("--mode", choices=["LWIP", "LWIP_OPTIMIZED", "VPN"], required=True)
     diagnostics = commands.add_parser("lwip-diagnostics", help="立即切换 lwIP 聚合计时，用于观测开销对照")
     diagnostics.add_argument("--mode", choices=["ON", "OFF"], required=True)
     phone = commands.add_parser("phone-diagnostics", help="默认关闭；临时采集iPhone日志会占用CPU和USB")
@@ -175,8 +172,6 @@ def main():
                     fields["configuration"] = json.loads(Path(args.config_file).read_text() if args.config_file else args.config)
                     if not isinstance(fields["configuration"], dict): parser.error("--config must be a JSON object")
                 elif args.config or args.config_file: parser.error("--config/--config-file is only valid with SET")
-            if args.cmd == "native-ncm-startup":
-                fields = {key: getattr(args, key) for key in ("warmWorker", "prewarm") if getattr(args, key) is not None}
             if args.cmd == "lwip-poll-wait": fields = {"millis": args.millis}
             if args.cmd == "video-gesture": fields = {"kind": args.kind}
             if args.cmd == "host-ui": fields = {"action": args.action}

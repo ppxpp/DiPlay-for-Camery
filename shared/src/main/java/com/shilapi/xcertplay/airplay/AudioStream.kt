@@ -39,8 +39,6 @@ class AudioStream(
     /** The control connection's local address; its family picks the data socket's wildcard. */
     private val bindAddress: InetAddress? = null,
     private val exactBindAddress: Boolean = false,
-    private val nativeBinding: com.shilapi.xcertplay.network.InterfaceSocketBinding? = null,
-    private val expectedPeer: InetAddress? = null,
 ) : Closeable {
     interface Listener {
         fun onStarted(firstSample: Int) {}
@@ -70,8 +68,7 @@ class AudioStream(
     fun listen(listener: Listener): Pair<Int, Int> {
         // Only the RTP data port handles inbound media; the control port ignores its datagrams, so
         // it stays ephemeral and never consumes a forwarded firewall port.
-        val data = if (nativeBinding != null) DatagramSocket(null).also { nativeBinding.bind(it) }
-            else CarFirewallPorts.udpSocket(bindAddress, preferredDataPorts, exactBindAddress)
+        val data = CarFirewallPorts.udpSocket(bindAddress, preferredDataPorts, exactBindAddress)
         // Keep short Wi-Fi bursts in the kernel while decrypting or scheduling pauses
         // the receive thread. The platform may cap this request; log the actual size.
         val originalBufferBytes = runCatching { data.receiveBufferSize }.getOrDefault(0)
@@ -80,8 +77,7 @@ class AudioStream(
         }
         onDiagnostic("Audio UDP receive buffer type=$streamType original=$originalBufferBytes requested=$AUDIO_RECEIVE_BUFFER_BYTES actual=${runCatching { data.receiveBufferSize }.getOrDefault(0)}")
         val control = try {
-            if (nativeBinding != null) DatagramSocket(null).also { nativeBinding.bind(it) }
-            else CarFirewallPorts.udpSocket(if (exactBindAddress) bindAddress else null, null, exactBindAddress)
+            CarFirewallPorts.udpSocket(if (exactBindAddress) bindAddress else null, null, exactBindAddress)
         } catch (error: Throwable) { data.close(); throw error }
         dataSocket = data
         controlSocket = control
@@ -121,10 +117,8 @@ class AudioStream(
                 try {
                     stats.reading()
                     socket.receive(packet)
-                    nativeBinding?.validatePeer(packet.address, expectedPeer)
                 } catch (error: Exception) {
                     if (closed.get()) return
-                    if (nativeBinding != null) { listener.onClosed(error); close(); return }
                     continue
                 }
                 stats.received(
@@ -213,10 +207,8 @@ class AudioStream(
             try {
                 val packet = DatagramPacket(buffer, buffer.size)
                 socket.receive(packet)
-                nativeBinding?.validatePeer(packet.address, expectedPeer)
             } catch (error: Exception) {
                 if (closed.get()) return
-                if (nativeBinding != null) { listener.onClosed(error); close(); return }
             }
         }
     }

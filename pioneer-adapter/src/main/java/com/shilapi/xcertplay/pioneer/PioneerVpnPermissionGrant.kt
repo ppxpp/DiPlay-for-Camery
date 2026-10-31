@@ -128,7 +128,7 @@ object PioneerVpnPermissionGrant {
         Os.chmod(directory.path, 0x1c0)
         val started = SystemClock.elapsedRealtime()
         val taskBudgetMs = 15000L
-        val request = JSONObject().put("token", token).put("action", action).put("package", app.packageName)
+        val request = JSONObject().put("token", token).put("action", action).put("camryAdaptation", CamryAdaptation.requestMode()).put("package", app.packageName)
             .put("uid", app.applicationInfo.uid).put("apk", app.applicationInfo.sourceDir)
             .put("boot", boot).put("appPid", Process.myPid())
             .put("appStart", File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19])

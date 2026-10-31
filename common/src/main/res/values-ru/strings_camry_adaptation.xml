@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_section">Адаптация под Camry A Navigation</string>
+    <string name="settings_camry_title">Включить адаптацию под Camry A Navigation</string>
+    <string name="settings_camry_description">При включении DiPlay управляет USB, VPN, звуком, микрофоном и HUD под головное устройство Camry A Navigation. Автоопределение проверяет модель; выберите «Принудительно», если устройство не распознано, и «Выключить» для других автомобилей. После изменения переподключите CarPlay. Беспроводное подключение использует специальный режим головного устройства.</string>
+    <string name="settings_camry_auto">Автоопределение (по умолчанию)</string>
+    <string name="settings_camry_on">Принудительно</string>
+    <string name="settings_camry_off">Выключить</string>
+    <string name="settings_camry_enabled">Адаптация включена принудительно</string>
+    <string name="settings_camry_disabled">Адаптация выключена: подключение как к обычному устройству</string>
+    <string name="settings_camry_detected">Автоопределение: Camry A Navigation распознана; адаптация включена</string>
+    <string name="settings_camry_not_detected">Автоопределение: Camry A Navigation не распознана; адаптация выключена</string>
+</resources>

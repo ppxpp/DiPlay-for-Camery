@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="settings_native_ncm">Нативний NCM (експериментально)</string>
-    <string name="settings_native_ncm_description">Увімкнено: системна мережа USB. Вимкнено: поточний спосіб підключення. Застосовується під час наступного підключення. У разі збою перемкніть вручну; автоматичного переходу між способами немає.</string>
-</resources>

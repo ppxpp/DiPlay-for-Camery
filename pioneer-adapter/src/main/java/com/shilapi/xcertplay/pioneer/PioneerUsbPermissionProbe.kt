@@ -36,7 +36,7 @@ object PioneerUsbPermissionProbe {
         return PioneerDebugUpdateGuard.withCacheMaintenance { execute(app, action, node) }
     }
 
-    /** Connection worker only: initial native-NCM authorization may already be done by module prewarm. */
+    /** Connection worker only: reuse an existing USB authorization when available. */
     fun grantForConnection(context: Context, device: UsbDevice, stillCurrent: () -> Boolean): JSONObject {
         check(PioneerUsbPolicy.matchesDevice() && !holdsRequests(context)) { "Automatic USB grant unavailable or held" }
         val app = context.applicationContext
@@ -85,7 +85,7 @@ object PioneerUsbPermissionProbe {
         val deadline = SystemClock.elapsedRealtime() + 15000
         val boot = File("/proc/sys/kernel/random/boot_id").readText().trim()
         val appStart = File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19]
-        val request = JSONObject().put("token", token).put("action", action).put("package", app.packageName)
+        val request = JSONObject().put("token", token).put("action", action).put("camryAdaptation", CamryAdaptation.requestMode()).put("package", app.packageName)
             .put("uid", app.applicationInfo.uid).put("appPid", Process.myPid()).put("appStart", appStart)
             .put("boot", boot).put("requestedAtMs", SystemClock.elapsedRealtime()).put("deadline", deadline).put("node", device.deviceName)
             .put("deviceId", device.deviceId).put("vid", device.vendorId).put("pid", device.productId)

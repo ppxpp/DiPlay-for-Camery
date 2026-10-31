@@ -29,7 +29,7 @@ class PioneerWiredSessionTest {
     @Test fun staleReleaseAndFrameCannotAffectTheNextBackend() {
         val old = PioneerWiredSession.begin(PioneerWiredSession.Backend.LWIP, true)
         old.close()
-        val next = PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM, true)
+        val next = PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN, true)
         old.close()
         PioneerWiredSession.firstFrame(old.id)
         PioneerWiredSession.controlAccepted(old.id)
@@ -42,7 +42,7 @@ class PioneerWiredSessionTest {
     @Test fun overlappingTransportCannotReplaceAnActiveOwner() {
         val owner = PioneerWiredSession.begin(PioneerWiredSession.Backend.LWIP, true)
         try {
-            PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM, true)
+            PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN, true)
             fail("An active transport must be stopped before manual switching")
         } catch (_: IllegalStateException) {
             assertSame(owner, PioneerWiredSession.current)
@@ -50,7 +50,7 @@ class PioneerWiredSessionTest {
     }
 
     @Test fun unverifiedDeviceDoesNotAcquireVehiclePolicies() {
-        val session = PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM, false)
+        val session = PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN, false)
         assertTrue(PioneerWiredSession.active)
         assertFalse(PioneerWiredSession.adaptationActive)
         assertFalse(PioneerWiredSession.isCurrent(session.id))

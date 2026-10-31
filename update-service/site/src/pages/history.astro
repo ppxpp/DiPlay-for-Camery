@@ -1,9 +1,24 @@
 ---
 import '../styles/global.css';
+import Analytics from '../components/Analytics.astro';
 import ReleaseHistory from '../components/ReleaseHistory.vue';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { site } from '../data/site.ts';
+import { fetchReleasesForBuild } from '../data/releases.ts';
+
+const initial = await fetchReleasesForBuild();
+
+const title = `历史版本 · ${site.shortName}`;
+const description = 'DiPlay 凯美瑞版历史版本，可按正式版或内测版筛选下载。';
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: '首页', item: 'https://diplay.mgulu.com/' },
+    { '@type': 'ListItem', position: 2, name: '历史版本', item: 'https://diplay.mgulu.com/history/' },
+  ],
+};
 ---
 
 <!doctype html>
@@ -11,12 +26,27 @@ import { site } from '../data/site.ts';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="applicable-device" content="pc,mobile" />
     <meta name="color-scheme" content="light" />
-    <title>历史版本 · {site.shortName}</title>
-    <meta name="description" content="DiPlay 凯美瑞版历史版本，可按正式版或内测版筛选下载。" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="/app-icon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.shortName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:url" content="https://diplay.mgulu.com/history/" />
+    <meta property="og:image" content="https://diplay.mgulu.com/app-icon.png" />
+    <meta property="og:image:alt" content={title} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <link rel="canonical" href="https://diplay.mgulu.com/history/" />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <Analytics />
   </head>
   <body>
     <SiteHeader current="history" />
@@ -37,7 +67,7 @@ import { site } from '../data/site.ts';
           <p class="page-lead">已发布版本长期保留，可按正式版或内测版筛选下载。</p>
         </div>
 
-        <ReleaseHistory client:load />
+        <ReleaseHistory client:load initial-stable={initial.stable} initial-beta={initial.beta} />
       </div>
     </main>
 

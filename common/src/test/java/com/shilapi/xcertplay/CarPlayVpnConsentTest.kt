@@ -160,7 +160,11 @@ class CarPlayVpnConsentTest {
             assertFalse(field("vpnReady"))
             assertNull(ReflectionHelpers.getField<Any?>(activity, "startupWiredBackend"))
             assertEquals(1, launches)
-        } finally { activity.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit() }
+        } finally {
+            activity.getSharedPreferences("pioneer-adapter", 0).edit().clear().commit()
+            com.shilapi.xcertplay.pioneer.CamryAdaptation.useRequestMode(
+                org.json.JSONObject().put("camryAdaptation", "AUTO"))
+        }
     }
 
     @Test fun pioneerManualConsentResultStillRequiresPrepareVerification() {

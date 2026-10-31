@@ -378,13 +378,19 @@ object AirPlayPersistence {
         val stored = prefs.getString(KEY_WIRELESS_HOTSPOT_MODE, null)
         val mode = WirelessHotspotMode.entries.firstOrNull { it.name == stored }
             ?: WirelessHotspotMode.MANUAL
-        val supported = if (mode == WirelessHotspotMode.LOCAL_ONLY_HOTSPOT) WirelessHotspotMode.MANUAL else mode
+        val enabled=com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled()
+        val supported=com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerWirelessSelection.resolve(
+            if(mode==WirelessHotspotMode.LOCAL_ONLY_HOTSPOT) WirelessHotspotMode.MANUAL else mode,enabled)
+        if(enabled) return supported // Do not overwrite the ordinary mode while forcing adaptation.
         if (stored != supported.name) saveWirelessHotspotMode(context, supported)
         return supported
     }
 
     fun saveWirelessHotspotMode(context: Context, mode: WirelessHotspotMode) {
-        val supported = if (mode == WirelessHotspotMode.LOCAL_ONLY_HOTSPOT) WirelessHotspotMode.MANUAL else mode
+        if(mode==WirelessHotspotMode.PIONEER_VEHICLE && com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled()) return
+        val supported = if(mode==WirelessHotspotMode.LOCAL_ONLY_HOTSPOT ||
+            mode==WirelessHotspotMode.PIONEER_VEHICLE && !com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled())
+            WirelessHotspotMode.MANUAL else mode
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_WIRELESS_HOTSPOT_MODE, supported.name)
             .apply()

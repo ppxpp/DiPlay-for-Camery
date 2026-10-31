@@ -50,10 +50,10 @@ class PioneerMicrophoneLeaseTest {
     private fun acquire(): PioneerMicrophoneLease? =
         PioneerMicrophoneLease.acquire("test.diplay", {}).also { if (it != null) leases.add(it) }
 
-    @Test fun nativeNcmRequestsAndReleasesTheVehicleMicrophone() {
-        PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
+    @Test fun vpnRequestsAndReleasesTheVehicleMicrophone() {
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
         val lease = acquire()
-        assertNotNull("Native NCM calls must request the Pioneer microphone", lease)
+        assertNotNull("VPN calls must request the Pioneer microphone", lease)
         assertEquals(1, controller.requests)
         assertEquals("test.diplay", controller.token)
         lease!!.close()
@@ -121,7 +121,7 @@ class PioneerMicrophoneLeaseTest {
     }
 
     @Test fun failedAppRecordingStartupReleasesItsMicrophoneLease() {
-        PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
         val config = MicrophoneConfig(audioType = "default", sampleRate = 16_000,
             channels = 1, payloadType = 100, frameMillis = 20,
             host = InetAddress.getLoopbackAddress(), port = 9, key = ByteArray(32),
@@ -138,13 +138,13 @@ class PioneerMicrophoneLeaseTest {
     @Test fun inactiveAndOtherHeadUnitsDoNotRequestTheVehicleMicrophone() {
         assertNull(acquire())
         ReflectionHelpers.setStaticField(Build::class.java, "MODEL", "Other")
-        PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
         assertNull(acquire())
         assertEquals(0, controller.requests)
     }
 
     @Test fun overlappingStreamsReleaseOnlyAfterTheLastUser() {
-        PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
         val first = checkNotNull(acquire())
         val second = checkNotNull(acquire())
         first.close()
@@ -154,7 +154,7 @@ class PioneerMicrophoneLeaseTest {
     }
 
     @Test fun changedOwnerIsNeverReleased() {
-        PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
         val lease = checkNotNull(acquire())
         controller.token = "another.app"
         lease.close()
@@ -209,7 +209,7 @@ class PioneerMicrophoneLeaseTest {
     }
 
     @Test fun refusedVehicleRequestFailsInsteadOfSilentlyUsingAnUnopenedMic() {
-        PioneerWiredSession.begin(PioneerWiredSession.Backend.NATIVE_NCM)
+        PioneerWiredSession.begin(PioneerWiredSession.Backend.VPN)
         controller.grant = false
         try {
             acquire()

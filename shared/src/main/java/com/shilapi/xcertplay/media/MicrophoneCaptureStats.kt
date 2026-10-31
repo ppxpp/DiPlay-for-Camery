@@ -24,6 +24,9 @@ internal class MicrophoneCaptureStats(
     private var zeroReads = 0L
     private var readErrors = 0L
     private var readMaxNs = 0L
+    private var encodeTotalNs = 0L
+    private var encodeMaxNs = 0L
+    private var encodeCalls = 0L
     private var encodedFrames = 0L
     private var emptyEncodedFrames = 0L
     private var udpSent = 0L
@@ -110,6 +113,10 @@ internal class MicrophoneCaptureStats(
         }
     }
 
+    fun encoding(elapsedNs: Long) {
+        encodeCalls++; encodeTotalNs += elapsedNs; encodeMaxNs = maxOf(encodeMaxNs, elapsedNs)
+    }
+
     fun encoded(frameCount: Int, emptyCount: Int) {
         encodedFrames += frameCount.coerceAtLeast(0)
         emptyEncodedFrames += emptyCount.coerceAtLeast(0)
@@ -140,7 +147,7 @@ internal class MicrophoneCaptureStats(
         publish(ended)
         emit("Microphone: stats $metadata routedDeviceType=${routedDeviceType ?: "unknown"} " +
             "captureBytes=$capturedBytes reads=$reads zeroReads=$zeroReads readErrors=$readErrors " +
-            "readMaxMs=${readMaxNs / 1_000_000} encodedFrames=$encodedFrames " +
+            "readMaxMs=${readMaxNs / 1_000_000} encodeAvgMs=${encodeTotalNs / maxOf(1, encodeCalls) / 1_000_000} encodeMaxMs=${encodeMaxNs / 1_000_000} encodedFrames=$encodedFrames " +
             "emptyEncodedFrames=$emptyEncodedFrames udpSent=$udpSent sendErrors=$sendErrors " +
             "sendGapMaxMs=${sendGapMaxNs / 1_000_000} rawSamples=$rawSamples rawNonzero=$rawNonzero rawPeakDbfs=${peakDbfs(rawPeak)} peakDbfs=${peakDbfs(peakSample)} ended=$ended")
         windowStart = now
@@ -149,6 +156,7 @@ internal class MicrophoneCaptureStats(
         zeroReads = 0
         readErrors = 0
         readMaxNs = 0
+        encodeTotalNs = 0; encodeMaxNs = 0; encodeCalls = 0
         encodedFrames = 0
         emptyEncodedFrames = 0
         udpSent = 0

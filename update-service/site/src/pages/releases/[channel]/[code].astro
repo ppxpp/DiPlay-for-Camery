@@ -1,0 +1,157 @@
+---
+import '../../../styles/global.css';
+import Analytics from '../../../components/Analytics.astro';
+import SiteFooter from '../../../components/SiteFooter.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { site } from '../../../data/site.ts';
+import {
+  fetchReleasesForBuild,
+  releaseDisplayName,
+  type ChannelKey,
+  type Release,
+} from '../../../data/releases.ts';
+import { formatUpdateSize } from '../../../data/updates.ts';
+
+export async function getStaticPaths() {
+  const channels = await fetchReleasesForBuild();
+  const seen = new Set<string>();
+  const paths: Array<{
+    params: { channel: ChannelKey; code: string };
+    props: { channel: ChannelKey; release: Release };
+  }> = [];
+  for (const channel of ['stable', 'beta'] as const) {
+    for (const release of channels[channel]) {
+      const key = `${channel}-${release.versionCode}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      paths.push({
+        params: { channel, code: String(release.versionCode) },
+        props: { channel, release },
+      });
+    }
+  }
+  return paths;
+}
+
+type Props = { channel: ChannelKey; release: Release };
+const { channel, release } = Astro.props as Props;
+
+const versionLabel = releaseDisplayName(release);
+const channelLabel = channel === 'stable' ? '正式版' : '内测版';
+const publishedAt = release.publishedAt
+  ? new Date(release.publishedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+  : '发布时间未知';
+const notes = release.notes?.trim() || '该版本暂无更新说明。';
+const title = `${versionLabel} 更新说明与下载 · ${site.shortName}`;
+const description = `${versionLabel}（versionCode ${release.versionCode}）更新说明与版本信息，${channelLabel}。${notes.replaceAll(/\s+/g, ' ').slice(0, 100)}`;
+const canonical = `https://diplay.mgulu.com/releases/${channel}/${release.versionCode}/`;
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: '首页', item: 'https://diplay.mgulu.com/' },
+        { '@type': 'ListItem', position: 2, name: '历史版本', item: 'https://diplay.mgulu.com/history/' },
+        { '@type': 'ListItem', position: 3, name: versionLabel, item: canonical },
+      ],
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: `${site.name} ${versionLabel}`,
+      description,
+      url: canonical,
+      applicationCategory: 'MultimediaApplication',
+      operatingSystem: 'Android',
+      softwareVersion: versionLabel,
+      ...(release.publishedAt ? { datePublished: release.publishedAt } : {}),
+      inLanguage: 'zh-CN',
+      isAccessibleForFree: true,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+    },
+  ],
+};
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="applicable-device" content="pc,mobile" />
+    <meta name="color-scheme" content="light" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/app-icon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content={site.shortName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content="https://diplay.mgulu.com/app-icon.png" />
+    <meta property="og:image:alt" content={versionLabel} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <Analytics />
+  </head>
+  <body>
+    <SiteHeader current="history" />
+
+    <main class="shell page-shell">
+      <div class="page-frame">
+        <nav class="breadcrumb" aria-label="面包屑">
+          <a href="/">首页</a>
+          <span aria-hidden="true">/</span>
+          <a href="/history/">历史版本</a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">{versionLabel}</span>
+        </nav>
+
+        <div class="page-head">
+          <span class="eyebrow">
+            <span class="eyebrow-dot" aria-hidden="true"></span>
+            {channelLabel} · versionCode {release.versionCode}
+          </span>
+          <h1>{versionLabel}</h1>
+          <p class="page-lead">
+            DiPlay 凯美瑞 A 导航适配版 {versionLabel} 的更新说明与版本信息，发布于 {publishedAt}。
+          </p>
+        </div>
+
+        <section class="release-page" aria-labelledby="release-notes-title">
+          <article class="release-card">
+            <h2 id="release-notes-title">更新说明</h2>
+            <p class="release-notes" style="white-space: pre-wrap">{notes}</p>
+
+            {
+              release.artifacts.length > 0 && (
+                <div class="release-meta">
+                  {release.artifacts.map((artifact) => (
+                    <p>
+                      <span>{artifact.name}</span>
+                      {artifact.size ? <span> · {formatUpdateSize(artifact.size)}</span> : null}
+                      {artifact.sha256 ? <code class="meta-hash">{artifact.sha256}</code> : null}
+                    </p>
+                  ))}
+                </div>
+              )
+            }
+
+            <div class="release-actions">
+              <a class="btn primary btn--compact" href="/history/">前往历史版本下载</a>
+              <a class="btn secondary btn--compact" href="/">返回首页</a>
+            </div>
+          </article>
+        </section>
+      </div>
+    </main>
+
+    <SiteFooter />
+  </body>
+</html>

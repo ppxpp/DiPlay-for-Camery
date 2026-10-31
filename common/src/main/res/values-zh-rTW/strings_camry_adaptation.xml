@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_section">Camry A 導航車機適配</string>
+    <string name="settings_camry_title">是否啟用 Camry A 導航車機適配</string>
+    <string name="settings_camry_description">開啟後，DiPlay 將依 Camry A 導航車機的方式接管 USB、VPN、音訊、麥克風及 HUD。自動辨識依據機型判斷；辨識不到時可選強制啟用；其他車型請選不啟用。修改後重新連接 CarPlay 生效。 啟用時無線連線使用車機專用方案。</string>
+    <string name="settings_camry_auto">自動辨識（預設）</string>
+    <string name="settings_camry_on">強制啟用</string>
+    <string name="settings_camry_off">不啟用</string>
+    <string name="settings_camry_enabled">已強制啟用適配</string>
+    <string name="settings_camry_disabled">未啟用適配，依普通車機連接</string>
+    <string name="settings_camry_detected">自動辨識：目前車機為 Camry A 導航，適配已啟用</string>
+    <string name="settings_camry_not_detected">自動辨識：目前車機不是 Camry A 導航，適配未啟用</string>
+</resources>

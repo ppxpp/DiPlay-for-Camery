@@ -23,6 +23,7 @@ internal object MicrophoneOpusEncoders {
         platform: (Int) -> MicrophoneOpusEncoder = { OpusEncoder(it) },
         software: (Int) -> MicrophoneOpusEncoder = { SoftwareOpusEncoder(it) },
     ): MicrophoneOpusEncoder? {
+        PioneerNativeOpusEncoder.create(bitrate)?.let { return it }
         val platformEncoder = platform(bitrate)
         if (platformEncoder.available) return platformEncoder
         platformEncoder.close()

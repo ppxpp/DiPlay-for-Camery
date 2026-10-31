@@ -14,6 +14,11 @@ internal class ProbeReport(
     val file = File(context.filesDir, fileName)
     private val external = context.getExternalFilesDir(null)?.let { File(it, externalName) }
     @Synchronized fun read(): String = if (file.exists()) file.readText() else ""
+    @Synchronized fun clear() {
+        file.parentFile!!.mkdirs()
+        file.writeText("")
+        runCatching { external?.writeText("") }
+    }
     @Synchronized fun append(message: String): String {
         file.parentFile!!.mkdirs()
         val time = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ROOT).format(Date())

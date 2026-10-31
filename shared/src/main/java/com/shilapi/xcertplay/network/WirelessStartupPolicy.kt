@@ -16,13 +16,16 @@ enum class WirelessStartupFailure {
 
     /** The head unit's Android Bluetooth accepts connections that reach no phone. */
     BLUETOOTH_UNUSABLE,
+    BLUETOOTH_NOT_CONNECTED,
+    BLUETOOTH_CONFIGURATION_CONFLICT,
 
     /** Android 13+ asked to turn the car hotspot off for Wi-Fi Direct, and the driver said no. */
     WIFI_DIRECT_BESIDE_HOTSPOT;
 
     /** False when no further attempt can change what went wrong. */
     val retryable: Boolean get() = this != HOTSPOT_CONFIGURATION && this != BLUETOOTH_UNUSABLE &&
-        this != WIFI_DIRECT_BESIDE_HOTSPOT
+        this != WIFI_DIRECT_BESIDE_HOTSPOT && this != BLUETOOTH_NOT_CONNECTED &&
+        this != BLUETOOTH_CONFIGURATION_CONFLICT
 }
 
-class WirelessStartupException(val reason: WirelessStartupFailure, message: String) : IOException(message)
+class WirelessStartupException(val reason: WirelessStartupFailure, message: String, val timeoutMillis: Long? = null) : IOException(message)

@@ -20,6 +20,11 @@ const [initialStable, initialBeta] = await Promise.all([
       </span>
       <h1 id="hero-title"><span class="brand-word">DiPlay</span>凯美瑞A 导航适配版</h1>
       <p class="intro">{site.intro}</p>
+      <ul class="value-points" aria-label="产品特点">
+        <li>开源 · GPL-3.0</li>
+        <li>完全免费</li>
+        <li>支持应用内 OTA</li>
+      </ul>
       <DownloadPanel client:load initialStable={initialStable} initialBeta={initialBeta} />
     </div>
     <DeviceCard />

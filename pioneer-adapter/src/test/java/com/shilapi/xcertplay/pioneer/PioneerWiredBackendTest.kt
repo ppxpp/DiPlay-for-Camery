@@ -21,25 +21,21 @@ class PioneerWiredBackendTest {
     @Test fun defaultIsVpnAndHasNoLwipFallback() {
         assertEquals(PioneerWiredBackend.Mode.VPN, PioneerWiredBackend.mode(context))
         assertFalse(PioneerLwipRuntime.enabled(context))
-        assertFalse(PioneerWiredBackend.nativeEnabled(context))
     }
     @Test fun availableManualChoicesAreDistinctAndStable() {
         for (mode in PioneerWiredBackend.availableModes()) {
             PioneerWiredBackend.save(context, mode)
             assertEquals(mode, PioneerWiredBackend.mode(context))
-            assertEquals(mode == PioneerWiredBackend.Mode.NATIVE_NCM, PioneerWiredBackend.nativeEnabled(context))
             assertEquals(mode == PioneerWiredBackend.Mode.LWIP_OPTIMIZED, PioneerWiredBackend.optimizedEnabled(context))
             assertTrue(PioneerWiredBackend.usesVehicleAdaptation(context))
             repeat(3) { assertEquals(mode, PioneerWiredBackend.mode(context)) }
         }
     }
-    @Test fun buildCapabilityControlsSelectionAndRejectsExcludedNativeBackend() {
-        val native = PioneerWiredBackend.Mode.NATIVE_NCM
-        assertEquals(BuildConfig.NATIVE_NCM_INCLUDED, native in PioneerWiredBackend.availableModes())
-        if (!BuildConfig.NATIVE_NCM_INCLUDED) {
-            assertThrows(IllegalArgumentException::class.java) { PioneerWiredBackend.save(context, native) }
-            assertEquals(PioneerWiredBackend.Mode.VPN, PioneerWiredBackend.mode(context))
-        }
+    @Test fun removedBackendPreferenceFallsBackToVpn() {
+        context.getSharedPreferences("pioneer-adapter", 0).edit().putString("wired_backend", "NATIVE_NCM").commit()
+        assertEquals(PioneerWiredBackend.Mode.VPN, PioneerWiredBackend.mode(context))
+        assertEquals(listOf(PioneerWiredBackend.Mode.LWIP, PioneerWiredBackend.Mode.LWIP_OPTIMIZED,
+            PioneerWiredBackend.Mode.VPN), PioneerWiredBackend.availableModes())
     }
     @Test fun selectorIsOnlyAvailableInDebugBuilds() {
         assertEquals(BuildConfig.DEBUG, PioneerWiredBackend.selectorVisible)

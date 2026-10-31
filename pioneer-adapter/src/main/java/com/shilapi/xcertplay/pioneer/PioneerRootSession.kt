@@ -30,7 +30,7 @@ object PioneerRootSession {
         val token = UUID.randomUUID().toString()
         val file = File(root, "$token.json")
         val started = SystemClock.elapsedRealtime()
-        file.writeText(JSONObject().put("token", token).put("package", app.packageName)
+        file.writeText(JSONObject().put("token", token).put("camryAdaptation", CamryAdaptation.requestMode()).put("package", app.packageName)
             .put("uid", app.applicationInfo.uid).put("apk", app.applicationInfo.sourceDir)
             .put("boot", File("/proc/sys/kernel/random/boot_id").readText().trim())
             .put("appPid", Process.myPid()).put("appStart", File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19])

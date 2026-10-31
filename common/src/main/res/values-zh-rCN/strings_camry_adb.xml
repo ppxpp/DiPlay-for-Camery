@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_camry_usb_adb">USB ADB 调试 · %1$s</string>
+    <string name="settings_camry_usb_adb_on">已开启</string>
+    <string name="settings_camry_usb_adb_off">已关闭</string>
+    <string name="settings_camry_usb_adb_unknown">未知或切换中</string>
+    <string name="settings_camry_usb_adb_changing">正在切换…</string>
+    <string name="settings_camry_usb_adb_description">仅适用于凯美瑞 A 导航，点击切换 USB ADB 调试开关。</string>
+    <string name="settings_camry_usb_adb_failed">未能确认 ADB 状态，请稍后重试。</string>
+</resources>

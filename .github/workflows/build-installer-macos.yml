@@ -1,0 +1,50 @@
+name: Build installer (macOS portable)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-37.0 build-tools;36.0.0
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Fetch bundled platform-tools
+        run: bash installer/packaging/fetch-platform-tools.sh
+
+      - name: Build portable app image
+        run: ./gradlew --configure-on-demand :installer-desktop:createDistributable --stacktrace
+
+      - name: Package portable ZIP
+        run: |
+          rm -f installer/desktop/build/portable/*.zip
+          ./gradlew --configure-on-demand :installer-desktop:packagePortableZip -x :installer-desktop:createDistributable --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DiPlayInstaller-macos-${{ matrix.arch }}
+          path: installer/desktop/build/portable/*.zip
+          if-no-files-found: error

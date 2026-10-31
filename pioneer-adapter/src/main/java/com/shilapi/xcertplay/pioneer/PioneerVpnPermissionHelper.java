@@ -75,6 +75,7 @@ public final class PioneerVpnPermissionHelper {
                     throw new IOException("VPN_APP_PROCESS_CHANGED");
             };
             guard.check();
+            CamryAdaptation.INSTANCE.useRequestMode(request);
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("VPN_UNSUPPORTED_DEVICE");
             PioneerFirmwareCatalog.requireSupportedFirmware(); // Catalog check only; never ensureLoaded().
             result.put("selfVpnOwner", requireNoOtherVpn(pkg, user));

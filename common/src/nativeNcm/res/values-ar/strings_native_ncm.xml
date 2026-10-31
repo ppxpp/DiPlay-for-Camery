@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="settings_native_ncm">NCM الأصلي (تجريبي)</string>
-    <string name="settings_native_ncm_description">عند التفعيل تُستخدم شبكة USB للنظام، وعند الإيقاف تُستخدم طريقة الاتصال الحالية. يسري عند الاتصال التالي. عند الفشل بدّل يدويًا؛ لا يوجد تبديل تلقائي بين الطريقتين.</string>
-</resources>

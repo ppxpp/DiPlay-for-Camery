@@ -424,8 +424,12 @@ class CarPlayHostDisplaySizeTest {
         allowStartup()
         startSession(rotation = Surface.ROTATION_180)
         scheduleSize(1920, 990)
-        activity.javaClass.getDeclaredMethod("restartCarPlay", String::class.java)
-            .apply { isAccessible = true }.invoke(activity, "Test reconnect")
+        activity.javaClass.getDeclaredMethod(
+            "restartCarPlay",
+            String::class.java,
+            Boolean::class.javaPrimitiveType,
+            String::class.java,
+        ).apply { isAccessible = true }.invoke(activity, "Test reconnect", false, "configuration_change")
         finishTeardown()
         assertNull(getField("sessionDisplay"))
 

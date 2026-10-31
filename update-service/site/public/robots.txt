@@ -1,0 +1,9 @@
+User-agent: Baiduspider
+Allow: /
+Disallow: /admin
+
+User-agent: *
+Allow: /
+Disallow: /admin
+
+Sitemap: https://diplay.mgulu.com/sitemap-index.xml

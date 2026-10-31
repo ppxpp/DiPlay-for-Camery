@@ -21,6 +21,7 @@ const { values } = parseArgs({
     artifact: { type: "string" },
     arch: { type: "string", default: "universal" },
     "notes-url": { type: "string" },
+    "enable-delivery": { type: "boolean", default: false },
     "meta-bucket": { type: "string" },
     "assets-bucket": { type: "string" },
     "account-id": { type: "string" },
@@ -41,12 +42,14 @@ Required:
   --artifact <file>       Local release file, usually an APK
 
 Optional:
-  --version-name <text>   Display version shown by clients, for example
-                          0.3.0_凯美瑞A导航适配版_0.1.0
+  --version-name <text>   Display version used for release keys, for example
+                          0.3.0_凯美瑞A导航适配版_0.1.0 (defaults to --version)
   --platform <name>       Default: android
   --channel <name>        Default: stable
   --arch <name>           Default: universal
   --notes-url <url>       Release notes URL
+  --enable-delivery       Publish with automatic delivery enabled (mode "all");
+                          omit to keep delivery off until an admin enables it
   --meta-bucket <name>    Default: R2_META_BUCKET
   --assets-bucket <name>  Default: R2_ASSETS_BUCKET
   --account-id <id>       Default: R2_ACCOUNT_ID
@@ -57,9 +60,9 @@ Credentials:
   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 
 Layout:
-  assets: apps/{app}/{platform}/{channel}/{version}/{file}
+  assets: apps/{app}/{platform}/{channel}/{versionName}/{file}
   meta:   apps/{app}/{platform}/{channel}/latest.json
-          apps/{app}/{platform}/{channel}/releases/{version}.json
+          apps/{app}/{platform}/{channel}/releases/{versionName}.json
 `);
   process.exit(0);
 }
@@ -146,10 +149,13 @@ if (!/^[\p{L}\p{N}._-]+$/u.test(artifactName)) {
   fail("artifact name may contain only letters, digits, dot, underscore and dash");
 }
 
-const versionBase = `apps/${app}/${platform}/${channel}/${version}`;
+const releaseKey = versionName || version;
+if (releaseKey === "." || releaseKey === "..") fail("--version-name cannot be used as an object key");
+
+const versionBase = `apps/${app}/${platform}/${channel}/${releaseKey}`;
 const artifactKey = `${versionBase}/${artifactName}`;
 const checksumsKey = `${versionBase}/SHA256SUMS.txt`;
-const snapshotKey = `apps/${app}/${platform}/${channel}/releases/${version}.json`;
+const snapshotKey = `apps/${app}/${platform}/${channel}/releases/${releaseKey}.json`;
 const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
 
 const hash = await sha256(artifactPath);
@@ -161,7 +167,7 @@ const manifest = {
   versionCode,
   publishedAt: new Date().toISOString(),
   mandatory: false,
-  management: { enabled: false, mode: "all", notes: "" },
+  management: { enabled: values["enable-delivery"] === true, mode: "all", notes: "" },
   ...(values["notes-url"] ? { notesUrl: values["notes-url"] } : {}),
   artifacts: [
     {
@@ -178,6 +184,7 @@ const manifestBody = manifestJson(manifest);
 
 console.log(`App:        ${app}/${platform}/${channel}`);
 console.log(`Version:    ${version} (${versionCode})${versionName ? ` / ${versionName}` : ""}`);
+console.log(`Release key: ${releaseKey}`);
 console.log(`Artifact:   ${artifactPath}`);
 console.log(`SHA-256:    ${hash}`);
 console.log(`Size:       ${stats.size}`);

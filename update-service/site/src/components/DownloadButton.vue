@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, useId } from 'vue';
+import { computed, ref, useId } from 'vue';
 import { site } from '../data/site.ts';
 import {
   displayShortVersion,
@@ -19,27 +19,17 @@ const props = withDefaults(
   { tone: 'primary', icon: 'download', unavailableText: '暂无版本' },
 );
 
-const STORAGE_KEY = 'diplay-camry.disclaimer-accepted.v1';
 const titleId = useId();
 const dialog = ref<HTMLDialogElement | null>(null);
 const agreed = ref(false);
-const accepted = ref(false);
 const version = computed(() => (props.channel ? displayVersion(props.channel.manifest) : ''));
 const shortVersion = computed(() =>
   props.channel ? displayShortVersion(props.channel.manifest) : '',
 );
 const available = computed(() => Boolean(props.channel?.artifact.url?.trim()));
 
-onMounted(() => {
-  accepted.value = localStorage.getItem(STORAGE_KEY) === '1';
-});
-
 function open() {
   if (!available.value) return;
-  if (accepted.value) {
-    download();
-    return;
-  }
   agreed.value = false;
   dialog.value?.showModal();
 }
@@ -60,8 +50,6 @@ function download() {
 
 function confirmAndDownload() {
   if (!agreed.value || !available.value) return;
-  localStorage.setItem(STORAGE_KEY, '1');
-  accepted.value = true;
   close();
   download();
 }
@@ -73,7 +61,7 @@ function confirmAndDownload() {
       :class="['btn', tone]"
       type="button"
       :disabled="!available"
-      :title="available ? `v${version}` : undefined"
+      :title="available ? version : undefined"
       @click="open"
     >
       <svg v-if="icon === 'flask'" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -130,7 +118,7 @@ function confirmAndDownload() {
 
         <div class="dialog-box">
           <p>
-            版本 <bdi>v{{ version }}</bdi>
+            版本 <bdi>{{ version }}</bdi>
             <template v-if="channel.artifact.size"> · 大小 {{ formatUpdateSize(channel.artifact.size) }}</template>
             <template v-if="channel.artifact.sha256">
               · SHA-256 <code>{{ channel.artifact.sha256 }}</code></template

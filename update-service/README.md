@@ -12,6 +12,7 @@ dist/                                                          generated Pages o
 schema/                                                        v1 manifest and response contracts
 scripts/build-site.mjs                                         build site and assemble dist
 scripts/publish-update.mjs                                     generic publisher
+scripts/restore-release-snapshot.mjs                           restore a history snapshot from an existing artifact
 test/                                                          Function tests
 wrangler.toml                                                  Pages project + R2 binding
 ```
@@ -23,7 +24,13 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
 GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
+GET /api/v1/install-kits/{kitId}/{channel}/latest
+DELETE /api/v1/admin/releases?channel={channel}&releaseKey={versionName}  (admin)
 ```
+
+The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (installer) app. Its static parts — the device profile, the uninstall notice, and the 爱趣听 / 微信 replacement packages (fixed R2 asset URLs, sizes and SHA-256) — are authored in `functions/_shared/install-kits.ts`. The DiPlay entry is resolved at request time from the app update interface: the Function reads `apps/diplay/android/stable/latest.json` and `apps/diplay/android/beta/latest.json`, skips disabled channels, and uses whichever carries the higher `versionCode` (preferring stable on a tie), so the installer always gets the newest DiPlay build without republishing the kit. If no DiPlay release is available it returns `503 {"error":"diplay_release_unavailable"}`; an unknown `kitId` returns `404`. Responses use `Cache-Control: no-store`.
+
+`DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
 
 A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
 
@@ -42,14 +49,16 @@ and expands stored object keys into public asset URLs. Responses use `Cache-Cont
 Download files live in the public assets bucket:
 
 ```
-apps/{appId}/{platform}/{channel}/{version}/{file}
+apps/{appId}/{platform}/{channel}/{versionName}/{file}
 ```
 
 Release snapshots are kept for rollback and audit:
 
 ```
-apps/{appId}/{platform}/{channel}/releases/{version}.json
+apps/{appId}/{platform}/{channel}/releases/{versionName}.json
 ```
+
+Both use the manifest `versionName` (falling back to `version` when no display name is supplied), so builds that share an app version but differ in display name keep separate assets and history entries.
 
 ## Initial setup
 
@@ -71,7 +80,7 @@ Set the public asset base URL in `wrangler.toml` or in the Pages project environ
 ASSET_BASE_URL = "https://dl.example.com"
 ```
 
-Bind the metadata bucket `gtmc-app-updates-meta-prod` as `META`. The assets bucket is read directly through its custom domain and is not bound to the Function.
+Bind the metadata bucket `gtmc-app-updates-meta-prod` as `META`. Bind the assets bucket as `RELEASE_ASSETS` so admin deletes can remove release files; the download site still reads it directly through its custom domain. `ASSETS` is reserved by Pages.
 
 Deploy the Pages project (builds the Astro site into `dist/`, then uploads it with the Functions):
 
@@ -85,7 +94,7 @@ Use custom domains such as `upd.example.com` and `dl.example.com`. Do not use `*
 
 The site fetches the public stable/beta manifests at build time and bakes the version data into the HTML, so the first paint has no loading state. After hydration it refreshes both channels silently; a failed refresh leaves the baked data in place. A build therefore needs network access to the update API.
 
-Publishing a release writes R2 objects and then `.github/workflows/release.yml` rebuilds and deploys the Pages project, so the download page and the API move together. Function or site code changes also require a deployment; `npm run deploy` is the manual path.
+Publishing a release uploads the APK, checksums and release snapshot, then `.github/workflows/release.yml` rebuilds and deploys the Pages project. CI never updates `latest.json`: the delivered version changes only when an admin selects it in `/admin/`. Function or site code changes also require a deployment; `npm run deploy` is the manual path.
 
 ## Publish a release
 
@@ -108,7 +117,7 @@ node scripts/publish-update.mjs \
   --verify-url https://upd.example.com/api/v1/apps/diplay/android/stable/latest
 ```
 
-`version` is the short tag used in object keys and release snapshots. The optional `versionName` is the full display version returned by the API and shown by download pages; when omitted, clients fall back to `version`. Non-ASCII artifact names are supported and are percent-encoded in public URLs.
+`versionName` is the full display version returned by the API and shown by download pages; it is also the object-key segment for assets and release snapshots. When omitted, `version` is used for keys and display. Non-ASCII artifact names and version names are supported and are percent-encoded in public URLs.
 
 The publisher computes SHA-256 and size, uploads the artifact and `SHA256SUMS.txt`, writes a version snapshot, then updates `latest.json` last. It does not read the previous manifest.
 
@@ -119,6 +128,23 @@ still overrides the build default.
 
 Use `--dry-run` to print the plan without writing R2.
 
+### Restore a release snapshot
+
+If a snapshot was overwritten, restore it from an artifact that still exists in R2. The script copies the artifact into the versionName directory, writes `SHA256SUMS.txt`, and writes `releases/{versionName}.json`; it does not change `latest.json`:
+
+```sh
+set -a; . ./.env.deploy; set +a
+
+node scripts/restore-release-snapshot.mjs \
+  --channel beta \
+  --version 0.2.21 \
+  --version-name 0.2.21_凯美瑞A导航适配版_0.1.0 \
+  --version-code 1000 \
+  --dry-run
+```
+
+Remove `--dry-run` to write. `publishedAt` defaults to the source object's Last-Modified time; release notes can be edited later in `/admin/`.
+
 ## GitHub Actions
 
 The DiPlay repository uses `.github/workflows/release.yml`:
@@ -128,7 +154,7 @@ The DiPlay repository uses `.github/workflows/release.yml`:
 - The workflow builds `:mobile:assembleRelease`, verifies the APK version matches the tag, rejects a `versionCode` that is not greater than the currently published one, uploads to R2 and checks the public endpoint.
 - It then installs `update-service` dependencies, rebuilds the Astro site with the newly published manifests baked in, and deploys the Pages project. A site deploy failure fails the workflow after the R2 release is already live.
 
-Manually published releases start with automatic delivery disabled. Sign in to `/admin/` and enable delivery after reviewing the release. Release APKs and APK-derived identity fields are immutable; the console edits only release notes and delivery settings.
+CI uploads every release as a disabled candidate and never moves the delivered version. Sign in to `/admin/`, review it, and use “设为当前下发版本”; that also enables delivery. Release APKs and APK-derived identity fields are immutable; the console edits only release notes and delivery settings.
 
 ### Deploy only the site
 
@@ -171,6 +197,7 @@ Repository secrets:
 | `R2_ACCESS_KEY_ID` | R2 write access key |
 | `R2_SECRET_ACCESS_KEY` | R2 write secret |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Pages deployment (Pages Edit) |
+| `BAIDU_PUSH_TOKEN` | Optional; Baidu 普通收录 API token for automatic URL push |
 
 Repository variables:
 
@@ -188,7 +215,7 @@ The workflow uses the `release` GitHub Environment, so secrets can be scoped the
 
 `versionCode` is the authoritative update value. Every release for an app/channel must have a higher `versionCode` than the currently published manifest; the workflow refuses to publish otherwise.
 
-`versionName` is the full display version, for example `0.3.1_凯美瑞A导航适配版_0.1.0`, and the release APK is published under that name. The short `version` (for example `0.3.1`) is used for tags and object keys. Changing only the descriptive suffix does not create a new update; `versionCode` must still increase.
+`versionName` is the full display version, for example `0.3.1_凯美瑞A导航适配版_0.1.0`, and is used for the APK name, asset directory and release snapshot. Builds that reuse a `versionName` overwrite the same release snapshot, so publish each build under a distinct display version. The short `version` (for example `0.3.1`) is used for git tags. Changing only the descriptive suffix creates a separate history entry, but clients still compare `versionCode`, which must increase.
 
 ## Adding another app
 
@@ -197,6 +224,23 @@ The workflow uses the `release` GitHub Environment, so secrets can be scoped the
 3. Point the app's update client at the same API path.
 
 No Function changes or Pages deployment are needed. Keys are isolated by `appId/platform/channel`, so concurrent releases from different apps are safe. Serialize publishes of the same app and channel with a CI concurrency group.
+
+### The installer app (DiPlay 装车助手)
+
+The installer app self-updates through the same generic endpoint. It is published under `--app installer --platform android --channel stable` (universal APK):
+
+```sh
+node scripts/publish-update.mjs \
+  --app installer \
+  --platform android \
+  --channel stable \
+  --version 0.1.1 \
+  --version-code 2 \
+  --artifact ./installer-0.1.1.apk \
+  --arch universal
+```
+
+The client checks `GET /api/v1/apps/installer/android/stable/latest?id=<ANDROID_ID>` on every home screen visit, compares the manifest `versionCode` with its own `longVersionCode`, and offers to download and install the APK. `latest` (not `public-latest`) is used so release rollout stays under admin delivery control. A release must be manually enabled in `/admin/` after publishing, same as DiPlay releases.
 
 ## Notes
 

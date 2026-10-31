@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_section">Adaptación para Camry A Navigation</string>
+    <string name="settings_camry_title">Activar la adaptación para Camry A Navigation</string>
+    <string name="settings_camry_description">Si está activada, DiPlay gestiona USB, VPN, audio, micrófono y HUD según la integración del Camry A Navigation. La detección automática identifica el modelo; elige «Forzar» si no se detecta y «Desactivar» en otros vehículos. Vuelve a conectar CarPlay tras cambiar esta opción. Al activarlas, las conexiones inalámbricas usan el método específico del vehículo.</string>
+    <string name="settings_camry_auto">Detección automática (predeterminada)</string>
+    <string name="settings_camry_on">Forzar</string>
+    <string name="settings_camry_off">Desactivar</string>
+    <string name="settings_camry_enabled">Adaptación forzada</string>
+    <string name="settings_camry_disabled">Adaptación desactivada: se conecta como una unidad estándar</string>
+    <string name="settings_camry_detected">Detección automática: Camry A Navigation detectado; adaptación activada</string>
+    <string name="settings_camry_not_detected">Detección automática: Camry A Navigation no detectado; adaptación desactivada</string>
+</resources>

@@ -1,7 +1,6 @@
 plugins {
     id 'com.android.library'
 }
-apply from: rootProject.file('gradle/native-ncm.gradle')
 
 android {
     namespace = 'com.shilapi.xcertplay.shared'
@@ -9,7 +8,7 @@ android {
 
     defaultConfig {
         minSdk = 23
-        consumerProguardFiles 'ambient-consumer-rules.pro'
+        consumerProguardFiles 'ambient-consumer-rules.pro', 'wireless-consumer-rules.pro'
         targetSdk = 37
 
         ndk {
@@ -58,4 +57,26 @@ dependencies {
     implementation libs.jmdns
     testImplementation libs.junit
     testImplementation 'org.robolectric:robolectric:4.17'
+}
+
+// The root helper must not AOT-compile the complete application on this ARM32 head unit.
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    def capitalized = variant.name.capitalize()
+    def helperOutput = layout.buildDirectory.dir("generated/pioneer-hotspot-helper/${variant.name}")
+    def helperClasses = layout.buildDirectory.dir("intermediates/built_in_kotlinc/${variant.name}/compile${capitalized}Kotlin/classes")
+    def helperTask = tasks.register("build${capitalized}PioneerHotspotHelper", Exec) {
+        dependsOn("compile${capitalized}Kotlin")
+        inputs.dir(helperClasses)
+        inputs.file(rootProject.file("scripts/build-pioneer-hotspot-helper.py"))
+        outputs.dir(helperOutput)
+        commandLine("python3", rootProject.file("scripts/build-pioneer-hotspot-helper.py").absolutePath,
+            helperClasses.get().asFile.absolutePath, helperOutput.get().asFile.absolutePath)
+    }
+    variant.sources.assets.addStaticSourceDirectory(helperOutput.get().asFile.absolutePath)
+    tasks.configureEach { task ->
+        if (task.name == "merge${capitalized}Assets" ||
+            (task.name.contains(capitalized) && task.name.toLowerCase().contains("lint"))) {
+            task.dependsOn(helperTask)
+        }
+    }
 }

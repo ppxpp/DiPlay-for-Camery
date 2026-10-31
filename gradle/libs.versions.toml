@@ -4,7 +4,10 @@ coreKtx = "1.19.0"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 kotlin = "2.2.10"
+composeMultiplatform = "1.9.3"
 composeBom = "2026.02.01"
+serialization = "1.9.0"
+coroutines = "1.10.2"
 appcompat = "1.8.0"
 appProjected = "1.4.0"
 appAutomotive = "1.7.0"
@@ -17,8 +20,14 @@ zxing = "3.5.3"
 work = "2.11.2"
 desugarJdkLibs = "2.1.5"
 retrofuture = "1.7.4"
+umengCommon = "10.0.1"
+umengAsms = "1.8.7.2"
+umengApm = "2.1.0"
 
 [libraries]
+umeng-common = { group = "com.umeng.umsdk", name = "common", version.ref = "umengCommon" }
+umeng-asms = { group = "com.umeng.umsdk", name = "asms", version.ref = "umengAsms" }
+umeng-apm = { group = "com.umeng.umsdk", name = "apm", version.ref = "umengApm" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 android-retrofuture = { group = "net.sourceforge.streamsupport", name = "android-retrofuture", version.ref = "retrofuture" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +46,9 @@ androidx-app-projected = { group = "androidx.car.app", name = "app-projected", v
 androidx-app-automotive = { group = "androidx.car.app", name = "app-automotive", version.ref = "appAutomotive" }
 androidx-app = { group = "androidx.car.app", name = "app", version.ref = "app" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 jmdns = { group = "org.jmdns", name = "jmdns", version.ref = "jmdns" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
@@ -48,4 +60,9 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime", versio
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }

@@ -1,10 +1,36 @@
 ---
 import '../styles/global.css';
+import Analytics from '../components/Analytics.astro';
 import DocsLinks from '../components/DocsLinks.astro';
 import Hero from '../components/Hero.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { site } from '../data/site.ts';
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      name: site.name,
+      alternateName: site.shortName,
+      url: 'https://diplay.mgulu.com/',
+      inLanguage: 'zh-CN',
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: site.name,
+      alternateName: site.shortName,
+      description: site.intro,
+      url: 'https://diplay.mgulu.com/',
+      applicationCategory: 'MultimediaApplication',
+      operatingSystem: 'Android',
+      inLanguage: 'zh-CN',
+      isAccessibleForFree: true,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+    },
+  ],
+};
 ---
 
 <!doctype html>
@@ -12,6 +38,7 @@ import { site } from '../data/site.ts';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="applicable-device" content="pc,mobile" />
     <meta name="color-scheme" content="light" />
     <title>{site.name}</title>
     <meta name="description" content={site.intro} />
@@ -23,6 +50,15 @@ import { site } from '../data/site.ts';
     <meta property="og:title" content={site.name} />
     <meta property="og:description" content={site.intro} />
     <meta property="og:locale" content="zh_CN" />
+    <meta property="og:url" content="https://diplay.mgulu.com/" />
+    <meta property="og:image" content="https://diplay.mgulu.com/app-icon.png" />
+    <meta property="og:image:alt" content={site.name} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={site.name} />
+    <meta name="twitter:description" content={site.intro} />
+    <link rel="canonical" href="https://diplay.mgulu.com/" />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <Analytics />
   </head>
   <body>
     <SiteHeader current="home" />
@@ -105,8 +141,7 @@ import { site } from '../data/site.ts';
               反馈与环境信息
             </h3>
             <p>
-              反馈时请注明车机固件版本、iPhone 与 iOS 版本、连接方式（Wi-Fi 热点 + 外接蓝牙 /
-              USB）、相关设置、复现步骤与故障时间，并附上应用内导出的诊断报告。
+              反馈时请注明车机固件版本、iPhone 与 iOS 版本、连接方式（无线 / 有线）、相关设置、复现步骤与故障时间，并附上应用内导出的诊断报告。
             </p>
             {
               site.feedbackUrl ? (

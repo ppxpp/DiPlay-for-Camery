@@ -1,18 +1,19 @@
 package com.shilapi.xcertplay.pioneer
 
 import android.content.Context
+import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /** VPN authorization is requested with USB authorization, awaited only immediately before TUN. */
 object PioneerVpnInitialization {
-    private data class Attempt(val owner: Any, val done: CountDownLatch = CountDownLatch(1), @Volatile var failure: Throwable? = null)
+    private data class Attempt(val owner: WeakReference<Any>, val done: CountDownLatch = CountDownLatch(1), @Volatile var failure: Throwable? = null)
     @Volatile private var attempt: Attempt? = null
 
     @Synchronized fun begin(context: Context, owner: Any, current: () -> Boolean) {
-        if (attempt?.let { it.owner === owner && it.done.count == 1L } == true) return
+        if (attempt?.let { it.owner.get() === owner && it.done.count == 1L } == true) return
         val app = context.applicationContext
-        val owned = Attempt(owner)
+        val owned = Attempt(WeakReference(owner))
         attempt = owned
         PioneerRootSession.start(app)
         PioneerConnectionTasks.update("vpn-authorization", "RUNNING")

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import { adminSession } from '../data/admin-session.ts';
+import { releaseDisplayName } from '../data/releases.ts';
 
 type Channel = 'stable' | 'beta';
 type ChannelFilter = 'all' | Channel;
 type Management = {
   enabled: boolean;
+  published?: boolean;
   mode: 'all' | 'percentage' | 'whitelist';
   percentage?: number;
   ids?: string[];
@@ -13,13 +15,15 @@ type Management = {
 };
 type Release = {
   channel: Channel;
+  releaseKey: string;
   version: string;
   versionName?: string;
   versionCode: number;
   publishedAt?: string;
+  artifacts?: Array<{ name?: string }>;
   management?: Management;
 };
-type ApiRelease = Omit<Release, 'channel'>;
+type ApiRelease = Omit<Release, 'channel' | 'releaseKey'> & { releaseKey?: string };
 
 const channel = ref<ChannelFilter>('all');
 const authenticated = ref(false);
@@ -69,6 +73,7 @@ async function load() {
         nextReleases.push({
           ...release,
           channel: result.channel,
+          releaseKey: release.releaseKey ?? release.versionName ?? release.version,
           management: { enabled: true, mode: 'all', notes: '', ...release.management },
         });
       }
@@ -128,6 +133,7 @@ async function save(release: Release) {
       method: 'PUT',
       body: JSON.stringify({
         channel: release.channel,
+        releaseKey: release.releaseKey,
         version: release.version,
         management: {
           ...management,
@@ -136,7 +142,7 @@ async function save(release: Release) {
         },
       }),
     });
-    message.value = `${release.version} 已保存`;
+    message.value = `${release.versionName ?? release.version} 已保存`;
     await load();
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : '保存失败';
@@ -144,16 +150,42 @@ async function save(release: Release) {
 }
 
 async function rollback(release: Release) {
-  if (!window.confirm(`将自动更新推荐版本回撤到 ${release.version}？当前推荐版本会停止下发。`)) return;
+  if (!window.confirm(`将自动更新推荐版本设为 ${release.versionName ?? release.version}？原推荐版本会停止下发，该版本会立即开启下发。`)) return;
   try {
-    const result = await request('/api/v1/admin/releases', {
+    await request('/api/v1/admin/releases', {
       method: 'POST',
-      body: JSON.stringify({ channel: release.channel, version: release.version }),
+      body: JSON.stringify({
+        channel: release.channel,
+        releaseKey: release.releaseKey,
+        version: release.version,
+      }),
     });
-    message.value = `已回撤到 ${result.currentVersion}`;
+    message.value = `已设为当前下发版本：${release.versionName ?? release.version}`;
     await load();
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : '回撤失败';
+  }
+}
+
+async function remove(release: Release) {
+  const label = release.versionName ?? release.version;
+  const current = release.releaseKey === currentVersions[release.channel];
+  const note = current ? '它当前是推荐版本，删除后会自动回退到上一个可用版本。' : '';
+  if (!window.confirm(`删除 ${label}？版本记录和安装包文件会一并删除，且不可恢复。${note}`)) return;
+  message.value = '';
+  try {
+    const params = new URLSearchParams({
+      channel: release.channel,
+      releaseKey: release.releaseKey,
+      version: release.version,
+    });
+    const result = await request(`/api/v1/admin/releases?${params}`, { method: 'DELETE' });
+    message.value = result.assetsRemoved === false
+      ? `已删除 ${label}，但安装包文件清理失败，请稍后重试。`
+      : `已删除 ${label}`;
+    await load();
+  } catch (cause) {
+    message.value = cause instanceof Error ? cause.message : '删除失败';
   }
 }
 
@@ -283,7 +315,7 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="release-list">
-        <article v-for="release in releases" :key="`${release.channel}-${release.version}`" class="release-card admin-release">
+        <article v-for="release in releases" :key="`${release.channel}-${release.releaseKey}`" class="release-card admin-release">
           <header class="release-card-head">
             <div class="release-identity">
               <span class="release-icon" aria-hidden="true">
@@ -304,9 +336,9 @@ onUnmounted(() => {
               </span>
               <div class="release-title">
                 <div class="release-title-row">
-                  <h2>{{ release.versionName ?? release.version }}</h2>
+                  <h2>{{ releaseDisplayName(release) }}</h2>
                   <span
-                    v-if="release.version === currentVersions[release.channel]"
+                    v-if="release.releaseKey === currentVersions[release.channel]"
                     class="tag tag--brand"
                   >
                     当前推荐
@@ -324,12 +356,20 @@ onUnmounted(() => {
 
             <div class="release-actions">
               <button
-                v-if="release.version !== currentVersions[release.channel]"
+                v-if="release.releaseKey !== currentVersions[release.channel]"
                 class="btn secondary btn--compact"
                 type="button"
                 @click="rollback(release)"
               >
-                回撤到此版本
+                设为当前下发版本
+              </button>
+              <button
+                class="btn danger btn--compact"
+                type="button"
+                :disabled="busy"
+                @click="remove(release)"
+              >
+                删除
               </button>
             </div>
           </header>

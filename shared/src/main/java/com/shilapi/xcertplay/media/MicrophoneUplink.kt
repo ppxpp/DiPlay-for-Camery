@@ -162,10 +162,7 @@ internal class MicrophoneUplink(
         val nextSocket = try {
             DatagramSocket(null).apply {
                 reuseAddress = true
-                if (config.nativeBinding != null) {
-                    config.nativeBinding.bind(this)
-                    connect(config.nativeBinding.peerEndpoint(config.host, config.port))
-                } else bind(InetSocketAddress(config.bindAddress ?: InetAddress.getByName("::"), 0))
+                bind(InetSocketAddress(config.bindAddress ?: InetAddress.getByName("::"), 0))
             }
         } catch (error: Exception) {
             Log.e(TAG, "microphone socket creation failed", error)
@@ -499,11 +496,13 @@ internal class MicrophoneUplink(
     }
 
     private fun sendFrame(socket: DatagramSocket, counters: MicrophoneCounters, frame: ByteArray) {
+        val encodeStarted=System.nanoTime()
         val bodies = if (config.codec == AudioCodecKind.OPUS) {
             opusEncoder?.encode(frame).orEmpty()
         } else {
             listOf(MicrophonePacketizer.toWirePcm(frame))
         }
+        stats.encoding(System.nanoTime()-encodeStarted)
         stats.encoded(bodies.size, if (bodies.isEmpty()) 1 else bodies.count { it.isEmpty() })
         bodies.forEach { body ->
             sendPacket(
@@ -529,7 +528,7 @@ internal class MicrophoneUplink(
             samples = samples,
         )
         try {
-            val destination = config.nativeBinding?.peerEndpoint(config.host, config.port) ?: InetSocketAddress(config.host, config.port)
+            val destination = InetSocketAddress(config.host, config.port)
             socket.send(DatagramPacket(packet, packet.size, destination))
             stats.sent()
         } catch (error: Exception) {

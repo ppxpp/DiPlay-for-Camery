@@ -20,21 +20,29 @@ internal object CrashRecord {
     private const val MAX_FRAMES = 12
     private const val MAX_OWN_FRAMES = 6
     private const val MAX_MESSAGE = 120
-    private var installed = false
+    private var installedHandler: Thread.UncaughtExceptionHandler? = null
 
-    @Synchronized fun install(context: Context) {
-        if (installed) return
-        installed = true
+    @Synchronized fun install(context: Context) = ensureOutermost(context)
+
+    /**
+     * Keep DiPlay's own record outermost. A vendor SDK such as U-APM replaces the default handler when
+     * it initialises, and unless it happens to chain to whatever was there before, the crash would be
+     * reported remotely but never reach the file the diagnostic report reads. Re-installing on top of
+     * the current handler keeps the local record guaranteed and costs nothing when nobody moved.
+     */
+    @Synchronized fun ensureOutermost(context: Context) {
+        val current = Thread.getDefaultUncaughtExceptionHandler()
+        if (current === installedHandler) return
         val file = File(context.applicationContext.filesDir, FILE)
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+        installedHandler = Thread.UncaughtExceptionHandler { thread, error ->
             // Recording must never replace the crash itself.
             runCatching {
                 file.parentFile?.mkdirs()
                 file.writeText(format(thread.name, error, System.currentTimeMillis()))
             }
-            previous?.uncaughtException(thread, error)
+            current?.uncaughtException(thread, error)
         }
+        Thread.setDefaultUncaughtExceptionHandler(installedHandler)
     }
 
     internal fun format(threadName: String, error: Throwable, atMillis: Long): String = buildString {
@@ -73,7 +81,12 @@ internal object CrashRecord {
 /** Installs [CrashRecord] when the process starts, before any activity, receiver or service runs. */
 class CrashRecordInstaller : ContentProvider() {
     override fun onCreate(): Boolean {
-        context?.let(CrashRecord::install)
+        context?.let {
+            CrashRecord.install(it)
+            // Process start is where Umeng expects its pre-consent preInit; collection still waits for
+            // the disclaimer gate in Analytics.startIfAllowed.
+            com.shilapi.xcertplay.analytics.Analytics.preInit(it)
+        }
         return true
     }
 
