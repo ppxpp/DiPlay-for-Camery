@@ -815,23 +815,62 @@ class CarPlayController(
             touchExecutor.execute {
                 if (runCatching(allowed).getOrDefault(false) && !closed && activeSession === session &&
                     mediaIntentRevision.get() == expectedRevision && nowPlayingSnapshot().playing) {
-                    session.sendMedia(com.shilapi.xcertplay.airplay.CarPlayMediaButton.PLAY)
+                    audioControlLog("command=PLAY source=source_recovery revision=$expectedRevision targetSession=${System.identityHashCode(session)} outcome=dispatch")
+                    lastMediaCommand = MediaCommandObservation(expectedRevision, com.shilapi.xcertplay.airplay.CarPlayMediaButton.PLAY, "source_recovery", android.os.SystemClock.elapsedRealtime(), session)
+                    try {
+                        session.sendMedia(com.shilapi.xcertplay.airplay.CarPlayMediaButton.PLAY)
+                        audioControlLog("command=PLAY source=source_recovery outcome=send_returned acknowledgement=false")
+                    } catch (error: Exception) {
+                        audioControlLog("command=PLAY source=source_recovery outcome=send_failed error=${diagnosticFailureClass(error)}")
+                        throw error
+                    }
                 }
             }
             true
         } catch (_: Exception) { false }
     }
 
-    fun sendMediaButton(index: Int): Boolean {
-        if (closed) return false
+    private data class MediaCommandObservation(val revision: Long, val index: Int, val source: String, val atMs: Long, val session: Any)
+    @Volatile private var lastMediaCommand: MediaCommandObservation? = null
+    private val audioEventSequence = java.util.concurrent.atomic.AtomicLong()
+
+    private fun audioControlLog(message: String) {
+        runCatching {
+            debugLog("AUDIO_CONTROL attempt=$diagnosticAttempt run=${diagnosticRun.get()} " +
+                "session=${activeSession?.let { System.identityHashCode(it) }} " +
+                "event=${audioEventSequence.incrementAndGet()} wallMs=${System.currentTimeMillis()} " +
+                "elapsedMs=${android.os.SystemClock.elapsedRealtime()} $message")
+        }
+    }
+
+    fun sendMediaButton(index: Int): Boolean = sendMediaButton(index, "unspecified")
+
+    fun sendMediaButton(index: Int, source: String): Boolean {
+        val safeSource = source.take(80).replace(Regex("[^A-Za-z0-9_.:-]"), "_")
+        if (closed) {
+            audioControlLog("command=$index source=$safeSource outcome=rejected_closed")
+            return false
+        }
         val revision = mediaIntentRevision.incrementAndGet()
-        debugLog("Audio playback: media command=$index revision=$revision phonePlaying=${nowPlayingSnapshot().playing}")
-        val session = activeSession ?: return false
+        val session = activeSession
+        audioControlLog("command=$index source=$safeSource revision=$revision phonePlaying=${nowPlayingSnapshot().playing} outcome=${if (session == null) "rejected_no_session" else "enqueue"}")
+        if (session == null) return false
         return try {
             if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled)) pioneerTouchQueue.barrier()
-            touchExecutor.execute { session.sendMedia(index) }
+            touchExecutor.execute {
+                lastMediaCommand = MediaCommandObservation(revision, index, safeSource, android.os.SystemClock.elapsedRealtime(), session)
+                audioControlLog("command=$index source=$safeSource revision=$revision targetSession=${System.identityHashCode(session)} outcome=dispatch")
+                try {
+                    session.sendMedia(index)
+                    audioControlLog("command=$index revision=$revision outcome=send_returned acknowledgement=false")
+                } catch (error: Exception) {
+                    audioControlLog("command=$index revision=$revision outcome=send_failed error=${diagnosticFailureClass(error)}")
+                    throw error
+                }
+            }
             true
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            audioControlLog("command=$index revision=$revision outcome=enqueue_failed error=${diagnosticFailureClass(error)}")
             false
         }
     }
@@ -1026,7 +1065,11 @@ class CarPlayController(
         }?.let { (update, playingChanged) ->
             nowPlayingListener?.invoke(update)
             if (playingChanged) {
-                debugLog("Audio playback: phonePlaying=${update.playing} mediaCommandRevision=${mediaIntentRevision.get()}")
+                val recent = lastMediaCommand?.takeIf { it.session === activeSession }
+                audioControlLog("phonePlaying=${update.playing} previousPlaying=${!update.playing} " +
+                    "mediaCommandRevision=${mediaIntentRevision.get()} lastCommand=${recent?.index} " +
+                    "lastSource=${recent?.source} lastRevision=${recent?.revision} " +
+                    "sinceDispatchMs=${recent?.let { android.os.SystemClock.elapsedRealtime() - it.atMs }}")
                 playbackListener?.invoke(update.playing)
             }
         }

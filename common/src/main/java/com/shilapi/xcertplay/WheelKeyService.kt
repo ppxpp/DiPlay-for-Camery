@@ -47,7 +47,7 @@ class WheelKeyService : AccessibilityService() {
     private val siriKey = WheelSiriKey()
     /** A remapped media key is handled by the same accessibility input filter as the Siri key. */
     internal var sendMedia: (Int) -> Boolean = { index ->
-        CarPlayBackgroundSession.snapshot()?.controller?.sendMediaButton(index) == true
+        CarPlayBackgroundSession.snapshot()?.controller?.sendMediaButton(index, "wheel_service") == true
     }
     private val handler = Handler(Looper.getMainLooper())
     private var doubleSiriFirstPressWasInCall = false

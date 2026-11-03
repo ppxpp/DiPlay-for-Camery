@@ -81,7 +81,13 @@ internal class AudioFocusCoordinator(
                 }
                 return@synchronized
             }
-            runCatching { report("Audio: focus change=$change activeTracks=${active.size}") }
+            runCatching { report("Audio: focus change=$change activeTracks=${active.size} " +
+                "action=${when (change) {
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> "duck"
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (muteMediaOnTransientLoss) "mute" else "keep"
+                    AudioManager.AUDIOFOCUS_GAIN -> "restore_volume"
+                    else -> "keep"
+                }} sendsMediaCommand=false elapsedMs=${android.os.SystemClock.elapsedRealtime()}") }
             when (change) {
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> setMediaVolume(DUCKED_VOLUME)
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
@@ -191,6 +197,7 @@ internal class AudioFocusCoordinator(
     }
 
     fun onExternalFocusChange(change: Int) {
+        runCatching { report("Audio: external focus change=$change source=media_key_session elapsedMs=${android.os.SystemClock.elapsedRealtime()}") }
         val current = synchronized(this) { currentListener }
         current.onAudioFocusChange(change)
     }
@@ -255,6 +262,7 @@ internal class AudioFocusCoordinator(
         val volume = if (com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().muteLocalMedia && active.values.any { it.isVehicleCall() }) 0f else mediaVolume
         if (entry.channel != AudioChannel.MEDIA || entry.appliedVolume == volume) return
         val applied = runCatching { track.setStereoVolume(volume, volume) == AudioTrack.SUCCESS }.getOrDefault(false)
+        runCatching { report("Audio: media gain previous=${entry.appliedVolume} requested=$volume applied=$applied vehicleCall=${active.values.any { it.isVehicleCall() }} elapsedMs=${android.os.SystemClock.elapsedRealtime()}") }
         if (applied) entry.appliedVolume = volume
     }
 

@@ -435,7 +435,7 @@ internal object CarPlayMediaKeys {
             WheelKeyLog.note("media key $source -> car video player $index")
             return
         }
-        val sent = synchronized(this) { controller }?.sendMediaButton(index) ?: false
+        val sent = synchronized(this) { controller }?.sendMediaButton(index, "media_session:$source") ?: false
         Log.i(TAG, "media key $source -> CarPlay $index sent=$sent")
         WheelKeyLog.note("media key $source -> CarPlay $index sent=$sent")
     }
