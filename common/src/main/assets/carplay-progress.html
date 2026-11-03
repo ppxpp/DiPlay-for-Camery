@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>CarPlay</title>
+<style>
+  /* 颜色全部由原生按 DiPlayPalette.of(night) 注入覆盖；这里只给深色兜底默认值。 */
+  :root{
+    --text:#ffffff; --dim:rgba(255,255,255,.60);
+    --accent:#0a84ff; --success:#30d158; --danger:#ff453a; --surface:#1c1c1e;
+    --glass:rgba(255,255,255,.14); --glass-bd:rgba(255,255,255,.22);
+    --bar:rgba(255,255,255,.16);
+  }
+  body.light{ --glass:rgba(255,255,255,.55); --glass-bd:rgba(0,0,0,.10); --bar:rgba(0,0,0,.12); }
+
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;width:100%;overflow:hidden}
+  body{font-family:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);background:var(--surface);transition:color .3s ease,background-color .3s ease}
+
+  .wall{position:fixed;inset:-20%;z-index:0;filter:blur(74px) saturate(140%);opacity:.94;
+    background:
+      radial-gradient(38% 38% at 20% 26%, #2e6bff 0%, transparent 60%),
+      radial-gradient(34% 34% at 80% 20%, #b14bff 0%, transparent 60%),
+      radial-gradient(40% 40% at 66% 76%, #ff4d8d 0%, transparent 62%),
+      radial-gradient(42% 42% at 26% 82%, #18d6c4 0%, transparent 62%),
+      radial-gradient(50% 50% at 50% 50%, #1a1a2e 0%, var(--surface) 75%);
+    animation:drift 26s ease-in-out infinite alternate}
+  @keyframes drift{0%{transform:scale(1.05) translate(0,0)}50%{transform:scale(1.15) translate(2%,-2%)}100%{transform:scale(1.08) translate(-2%,2%)}}
+  .wall.v2{background:
+      radial-gradient(38% 38% at 30% 25%, #ff7a18 0%, transparent 60%),
+      radial-gradient(36% 36% at 75% 30%, #ff2d78 0%, transparent 60%),
+      radial-gradient(40% 40% at 70% 78%, #6a3bff 0%, transparent 62%),
+      radial-gradient(44% 44% at 25% 80%, #00c2ff 0%, transparent 62%),
+      radial-gradient(50% 50% at 50% 50%, #20120a 0%, var(--surface) 75%)}
+  .wall.v3{background:
+      radial-gradient(40% 40% at 25% 30%, #00e0a4 0%, transparent 60%),
+      radial-gradient(36% 36% at 78% 25%, #00b4ff 0%, transparent 60%),
+      radial-gradient(40% 40% at 65% 78%, #7b5bff 0%, transparent 62%),
+      radial-gradient(42% 42% at 30% 80%, #ffd24d 0%, transparent 62%),
+      radial-gradient(50% 50% at 50% 50%, #0a1f1a 0%, var(--surface) 75%)}
+  /* 浅色（昼夜 setNight(false)）：壁纸减淡，让注入的深色 primaryText 可读 */
+  body.light .wall{opacity:.42;filter:blur(96px) saturate(120%)}
+
+  .ground{position:fixed;left:0;right:0;bottom:0;height:48%;z-index:1;pointer-events:none;
+    background:radial-gradient(62% 100% at 50% 100%, rgba(255,255,255,.11) 0%, transparent 70%)}
+  .road{position:fixed;left:0;right:0;bottom:0;height:44%;z-index:1;pointer-events:none;width:100%}
+  .road polygon{fill:rgba(255,255,255,.05)}
+  .road .edge{stroke:rgba(255,255,255,.26);stroke-width:2;fill:none}
+  .road .dash{stroke:rgba(255,255,255,.30);stroke-width:3;stroke-dasharray:16 18;fill:none;stroke-linecap:round}
+  .car{position:fixed;left:50%;bottom:-6%;transform:translateX(-50%);width:min(780px,86vw);z-index:2;pointer-events:none;opacity:.15}
+  .car path,.car circle{fill:#fff}
+  .vignette{position:fixed;inset:0;z-index:3;pointer-events:none;
+    background:linear-gradient(180deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,.10) 34%, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%)}
+  body.light .vignette{background:linear-gradient(180deg, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 42%, rgba(0,0,0,.10) 100%)}
+
+  .screen{position:relative;z-index:4;width:100%;height:100%;display:flex;flex-direction:column;overflow:auto}
+  header{display:flex;align-items:center;justify-content:space-between;padding:26px 46px;z-index:4}
+  .mark{font-size:15px;font-weight:700;letter-spacing:.02em;color:var(--text)}
+  .mark span{color:var(--dim);font-weight:500;letter-spacing:.22em;font-size:11px}
+  .pill{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--text);
+    background:var(--glass);border:1px solid var(--glass-bd);padding:9px 16px;border-radius:999px}
+  .blip{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+  body.idle .blip{opacity:.5;box-shadow:none}
+
+  .hud{padding:14px 60px 40px;z-index:4;max-width:1080px;animation:rise .7s cubic-bezier(.2,.8,.2,1)}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+  .head{display:flex;align-items:center;gap:20px}
+  .wheelwrap{position:relative;width:72px;height:72px;flex:0 0 auto}
+  .wheel{width:100%;height:100%;border-radius:50%;
+    background:conic-gradient(from 0deg,#ff3b30 0 90deg,#ffcc00 90deg 180deg,#34c759 180deg 270deg,#0a84ff 270deg 360deg);
+    -webkit-mask:radial-gradient(closest-side,transparent 62%,#000 63%);mask:radial-gradient(closest-side,transparent 62%,#000 63%);
+    animation:spin 1.1s linear infinite;animation-play-state:paused}
+  body.running .wheel{animation-play-state:running}
+  .wheel.is-complete{background:var(--success)}   /* COMPLETE：停转并转为成功色实心环 */
+  .wheel.is-failed{background:var(--danger)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .core{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .pct{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+  .state{min-width:0}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.28em;color:var(--accent);margin-bottom:6px}
+  .title{font-size:36px;font-weight:700;letter-spacing:-.02em;line-height:1.05;color:var(--text)}
+  .meta{margin-top:8px;font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+  /* estimate() 行：沿用原面板的预估/结果文案与色调语义 */
+  .estimate{margin-top:14px;font-size:15px;line-height:1.5;max-width:640px;color:var(--dim);
+    padding-left:14px;border-left:3px solid var(--glass-bd)}
+  .estimate.tone-normal{color:var(--text);border-left-color:var(--accent)}
+  .estimate.tone-success{color:var(--success);border-left-color:var(--success)}
+  .estimate.tone-danger{color:var(--danger);border-left-color:var(--danger)}
+  .estimate.tone-dim{color:var(--dim)}
+  .estimate.user-wait{font-weight:600}
+
+  /* 自适应列数：由 JS 依据 channel + 视口宽度设置 grid-template-columns（对应原面板 columns 逻辑） */
+  .track{margin-top:26px;display:grid;gap:12px 14px;z-index:4;grid-template-columns:repeat(6,1fr)}
+  .seg{display:flex;flex-direction:column;gap:9px;min-width:0}
+  .seg .bar{height:6px;border-radius:999px;background:var(--bar);overflow:hidden}
+  .seg .bar i{display:block;height:100%;width:0;border-radius:999px;transition:width .6s ease}
+  .seg.done .bar i{width:100%;background:var(--success)}
+  .seg.active .bar i{width:55%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:segpulse 1.6s infinite}
+  .seg.failed .bar i{width:55%;background:var(--danger);box-shadow:0 0 12px var(--danger)}
+  body.idle .seg.active .bar i{animation:none;width:100%}
+  @keyframes segpulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .seg .segrow{display:flex;align-items:center;gap:8px;min-width:0}
+  .seg .sym{width:20px;height:20px;flex:0 0 auto}
+  .seg .sym svg{width:20px;height:20px}
+  .seg .tx{font-size:13px;font-weight:600;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .seg.done .tx{color:var(--text)}
+  .seg.active .tx,.seg.failed .tx{color:var(--text)}
+  /* 时间列稳定：固定最小宽度 + 等宽数字，耗时变化不引起布局抖动（对齐原面板预测量时间列宽） */
+  .seg .tm{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:46px;text-align:right;margin-left:auto}
+  .seg.active .tm{color:var(--accent)}
+  .seg.failed .tm{color:var(--danger)}
+  /* per-step hint：来自 ConnectionTask.detail（车机蓝牙 / Wi-Fi），danger 态标红 */
+  .seg .hint{font-size:11px;line-height:1.4;color:var(--dim);white-space:normal}
+  .seg .hint.danger{color:var(--danger);font-weight:600}
+
+  .now{position:relative;margin-top:22px;display:flex;align-items:center;gap:16px;padding:16px 22px;border-radius:18px;width:max-content;max-width:100%;
+    background:var(--glass);border:1px solid var(--glass-bd);z-index:4;box-shadow:0 12px 40px -16px var(--surface);overflow:hidden}
+  /* 用伪元素叠色而非 color-mix()，兼容车机旧版 WebView */
+  .now::before{content:"";position:absolute;inset:0;background:var(--accent);opacity:0;pointer-events:none;transition:opacity .3s}
+  .now.is-active::before{opacity:.16}
+  .now.is-failed::before{background:var(--danger);opacity:.16}
+  .now.is-complete::before{background:var(--success);opacity:.16}
+  .now.is-active{border-color:var(--accent)}
+  .now.is-failed{border-color:var(--danger)}
+  .now.is-complete{border-color:var(--success)}
+  .now.is-retry{border-color:var(--dim)}
+  .now>*{position:relative;z-index:1}
+  .now .pulse{width:12px;height:12px;border-radius:50%;background:var(--accent);color:var(--accent);flex:0 0 auto;animation:ring 1.8s infinite;animation-play-state:paused}
+  body.running .now .pulse{animation-play-state:running}
+  .now.is-failed .pulse{background:var(--danger);color:var(--danger)}
+  .now.is-complete .pulse{background:var(--success);color:var(--success)}
+  @keyframes ring{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  .now .lbl{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--dim)}
+  .now .name{font-size:19px;font-weight:700;margin-top:2px;color:var(--text)}
+  .now .time{font-size:30px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;margin-left:8px;min-width:70px;text-align:right}
+  .now.is-failed .time{color:var(--danger)}
+  .now.is-complete .time{color:var(--success)}
+
+  /* 演示态控件：真机 applyConnectionState 注入后隐藏 */
+  .controls{position:fixed;right:24px;bottom:24px;z-index:5;display:flex;flex-wrap:wrap;gap:8px;max-width:60vw;justify-content:flex-end}
+  .btn{font-family:inherit;font-size:12px;font-weight:600;padding:9px 14px;border-radius:980px;cursor:pointer;border:1px solid var(--glass-bd);
+    background:var(--glass);color:var(--text);transition:.2s}
+  .btn:hover{filter:brightness(1.2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn:active{transform:scale(.97)}
+</style>
+</head>
+<body class="dark running">
+  <div class="wall" id="wall"></div>
+  <div class="ground"></div>
+
+  <svg class="road" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-hidden="true">
+    <polygon points="0,400 430,70 570,70 1000,400"/>
+    <path class="edge" d="M0 400 L430 70"/>
+    <path class="edge" d="M1000 400 L570 70"/>
+    <path class="dash" d="M500 400 L500 70"/>
+  </svg>
+
+  <svg class="car" viewBox="0 0 600 200" aria-hidden="true">
+    <path d="M20 150 Q32 138 72 137 L112 136 Q152 106 218 98 Q300 90 382 103 Q452 113 502 133 L560 137 Q588 138 592 151 L592 158 L20 158 Z"/>
+    <circle cx="160" cy="156" r="36"/><circle cx="452" cy="156" r="36"/>
+    <circle cx="160" cy="156" r="15" fill="#000" opacity=".25"/><circle cx="452" cy="156" r="15" fill="#000" opacity=".25"/>
+  </svg>
+
+  <div class="vignette"></div>
+
+  <div class="screen">
+    <header>
+      <div class="mark"><span id="markTitle">CarPlay</span> <span>· WIRELESS</span></div>
+      <div class="pill"><span class="blip"></span> <span id="channelLabel">Wireless</span></div>
+    </header>
+
+    <div class="hud">
+      <div class="head">
+        <div class="wheelwrap"><div class="wheel" id="wheel"></div><div class="core"><span class="pct" id="pct">0%</span></div></div>
+        <div class="state" aria-live="polite">
+          <div class="eyebrow">CARPLAY · CONNECTION</div>
+          <div class="title" id="title">—</div>
+          <div class="meta" id="meta">—</div>
+        </div>
+      </div>
+
+      <!-- estimate() 行：文案与色调全部来自注入 -->
+      <div class="estimate tone-normal" id="estimate" aria-live="polite">—</div>
+
+      <!-- 分段进度轨道：JS 按 channel + 宽度设置列数 -->
+      <div class="track" id="track"></div>
+
+      <!-- 当前步大号状态：无障碍 aria-live，对齐原 importantForAccessibility -->
+      <div class="now is-active" id="now" role="status" aria-live="polite">
+        <span class="pulse"></span>
+        <div><div class="lbl">CURRENT STEP</div><div class="name" id="nowName">—</div></div>
+        <div class="time" id="nowTime">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls">
+    <button class="btn" id="wallBtn">Wallpaper</button>
+    <button class="btn" id="nightBtn">Day / Night</button>
+    <button class="btn" id="connectBtn">Connecting</button>
+    <button class="btn" id="retryBtn">Retrying</button>
+    <button class="btn" id="doneBtn">Complete</button>
+    <button class="btn" id="failBtn">Failed</button>
+    <button class="btn" id="cancelBtn">Cancelled</button>
+    <button class="btn primary" id="hintBtn">Task hints</button>
+  </div>
+
+<script>
+  // 由原生 AppleStyleConnectionProgressPanel 通过 evaluateJavascript 单向注入。
+  // 真机所有业务文案来自 R.string；本页 DOM 只保留装饰性英文，无待翻译硬编码。
+  // 浏览器直接打开时用自包含的 DEMO（模拟注入数据）预览全部状态。
+  var ICON={
+    done:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="var(--success)"/><path d="M7 12.5l3 3 7-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    active:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="var(--accent)" stroke-width="2.4"><animate attributeName="opacity" values="1;.35;1" dur="1.4s" repeatCount="indefinite"/></circle></svg>',
+    failed:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="var(--danger)"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    pending:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="var(--dim)" stroke-width="2.4" opacity=".55"/></svg>'
+  };
+  // 通道连接方式的装饰性英文短标；业务语义由 steps[].title（R.string）承载。
+  var CHANNEL_LABEL={
+    WIRELESS:'Wireless', PIONEER_WIRELESS:'Vehicle Wireless', FRAMEWORK:'Wired',
+    LWIP:'Wired · LWIP', VPN:'Wired · VPN'
+  };
+
+  function escapeHtml(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+  // DiPlayPalette.of(night) 六色 -> CSS 变量，昼夜整套切换
+  function applyPalette(p){
+    if(!p) return;
+    var r=document.documentElement.style;
+    if(p.text)     r.setProperty('--text',p.text);
+    if(p.dim)      r.setProperty('--dim',p.dim);
+    if(p.accent)   r.setProperty('--accent',p.accent);
+    if(p.success)  r.setProperty('--success',p.success);
+    if(p.danger)   r.setProperty('--danger',p.danger);
+    if(p.surface)  r.setProperty('--surface',p.surface);
+  }
+
+  // 自适应列数：镜像原面板 columns 逻辑（宽屏 6 / 窄屏 3；车机无线宽屏 5 / 窄屏 3）。
+  // 原生 onSizeChanged 会重新 render 注入，宽度变化即重算。
+  function columnCount(channel){
+    var wide = window.innerWidth >= 560; // 近似 dp(560)
+    if(channel==='PIONEER_WIRELESS') return wide ? 5 : 3;
+    return wide ? 6 : 3;
+  }
+
+  var lastChannel='WIRELESS';
+  function applyColumns(channel){
+    lastChannel=channel||lastChannel;
+    document.getElementById('track').style.gridTemplateColumns=
+      'repeat('+columnCount(lastChannel)+',1fr)';
+  }
+
+  function renderState(s){
+    if(!s) return;
+    // 真机隐藏演示按钮
+    document.getElementById('controls').style.display='none';
+
+    applyPalette(s.palette);
+    // night -> 明暗主题；running -> 风火轮 / 脉冲是否转动
+    document.body.className=(s.night===false?'light':'dark')+' '+(s.running?'running':'idle');
+
+    var labels=s.labels||{};
+    var outcome=s.outcome||'CONNECTING';
+    var complete=(outcome==='COMPLETE');
+    var failed=(outcome==='FAILED'||outcome==='CANCELLED');
+
+    // 字标 / 通道
+    document.getElementById('markTitle').textContent=labels.title||'CarPlay';
+    document.getElementById('channelLabel').textContent=CHANNEL_LABEL[s.channel]||s.channel||'';
+
+    // 百分比 + 风火轮终态
+    document.getElementById('pct').textContent=(s.percent!=null?s.percent:0)+'%';
+    var wheel=document.getElementById('wheel');
+    wheel.className='wheel'+(complete?' is-complete':failed?' is-failed':'');
+
+    // 主标题随结果切换，全部来自注入的 R.string
+    var title=labels.waiting||'—';
+    if(complete) title=labels.complete||title;
+    else if(outcome==='CANCELLED') title=labels.cancelled||labels.failed||title;
+    else if(failed) title=labels.failed||title;
+    document.getElementById('title').textContent=title;
+    // summary 缺失时用原始数值兜底（纯数字，无需本地化）
+    var meta=s.summary;
+    if(!meta && s.attempt!=null){
+      meta=[s.attempt,s.elapsed,s.overall].filter(function(x){return x!=null&&x!=='';}).join(' · ');
+    }
+    document.getElementById('meta').textContent=meta||labels.waiting||'—';
+
+    // estimate() 行：文案 / 色调 / waitingForUser 强调
+    var est=document.getElementById('estimate');
+    est.className='estimate tone-'+(s.estimateTone||'normal')+(s.waitingForUser?' user-wait':'');
+    est.textContent=s.estimate||'';
+
+    // 分段轨道
+    var track=document.getElementById('track');
+    track.innerHTML='';
+    (s.steps||[]).forEach(function(st){
+      var state=st.state||'pending';
+      var d=document.createElement('div');
+      d.className='seg '+state;
+      var hint='';
+      if(st.hint){ hint='<div class="hint'+(st.hintDanger?' danger':'')+'">'+escapeHtml(st.hint)+'</div>'; }
+      d.innerHTML='<div class="bar"><i></i></div>'+
+        '<div class="segrow"><div class="sym">'+(ICON[state]||ICON.pending)+'</div>'+
+        '<div class="tx">'+escapeHtml(st.title)+'</div></div>'+
+        '<div class="tm">'+escapeHtml(st.time)+'</div>'+hint;
+      track.appendChild(d);
+    });
+    applyColumns(s.channel);
+
+    // 当前步状态条
+    var now=document.getElementById('now');
+    now.className='now '+(complete?'is-complete':failed?'is-failed':outcome==='RETRYING'?'is-retry':'is-active');
+    document.getElementById('nowName').textContent=s.currentTitle||
+      (complete?(labels.complete||''):failed?(labels.failed||''):(labels.waiting||''));
+    document.getElementById('nowTime').textContent=s.currentTime||
+      (s.overall!=null?s.overall+'s':'—');
+  }
+
+  // ---------------- 演示回退（无原生注入时） ----------------
+  // 结构与真机注入 JSON 完全一致；其中文仅用于浏览器预览，真机被 R.string 覆盖。
+  var DEMO={
+    night:true,
+    palette:{text:'#FFFFFF',dim:'#98989F',accent:'#0A84FF',success:'#30D158',danger:'#FF453A',surface:'#1C1C1E'},
+    labels:{title:'CarPlay',waiting:'正在连接 CarPlay',complete:'CarPlay 已连接',failed:'连接失败',cancelled:'连接已取消'},
+    outcome:'CONNECTING',running:true,channel:'PIONEER_WIRELESS',
+    attempt:1,elapsed:'44.0',overall:'44.0',
+    summary:'第 1 次尝试 · 本次 44.0 秒 · 总 44.0 秒',
+    estimate:'预计还需 8.0 秒（基于 12 次历史样本，预计总耗时 52.0 秒）',
+    estimateTone:'normal',waitingForUser:false,
+    percent:70,currentTitle:'等待 iPhone 入网',currentTime:'1.1s',
+    steps:[
+      {title:'准备连接',state:'done',time:'2.8s',hint:'',hintDanger:false},
+      {title:'连接车机蓝牙',state:'done',time:'0.0s',hint:'',hintDanger:false},
+      {title:'准备车机热点',state:'done',time:'2.6s',hint:'',hintDanger:false},
+      {title:'等待车机 Wi-Fi',state:'active',time:'1.1s',hint:'正在开启车机 Wi-Fi…',hintDanger:false},
+      {title:'蓝牙配对',state:'pending',time:'待执行',hint:'',hintDanger:false},
+      {title:'建立 CarPlay 会话',state:'pending',time:'待执行',hint:'',hintDanger:false},
+      {title:'会话认证',state:'pending',time:'待执行',hint:'',hintDanger:false},
+      {title:'视频通道',state:'pending',time:'待执行',hint:'',hintDanger:false}
+    ]
+  };
+  var demoTimer=null, demoElapsed=44.0, demoNight=true, demoHints=false;
+
+  function clone(o){return JSON.parse(JSON.stringify(o));}
+  function demoState(){
+    var s=clone(DEMO);
+    s.night=demoNight;
+    if(!demoNight){ s.palette={text:'#1C1C1E',dim:'#6E6E73',accent:'#007AFF',success:'#34C759',danger:'#FF3B30',surface:'#F2F2F7'}; }
+    if(demoHints){
+      s.steps[1].hint='未检测到车机蓝牙连接'; s.steps[1].hintDanger=true;
+      s.steps[3].hint='正在开启车机 Wi-Fi…'; s.steps[3].hintDanger=false;
+    }
+    return s;
+  }
+  function paint(o){
+    var s=demoState();
+    for(var k in o){ if(Object.prototype.hasOwnProperty.call(o,k)) s[k]=o[k]; }
+    renderState(s);
+    document.getElementById('controls').style.display='flex';
+  }
+  function startDemo(){
+    paint({});
+    if(demoTimer) clearInterval(demoTimer);
+    demoTimer=setInterval(function(){
+      demoElapsed+=0.1;
+      var t=demoElapsed.toFixed(1);
+      DEMO.elapsed=DEMO.overall=t;
+      DEMO.summary='第 1 次尝试 · 本次 '+t+' 秒 · 总 '+t+' 秒';
+      document.getElementById('meta').textContent=DEMO.summary;
+    },100);
+  }
+
+  // 原生注入覆盖演示计时；与内部 renderState 不同名，避免递归覆盖
+  window.applyConnectionState=function(s){
+    if(demoTimer){clearInterval(demoTimer);demoTimer=null;}
+    renderState(s);
+  };
+
+  // 演示控件
+  var wall=document.getElementById('wall'),wv=0;
+  document.getElementById('wallBtn').onclick=function(){wv=(wv+1)%3;wall.className='wall'+(wv?(' v'+wv):'');};
+  document.getElementById('nightBtn').onclick=function(){demoNight=!demoNight;paint({});};
+  document.getElementById('connectBtn').onclick=startDemo;
+  document.getElementById('retryBtn').onclick=function(){
+    if(demoTimer){clearInterval(demoTimer);demoTimer=null;}
+    paint({outcome:'RETRYING',running:true,estimateTone:'dim',estimate:'连接中断，正在重试…',percent:35,currentTitle:'重新建立通道'});
+  };
+  document.getElementById('doneBtn').onclick=function(){
+    if(demoTimer){clearInterval(demoTimer);demoTimer=null;}
+    paint({outcome:'COMPLETE',running:false,estimateTone:'success',estimate:'连接完成，用时 52.0 秒',percent:100,currentTitle:'',currentTime:'52.0s',
+      steps:DEMO.steps.map(function(x){return {title:x.title,state:'done',time:x.time,hint:'',hintDanger:false};})});
+  };
+  document.getElementById('failBtn').onclick=function(){
+    if(demoTimer){clearInterval(demoTimer);demoTimer=null;}
+    paint({outcome:'FAILED',running:false,estimateTone:'danger',estimate:'连接失败',percent:55,currentTitle:'等待车机 Wi-Fi',currentTime:'3.2s'});
+  };
+  document.getElementById('cancelBtn').onclick=function(){
+    if(demoTimer){clearInterval(demoTimer);demoTimer=null;}
+    paint({outcome:'CANCELLED',running:false,estimateTone:'danger',estimate:'连接已取消',percent:40,currentTitle:'',currentTime:'—'});
+  };
+  document.getElementById('hintBtn').onclick=function(){demoHints=!demoHints;paint({});};
+  window.addEventListener('resize',function(){applyColumns(lastChannel);});
+  startDemo();
+</script>
+</body>
+</html>
