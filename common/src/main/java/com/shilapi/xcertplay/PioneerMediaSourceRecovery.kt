@@ -119,7 +119,7 @@ internal class PioneerMediaSourceRecovery private constructor(
         }
     }
 
-    private fun log(line: String) = PioneerDebugRuntime.log(app, "Audio source recovery: $line")
+    private fun log(line: String) = PioneerDebugRuntime.log(app, "Audio source recovery: elapsedMs=${SystemClock.elapsedRealtime()} wallMs=${System.currentTimeMillis()} $line")
 
     override fun close() {
         closed = true

@@ -1828,7 +1828,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 !WheelZoomSettings.isMediaPlayPauseKey(this, WheelKey.of(event))) {
                 WheelZoomKeys.Action.PASS
             } else {
-                val sent = controller?.sendMediaButton(CarPlayMediaButton.PLAY_PAUSE) == true
+                val sent = controller?.sendMediaButton(CarPlayMediaButton.PLAY_PAUSE, "host_play_pause") == true
                 appendLog("Media: assigned wheel key ${event.keyCode} -> CarPlay play/pause sent=$sent")
                 WheelZoomKeys.Action.CONSUME
             }
@@ -1942,7 +1942,7 @@ class CarPlayHostActivity : ComponentActivity() {
             // on the press. The release is swallowed rather than passed on, or BYD's own player would
             // receive an unpaired key.
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                val sent = controller?.sendMediaButton(mediaPress) == true
+                val sent = controller?.sendMediaButton(mediaPress, "host_key") == true
                 appendLog("Media: wheel key ${event.keyCode} -> CarPlay $mediaPress sent=$sent")
             }
             return true
@@ -6975,7 +6975,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     }.show()
                 true
             }
-            "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE) == true
+            "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE, "host_media_pause") == true
             "AUDIO_TAKE", "AUDIO_RELEASE" -> {
                 check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice())
                 val session = checkNotNull(activeAirPlaySession) { "No active CarPlay session" }
