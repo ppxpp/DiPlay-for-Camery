@@ -1050,6 +1050,7 @@
     <string name="feedback_title">Send feedback</string>
     <string name="feedback_send">Send feedback</string>
     <string name="feedback_send_action">Send feedback</string>
+    <string name="feedback_send_short">Send</string>
     <string name="feedback_save_offline">Save, send when online</string>
     <string name="feedback_close">Close</string>
     <string name="feedback_cancel">Cancel</string>

@@ -1038,6 +1038,7 @@
     <string name="feedback_title">发送反馈</string>
     <string name="feedback_send">一键反馈</string>
     <string name="feedback_send_action">发送反馈</string>
+    <string name="feedback_send_short">发送</string>
     <string name="feedback_save_offline">保存，联网后发送</string>
     <string name="feedback_close">关闭</string>
     <string name="feedback_cancel">取消</string>

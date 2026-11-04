@@ -68,21 +68,11 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
             setPadding(baseLeft, baseTop, baseRight, baseBottom)
         }
         val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        topBar.addView(TextView(this).apply {
-            text = getString(R.string.feedback_records_title)
-            textSize = 24f
-            setTextColor(palette.primaryText)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            gravity = Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(0, dp(52), 1f))
-        topBar.addView(DiPlayButton(this).apply {
-            text = getString(R.string.feedback_close)
-            textSize = 16f
-            minWidth = dp(76)
-            minHeight = dp(52)
-            style(DiPlayButtonKind.SECONDARY, palette, overlay = false)
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)))
+        topBar.addView(FeedbackChrome.backButton(this, palette) { finish() }, FeedbackChrome.headerParams(this))
+        topBar.addView(
+            FeedbackChrome.title(this, palette, getString(R.string.feedback_records_title)),
+            FeedbackChrome.headerParams(this, weight = 1f, marginStart = 12),
+        )
         root.addView(topBar)
 
         val tabs = LinearLayout(this).apply {

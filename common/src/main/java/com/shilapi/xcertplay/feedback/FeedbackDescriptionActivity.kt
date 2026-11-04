@@ -2,7 +2,6 @@ package com.shilapi.xcertplay.feedback
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.InputFilter
@@ -22,7 +21,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.shilapi.xcertplay.AppAppearanceOwner
-import com.shilapi.xcertplay.DiPlayButton
 import com.shilapi.xcertplay.DiPlayButtonKind
 import com.shilapi.xcertplay.DiPlayPalette
 import com.shilapi.xcertplay.host.R
@@ -69,29 +67,17 @@ class FeedbackDescriptionActivity : ComponentActivity(), AppAppearanceOwner {
         }
 
         val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        topBar.addView(TextView(this).apply {
-            text = getString(R.string.feedback_description_title)
-            textSize = 20f
-            setTextColor(palette.primaryText)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            gravity = Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        topBar.addView(DiPlayButton(this).apply {
-            text = getString(R.string.feedback_done)
-            textSize = 14f
-            minWidth = dp(88)
-            minHeight = dp(40)
-            style(DiPlayButtonKind.PRIMARY, palette, overlay = false)
-            setOnClickListener { finishWithText() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(8) })
-        topBar.addView(DiPlayButton(this).apply {
-            text = getString(R.string.feedback_cancel)
-            textSize = 14f
-            minWidth = dp(88)
-            minHeight = dp(40)
-            style(DiPlayButtonKind.SECONDARY, palette, overlay = false)
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(8) })
+        topBar.addView(FeedbackChrome.backButton(this, palette) { finish() }, FeedbackChrome.headerParams(this))
+        topBar.addView(
+            FeedbackChrome.title(this, palette, getString(R.string.feedback_description_title)),
+            FeedbackChrome.headerParams(this, weight = 1f, marginStart = 12),
+        )
+        topBar.addView(
+            FeedbackChrome.action(this, palette, getString(R.string.feedback_done), DiPlayButtonKind.PRIMARY) {
+                finishWithText()
+            },
+            FeedbackChrome.headerParams(this, marginStart = 8),
+        )
         root.addView(topBar)
 
         val initial = intent.getStringExtra(EXTRA_TEXT).orEmpty().take(MAX_DESCRIPTION_CHARS)
