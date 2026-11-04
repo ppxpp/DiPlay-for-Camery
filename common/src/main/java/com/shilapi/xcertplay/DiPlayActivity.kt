@@ -964,12 +964,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         gravity = Gravity.CENTER_VERTICAL
         addView(headerButton(getString(R.string.back), R.drawable.ic_dp_back, compact, ::navigateBack),
             LinearLayout.LayoutParams(-2, if (compact) dp(44) else dp(52)))
-        val settingsTitle = label(getString(R.string.settings), if (compact) 20 else 26, TEXT, true,
-            centreGlyphs = true).apply {
-            setPadding(dp(12), 0, dp(12), 0)
-            setSingleLine(true)
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
+        val settingsTitle = DiPlayHeaderChrome.title(this@DiPlayActivity, palette, compact, getString(R.string.settings))
         // Reserve the action buttons first; only the title may shrink in a narrow header.
         addView(settingsTitle, LinearLayout.LayoutParams(
             if (settingsSearchExpanded) -2 else 0, controlHeight,
@@ -6917,23 +6912,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private class HeaderTitleView(context: android.content.Context) : TextView(context) {
-        private val glyphBounds = android.graphics.Rect()
-
-        override fun onDraw(canvas: android.graphics.Canvas) {
-            val value = text.toString()
-            paint.getTextBounds(value, 0, value.length, glyphBounds)
-            val checkpoint = canvas.save()
-            if (layout?.lineCount == 1 && !glyphBounds.isEmpty && baseline >= 0) {
-                val textCentre = alignedTextCentreY(this, value, glyphBounds)
-                val contentCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                canvas.translate(0f, contentCentre - textCentre)
-            }
-            super.onDraw(canvas)
-            canvas.restoreToCount(checkpoint)
-        }
-    }
-
     private fun label(value: String, size: Int, color: Int, bold: Boolean = false, centreGlyphs: Boolean = false) =
         (if (centreGlyphs) HeaderTitleView(this) else TextView(this)).apply {
         text = value; textSize = size.toFloat(); setTextColor(color); gravity = Gravity.CENTER_VERTICAL
@@ -6942,33 +6920,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
     private fun headerIconSize(compact: Boolean) = dp(if (compact) 20 else 24)
 
-    private fun headerButton(title: String, icon: Int, compact: Boolean, click: () -> Unit) = button(title, false, click).apply {
-        alignVisibleGlyphs = false
-        if (compact) textSize = 16f
-        includeFontPadding = false
-        setTextColor(TEXT)
-        setSingleLine(true)
-        gravity = Gravity.CENTER
-        val iconSize = headerIconSize(compact)
-        val drawable = getDrawable(icon)?.mutate()?.apply {
-            setTint(TEXT)
-            setBounds(0, 0, iconSize, iconSize)
+    private fun headerButton(title: String, icon: Int, compact: Boolean, click: () -> Unit) =
+        DiPlayHeaderChrome.headerButton(this, palette, compact, title, icon, click) {
+            searchIndexSink?.add(title.substringBefore(VALUE_SEPARATOR))
         }
-        setCompoundDrawablesRelative(drawable, null, null, null)
-        compoundDrawablePadding = dp(8)
-        doOnLayout {
-            // Use the same text alignment reference as other buttons in this locale.
-            if (baseline >= 0 && text.isNotEmpty()) {
-                val glyphCentre = textAlignmentCentreY()
-                val drawableCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                val offset = (glyphCentre - drawableCentre).roundToInt()
-                drawable?.setBounds(0, offset, iconSize, iconSize + offset)
-                // Move the aligned icon/text group to the button's visual centre.
-                contentOffsetY = drawableCentre - glyphCentre
-                invalidate()
-            }
-        }
-    }
 
     private fun layoutCornerRadius(): Float {
         val compact = isCompactLayout && (page != "settings" || !SettingsLayoutPreferences.isActive(this))
@@ -7030,62 +6985,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
      * start-aligned, muted value, chevron. Any other text stays a centred action button.
      * The plain text is unchanged, so callers and tests keep matching "Title · Value".
      */
-    private class SettingButton(
-        context: android.content.Context,
-        private val muted: Int,
-        private val accent: Int,
-    ) : Button(context) {
-        var action = false
-        var contentOffsetY = 0f
-        var alignVisibleGlyphs = true
-        private val glyphBounds = android.graphics.Rect()
-
-        fun textAlignmentCentreY(): Float {
-            return alignedTextCentreY(this, text, glyphBounds)
-        }
-
-        override fun onDraw(canvas: android.graphics.Canvas) {
-            var offset = contentOffsetY
-            if (alignVisibleGlyphs) {
-                offset = 0f
-                // Wrapped labels keep Android's multiline layout. Measure single-line labels
-                // on every draw so changing a setting value also updates its visual centre.
-                if (layout?.lineCount == 1 && baseline >= 0) {
-                    val textCentre = textAlignmentCentreY()
-                    val contentCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                    offset = contentCentre - textCentre
-                }
-                // The chevron is already centred by TextView; compensate for the text shift.
-                compoundDrawablesRelative.filterNotNull().forEach { drawable ->
-                    val bounds = drawable.bounds
-                    val top = -offset.roundToInt()
-                    drawable.setBounds(bounds.left, top, bounds.right, top + bounds.height())
-                }
-            }
-            val checkpoint = canvas.save()
-            canvas.translate(0f, offset)
-            super.onDraw(canvas)
-            canvas.restoreToCount(checkpoint)
-        }
-
-        override fun setText(text: CharSequence?, type: BufferType?) {
-            val split = if (action) -1 else text?.indexOf(VALUE_SEPARATOR) ?: -1
-            if (text == null || split <= 0) {
-                super.setText(text, type)
-                gravity = Gravity.CENTER
-                setCompoundDrawablesRelative(null, null, null, null)
-                return
-            }
-            val styled = android.text.SpannableString(text).apply {
-                setSpan(android.text.style.ForegroundColorSpan(muted), split, text.length,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            super.setText(styled, BufferType.SPANNABLE)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            setCompoundDrawablesRelativeWithIntrinsicBounds(null, null,
-                context.getDrawable(R.drawable.ic_dp_chevron)?.mutate()?.apply { setTint(accent) }, null)
-        }
-    }
     // Remote and D-pad users need to see where they are; touch mode never shows it.
     private fun focusRing(radiusDp: Int = 20) = android.graphics.drawable.StateListDrawable().apply {
         addState(intArrayOf(android.R.attr.state_focused), GradientDrawable().apply {
@@ -7255,27 +7154,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val FOCUS_RING get() = palette.focusRing
 
     companion object {
-        private fun alignedTextCentreY(
-            view: TextView,
-            text: CharSequence,
-            bounds: android.graphics.Rect,
-            drawingBaseline: Int = view.baseline,
-        ): Float {
-            if (usesChineseGlyphAlignment(androidx.core.os.ConfigurationCompat.getLocales(view.resources.configuration)[0]!!.language, text)) {
-                val value = text.toString()
-                view.paint.getTextBounds(value, 0, value.length, bounds)
-                return drawingBaseline + (bounds.top + bounds.bottom) / 2f
-            }
-            // Keep the baseline stable when labels contain descenders or accents.
-            val metrics = view.paint.fontMetrics
-            return drawingBaseline + (metrics.ascent + metrics.descent) / 2f
-        }
-
-        private fun usesChineseGlyphAlignment(language: String, text: CharSequence): Boolean {
-            return language == "zh" && text.isNotBlank() &&
-                text.none { it in 'A'..'Z' || it in 'a'..'z' }
-        }
-
         internal fun isLauncherIntent(intent: Intent): Boolean =
             intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) &&
                 !intent.hasExtra("page")
@@ -7306,7 +7184,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val SETTINGS_SEARCH_RESULTS_GAP_DP = 6
         private const val SETTINGS_SEARCH_RESULTS_SHORT_HEIGHT_DP = 200
         private const val SETTINGS_SEARCH_RESULTS_HEIGHT_DP = 380
-        private const val VALUE_SEPARATOR = " · "
         private const val SEARCH_HIGHLIGHT_MILLIS = 900L
         private const val SPACER = "spacer"
         private const val CONTROL_HEIGHT_DP = 60

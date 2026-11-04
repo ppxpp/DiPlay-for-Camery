@@ -26,7 +26,9 @@ import com.shilapi.xcertplay.AppAppearanceOwner
 import com.shilapi.xcertplay.CarPlayBackgroundSession
 import com.shilapi.xcertplay.DiPlayButton
 import com.shilapi.xcertplay.DiPlayButtonKind
+import com.shilapi.xcertplay.DiPlayHeaderChrome
 import com.shilapi.xcertplay.DiPlayPalette
+import com.shilapi.xcertplay.SettingButton
 import com.shilapi.xcertplay.appDialogBuilder
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.resolveAppNightNow
@@ -44,8 +46,8 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
     private var failureStageView: TextView? = null
     private var descriptionButton: DiPlayButton? = null
     private var descriptionText = ""
-    private var sendButton: DiPlayButton? = null
-    private var backButton: DiPlayButton? = null
+    private var sendButton: SettingButton? = null
+    private var backButton: SettingButton? = null
     private var networkView: TextView? = null
     private var networkButton: DiPlayButton? = null
     private var formContainer: LinearLayout? = null
@@ -156,19 +158,30 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        backButton = FeedbackChrome.backButton(this, palette) { finish() }
-        topBar.addView(backButton!!, FeedbackChrome.headerParams(this))
-        topBar.addView(
-            FeedbackChrome.title(this, palette, getString(R.string.feedback_title)),
-            FeedbackChrome.headerParams(this, weight = 1f, marginStart = 12),
-        )
-        sendButton = FeedbackChrome.action(
+        val compact = DiPlayHeaderChrome.isCompact(this)
+        val headerHeight = DiPlayHeaderChrome.headerHeight(this, compact)
+        backButton = DiPlayHeaderChrome.headerButton(
             this,
             palette,
+            compact,
+            getString(R.string.back),
+            R.drawable.ic_dp_back,
+            onClick = { finish() },
+        )
+        topBar.addView(backButton!!, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, headerHeight))
+        topBar.addView(
+            DiPlayHeaderChrome.title(this, palette, compact, getString(R.string.feedback_title)),
+            LinearLayout.LayoutParams(0, headerHeight, 1f),
+        )
+        sendButton = DiPlayHeaderChrome.actionButton(
+            this,
+            palette,
+            compact,
             getString(R.string.feedback_send_short),
-            DiPlayButtonKind.PRIMARY,
-        ) { submit() }
-        topBar.addView(sendButton!!, FeedbackChrome.headerParams(this, marginStart = 8))
+            primary = true,
+            onClick = { submit() },
+        )
+        topBar.addView(sendButton!!, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, headerHeight))
         top.addView(topBar)
 
         val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
