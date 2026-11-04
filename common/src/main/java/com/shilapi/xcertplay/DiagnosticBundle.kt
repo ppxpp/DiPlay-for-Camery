@@ -100,7 +100,12 @@ internal object DiagnosticBundle {
 }
 
 /** Bounded, streaming archive writer with a truthful per-item manifest. */
-internal class DiagnosticArchive(file: File) : java.io.Closeable {
+internal class DiagnosticArchive(
+    file: File,
+    private val textLimit: Int = TEXT_LIMIT,
+    private val componentLimit: Long = COMPONENT_LIMIT,
+    private val totalLimit: Long = TOTAL_LIMIT,
+) : java.io.Closeable {
     private val zip = ZipOutputStream(file.outputStream().buffered())
     private val manifest = JSONArray()
     private var written = 0L
@@ -111,11 +116,20 @@ internal class DiagnosticArchive(file: File) : java.io.Closeable {
         val value = runCatching(content).getOrElse { unavailable(path, "unavailable", it.javaClass.simpleName); return }
         val safe = value.lineSequence().mapNotNull(DiagnosticRedactor::redact).joinToString("\n")
         val bytes = safe.toByteArray(Charsets.UTF_8)
-        val bounded = bytes.copyOf(minOf(bytes.size, TEXT_LIMIT))
-        if (written + bounded.size > TOTAL_LIMIT) { unavailable(path, "skipped", "archive_size_limit"); return }
+        val bounded = bytes.copyOf(minOf(bytes.size, textLimit))
+        if (written + bounded.size > totalLimit) { unavailable(path, "skipped", "archive_size_limit"); return }
         zip.putNextEntry(ZipEntry(path)); zip.write(bounded); zip.closeEntry()
         written += bounded.size
-        manifest.put(JSONObject().put("path", path).put("status", if (bytes.size > TEXT_LIMIT) "truncated" else status)
+        manifest.put(JSONObject().put("path", path).put("status", if (bytes.size > textLimit) "truncated" else status)
+            .put("bytes", bounded.size).put("sha256", digest(bounded)))
+    }
+    /** Writes content without line redaction; used for machine-readable metadata and the README. */
+    fun raw(path: String, content: ByteArray, status: String = "success") {
+        val bounded = content.copyOf(minOf(content.size, textLimit))
+        if (written + bounded.size > totalLimit) { unavailable(path, "skipped", "archive_size_limit"); return }
+        zip.putNextEntry(ZipEntry(path)); zip.write(bounded); zip.closeEntry()
+        written += bounded.size
+        manifest.put(JSONObject().put("path", path).put("status", if (content.size > textLimit) "truncated" else status)
             .put("bytes", bounded.size).put("sha256", digest(bounded)))
     }
     fun component(file: File) {
@@ -126,7 +140,7 @@ internal class DiagnosticArchive(file: File) : java.io.Closeable {
             unavailable(path, "skipped", "outside_system_partition"); return
         }
         val length = file.length()
-        if (length > COMPONENT_LIMIT || written + length > TOTAL_LIMIT) { unavailable(path, "skipped", "size_limit"); return }
+        if (length > componentLimit || written + length > totalLimit) { unavailable(path, "skipped", "size_limit"); return }
         val input = runCatching { file.inputStream() }.getOrElse { unavailable(path, "permission_denied", it.javaClass.simpleName); return }
         input.use {
             val hash = MessageDigest.getInstance("SHA-256")

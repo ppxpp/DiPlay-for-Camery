@@ -85,6 +85,23 @@
             android:theme="@style/Theme.Xcertplay">
 
         </activity>
+        <activity
+            android:name="com.shilapi.xcertplay.feedback.FeedbackActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustPan|stateAlwaysHidden"
+            android:theme="@style/Theme.Xcertplay" />
+        <activity
+            android:name="com.shilapi.xcertplay.feedback.FeedbackDescriptionActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize|stateVisible"
+            android:theme="@style/Theme.Xcertplay" />
+        <activity
+            android:name="com.shilapi.xcertplay.feedback.FeedbackRecordsActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Xcertplay" />
         <service android:name="com.shilapi.xcertplay.DiPlaySessionService"
             android:exported="false" android:foregroundServiceType="connectedDevice|microphone|location" />
 
