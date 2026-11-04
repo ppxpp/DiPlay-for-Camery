@@ -104,6 +104,10 @@ import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import com.shilapi.xcertplay.update.StableClientId
+import com.shilapi.xcertplay.feedback.FeedbackActivity
+import com.shilapi.xcertplay.feedback.FeedbackOutbox
+import com.shilapi.xcertplay.feedback.FeedbackRecordsActivity
+import com.shilapi.xcertplay.feedback.FeedbackScheduler
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -227,6 +231,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var testToneTrack: AudioTrack? = null
     private var toneStop: Runnable? = null
     private var exportButton: Button? = null
+    private val feedbackBadges = mutableListOf<TextView>()
+    private var feedbackSummary: TextView? = null
     private var rootScroll: ScrollView? = null
     private var settingsRailScroll: ScrollView? = null
     private var reconnectBar: View? = null
@@ -635,6 +641,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     if (intent.getStringExtra(com.shilapi.xcertplay.analytics.ConnectionAnalytics.SOURCE_EXTRA) == "boot_auto") "boot_auto" else "app_auto") }
             }
         }
+        FeedbackScheduler.schedule(this)
+        refreshFeedbackBadges()
     }
     override fun onPause() {
         appearanceUpdatesResumed = false
@@ -778,6 +786,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         reconnectBar = null
         readinessCard = null
         exportButton = null
+        feedbackBadges.clear()
+        feedbackSummary = null
         bydAdbControls = null
         adbSwitches.clear()
         adbStatus = null
@@ -835,6 +845,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         renderedPage = page
         renderedSettingsCategory = settingsCategory.takeIf { page == "settings" }
         refreshStatus()
+        refreshFeedbackBadges()
         focusSnapshot?.let { snapshot ->
             root.doOnLayout {
                 descendants(root).firstOrNull { candidate ->
@@ -1235,6 +1246,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             addView(label(title, 16, if (selected) ACCENT else TEXT, true,
                 centreGlyphs = usesChineseGlyphAlignment(androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]!!.language, title)),
                 LinearLayout.LayoutParams(0, -1, 1f))
+            if (category == SettingsCategory.DIAGNOSTICS) {
+                addView(feedbackBadge(), LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(8) })
+            }
             setOnClickListener {
                 openSettingsCategory(category)
             }
@@ -1443,8 +1457,46 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 addView(label(settingsCategoryTitle(category), 17, if (warning) WARNING else TEXT, true))
                 addView(label(summary, 13, MUTED).apply { setPadding(0, dp(3), 0, 0) })
             }, LinearLayout.LayoutParams(0, -2, 1f))
+            if (category == SettingsCategory.DIAGNOSTICS) {
+                addView(feedbackBadge(), LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(8) })
+            }
         })
         setOnClickListener { openSettingsCategory(category) }
+    }
+
+    private fun feedbackBadge() = TextView(this).apply {
+        gravity = Gravity.CENTER
+        textSize = 11f
+        setTextColor(ON_ACCENT)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(ACCENT)
+            cornerRadius = dp(11).toFloat()
+        }
+        visibility = View.GONE
+        feedbackBadges += this
+    }
+
+    private fun refreshFeedbackBadges() {
+        val count = runCatching { FeedbackOutbox.pendingCount(this) }.getOrDefault(0)
+        val text = if (count > 99) "99+" else count.toString()
+        feedbackBadges.forEach { badge ->
+            badge.text = text
+            badge.contentDescription = getString(R.string.feedback_pending_count, count)
+            badge.visibility = if (count > 0) View.VISIBLE else View.GONE
+        }
+        feedbackSummary?.apply {
+            this.text = if (count > 0) getString(R.string.feedback_pending_count, count) else ""
+            visibility = if (count > 0) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun openFeedback() {
+        startActivity(FeedbackActivity.intent(this))
+    }
+
+    private fun openFeedbackRecords() {
+        startActivity(FeedbackRecordsActivity.intent(this))
     }
 
     private fun settingsPageTitle(content: LinearLayout, title: String, subtitle: String) {
@@ -1939,6 +1991,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(button(getString(R.string.feedback_send), true) { openFeedback() }, matchButton(0, 60))
+            card.addView(label(getString(R.string.feedback_network_requirement), 14, MUTED).apply {
+                setPadding(0, dp(6), 0, dp(10))
+            })
+            val summary = label("", 14, ACCENT).apply {
+                isClickable = true
+                setOnClickListener { openFeedbackRecords() }
+                setPadding(0, 0, 0, dp(8))
+            }
+            feedbackSummary = summary
+            card.addView(summary)
+            card.addView(button(getString(R.string.feedback_records_title), false) { openFeedbackRecords() }, matchButton(6, 56))
             if (com.shilapi.xcertplay.pioneer.PioneerAdbDebug.supported()) {
                 card.addView(label(getString(R.string.settings_camry_usb_adb_description), 14, MUTED))
                 lateinit var adbButton: SettingButton

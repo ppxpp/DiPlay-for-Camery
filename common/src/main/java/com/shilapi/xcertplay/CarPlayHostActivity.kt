@@ -1,6 +1,8 @@
 package com.shilapi.xcertplay
 
 import com.shilapi.xcertplay.analytics.ConnectionAnalytics
+import com.shilapi.xcertplay.feedback.FeedbackActivity
+import com.shilapi.xcertplay.feedback.FeedbackCategory
 
 import android.app.AlertDialog
 import android.Manifest
@@ -228,6 +230,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private val connectionProgressPanel by lazy { com.shilapi.xcertplay.connection.ConnectionProgressPanel(this) }
     private var connectionInstructionsView: TextView? = null
     private var connectionHelpView: TextView? = null
+    private var feedbackButton: DiPlayButton? = null
     private var wifiRecoveryButton: View? = null
     private var reconnectAttempts = 0
     private val siriKey = WheelSiriKey()
@@ -2255,6 +2258,19 @@ class CarPlayHostActivity : ComponentActivity() {
             visibility = View.GONE
         }
         panel.addView(help)
+        val feedback = DiPlayButton(this).apply {
+            text = getString(R.string.feedback_send_this_issue)
+            visibility = View.GONE
+            setOnClickListener {
+                startActivity(FeedbackActivity.intent(
+                    this@CarPlayHostActivity,
+                    FeedbackCategory.CONNECTION,
+                    connectionHelpView?.text?.toString(),
+                ))
+            }
+            feedbackButton = this
+        }
+        panel.addView(feedback, LinearLayout.LayoutParams(dp(300), dp(64)).apply { bottomMargin = dp(12) })
         val recovery = DiPlayButton(this).apply {
             text = getString(R.string.reset_carplay_wi_fi)
             visibility = View.GONE
@@ -2308,6 +2324,7 @@ class CarPlayHostActivity : ComponentActivity() {
             back.style(DiPlayButtonKind.PRIMARY, buttonPalette, overlay = false)
             retry.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
+            feedback.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
         val preparationScroll = ScrollView(this).apply {
@@ -2338,7 +2355,7 @@ class CarPlayHostActivity : ComponentActivity() {
             fun spacing(short: Float, regular: Float) = dp(size(short, regular).toInt())
             val availableWidth = viewport.width - viewport.paddingLeft - viewport.paddingRight - dp(48)
             val buttonWidth = minOf(dp(300), availableWidth.coerceAtLeast(dp(48)))
-            for (button in listOf(back, recovery, retry)) {
+            for (button in listOf(back, feedback, recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
                     button.layoutParams = button.layoutParams.apply { width = buttonWidth }
                 }
@@ -7275,6 +7292,7 @@ class CarPlayHostActivity : ComponentActivity() {
             visibility = if (failure == null) View.GONE else View.VISIBLE
             if (failure != null) text = getString(ConnectionFailureGuidance.message(failure, wirelessEnabled, wirelessHotspotMode))
         }
+        feedbackButton?.visibility = if (failure == null) View.GONE else View.VISIBLE
     }
 
     /** [englishMessage] is [message] in English, which [friendlyStage] reads for its keywords. */

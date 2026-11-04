@@ -1157,7 +1157,9 @@ class AdaptiveSettingsUiTest {
             candidate.contentDescription == screen.getString(
                 R.string.settings_open_category,
                 screen.getString(category),
-            ) && descendants(candidate).filterIsInstance<TextView>().count() == 2
+            ) && descendants(candidate).filterIsInstance<TextView>().count {
+                (it.parent as? LinearLayout)?.orientation == LinearLayout.VERTICAL
+            } == 2
         }
         val about = categoryCard(R.string.about)
         val diagnostics = categoryCard(R.string.diagnostics)
