@@ -21,6 +21,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.shilapi.xcertplay.AppAppearanceOwner
 import com.shilapi.xcertplay.DiPlayButton
 import com.shilapi.xcertplay.DiPlayButtonKind
+import com.shilapi.xcertplay.DiPlayHeaderChrome
 import com.shilapi.xcertplay.DiPlayPalette
 import com.shilapi.xcertplay.appDialogBuilder
 import com.shilapi.xcertplay.host.R
@@ -68,10 +69,22 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
             setPadding(baseLeft, baseTop, baseRight, baseBottom)
         }
         val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        topBar.addView(FeedbackChrome.backButton(this, palette) { finish() }, FeedbackChrome.headerParams(this))
+        val compact = DiPlayHeaderChrome.isCompact(this)
+        val headerHeight = DiPlayHeaderChrome.headerHeight(this, compact)
         topBar.addView(
-            FeedbackChrome.title(this, palette, getString(R.string.feedback_records_title)),
-            FeedbackChrome.headerParams(this, weight = 1f, marginStart = 12),
+            DiPlayHeaderChrome.headerButton(
+                this,
+                palette,
+                compact,
+                getString(R.string.back),
+                R.drawable.ic_dp_back,
+                onClick = { finish() },
+            ),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, headerHeight),
+        )
+        topBar.addView(
+            DiPlayHeaderChrome.title(this, palette, compact, getString(R.string.feedback_records_title)),
+            LinearLayout.LayoutParams(0, headerHeight, 1f),
         )
         root.addView(topBar)
 

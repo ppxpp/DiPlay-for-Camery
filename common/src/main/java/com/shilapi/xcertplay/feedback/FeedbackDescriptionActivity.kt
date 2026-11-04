@@ -17,11 +17,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.shilapi.xcertplay.AppAppearanceOwner
-import com.shilapi.xcertplay.DiPlayButtonKind
+import com.shilapi.xcertplay.DiPlayHeaderChrome
 import com.shilapi.xcertplay.DiPlayPalette
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.resolveAppNightNow
@@ -39,11 +37,6 @@ class FeedbackDescriptionActivity : ComponentActivity(), AppAppearanceOwner {
         palette = DiPlayPalette.of(currentAppNight)
         window.statusBarColor = palette.background
         window.navigationBarColor = palette.background
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.statusBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         setContentView(buildContent())
         window.decorView.postDelayed({
@@ -67,16 +60,33 @@ class FeedbackDescriptionActivity : ComponentActivity(), AppAppearanceOwner {
         }
 
         val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        topBar.addView(FeedbackChrome.backButton(this, palette) { finish() }, FeedbackChrome.headerParams(this))
+        val compact = DiPlayHeaderChrome.isCompact(this)
+        val headerHeight = DiPlayHeaderChrome.headerHeight(this, compact)
         topBar.addView(
-            FeedbackChrome.title(this, palette, getString(R.string.feedback_description_title)),
-            FeedbackChrome.headerParams(this, weight = 1f, marginStart = 12),
+            DiPlayHeaderChrome.headerButton(
+                this,
+                palette,
+                compact,
+                getString(R.string.back),
+                R.drawable.ic_dp_back,
+                onClick = { finish() },
+            ),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, headerHeight),
         )
         topBar.addView(
-            FeedbackChrome.action(this, palette, getString(R.string.feedback_done), DiPlayButtonKind.PRIMARY) {
-                finishWithText()
-            },
-            FeedbackChrome.headerParams(this, marginStart = 8),
+            DiPlayHeaderChrome.title(this, palette, compact, getString(R.string.feedback_description_title)),
+            LinearLayout.LayoutParams(0, headerHeight, 1f),
+        )
+        topBar.addView(
+            DiPlayHeaderChrome.actionButton(
+                this,
+                palette,
+                compact,
+                getString(R.string.feedback_done),
+                primary = true,
+                onClick = { finishWithText() },
+            ),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, headerHeight),
         )
         root.addView(topBar)
 
@@ -131,6 +141,9 @@ class FeedbackDescriptionActivity : ComponentActivity(), AppAppearanceOwner {
                 baseRight + safe.right,
                 baseBottom + safe.bottom,
             )
+            // Keep the system status bar visible like Diagnostics; reclaim the header row for
+            // the input while the keyboard is open on short head units.
+            topBar.visibility = if (insets.isVisible(WindowInsetsCompat.Type.ime())) View.GONE else View.VISIBLE
             insets
         }
         ViewCompat.requestApplyInsets(root)
