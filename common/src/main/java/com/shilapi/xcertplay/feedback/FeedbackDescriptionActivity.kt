@@ -39,6 +39,7 @@ class FeedbackDescriptionActivity : ComponentActivity(), AppAppearanceOwner {
         window.navigationBarColor = palette.background
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         setContentView(buildContent())
+        DiPlayHeaderChrome.applySystemBars(this, palette)
         window.decorView.postDelayed({
             input?.requestFocus()
             input?.let { editor ->
