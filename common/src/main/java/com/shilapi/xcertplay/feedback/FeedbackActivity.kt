@@ -3,7 +3,6 @@ package com.shilapi.xcertplay.feedback
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -46,7 +45,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
     private var descriptionButton: DiPlayButton? = null
     private var descriptionText = ""
     private var sendButton: DiPlayButton? = null
-    private var closeButton: DiPlayButton? = null
+    private var backButton: DiPlayButton? = null
     private var networkView: TextView? = null
     private var networkButton: DiPlayButton? = null
     private var formContainer: LinearLayout? = null
@@ -157,33 +156,19 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        topBar.addView(TextView(this).apply {
-            text = getString(R.string.feedback_title)
-            textSize = 24f
-            setTextColor(palette.primaryText)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            gravity = Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(0, dp(52), 1f))
-        sendButton = DiPlayButton(this).apply {
-            text = getString(R.string.feedback_send_action)
-            textSize = 16f
-            minWidth = dp(96)
-            minHeight = dp(52)
-            style(DiPlayButtonKind.PRIMARY, palette, overlay = false)
-            setOnClickListener { submit() }
-        }
-        val send = sendButton!!
-        topBar.addView(send, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)).apply { marginStart = dp(8) })
-        closeButton = DiPlayButton(this).apply {
-            text = getString(R.string.feedback_close)
-            textSize = 16f
-            minWidth = dp(76)
-            minHeight = dp(52)
-            style(DiPlayButtonKind.SECONDARY, palette, overlay = false)
-            setOnClickListener { finish() }
-        }
-        val close = closeButton!!
-        topBar.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)).apply { marginStart = dp(8) })
+        backButton = FeedbackChrome.backButton(this, palette) { finish() }
+        topBar.addView(backButton!!, FeedbackChrome.headerParams(this))
+        topBar.addView(
+            FeedbackChrome.title(this, palette, getString(R.string.feedback_title)),
+            FeedbackChrome.headerParams(this, weight = 1f, marginStart = 12),
+        )
+        sendButton = FeedbackChrome.action(
+            this,
+            palette,
+            getString(R.string.feedback_send_short),
+            DiPlayButtonKind.PRIMARY,
+        ) { submit() }
+        topBar.addView(sendButton!!, FeedbackChrome.headerParams(this, marginStart = 8))
         top.addView(topBar)
 
         val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -380,7 +365,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         networkView?.text = getString(if (online) R.string.feedback_network_online else R.string.feedback_network_offline)
         networkView?.setTextColor(if (online) palette.success else palette.warning)
         networkButton?.visibility = if (online) View.GONE else View.VISIBLE
-        sendButton?.text = getString(if (online) R.string.feedback_send_action else R.string.feedback_save_offline)
+        sendButton?.text = getString(if (online) R.string.feedback_send_short else R.string.feedback_save_offline)
         updateSendEnabled()
     }
 
@@ -472,7 +457,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         statusView?.text = getString(R.string.feedback_preparing)
         actionRow?.visibility = View.GONE
         sendButton?.visibility = View.GONE
-        closeButton?.isEnabled = false
+        backButton?.isEnabled = false
         bottomInfo?.visibility = View.GONE
     }
 
@@ -484,7 +469,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         recordsButton?.visibility = View.GONE
         doneButton?.visibility = View.VISIBLE
         actionRow?.visibility = View.VISIBLE
-        closeButton?.isEnabled = true
+        backButton?.isEnabled = true
         statusContainer?.visibility = View.VISIBLE
         formContainer?.visibility = View.GONE
     }
@@ -497,7 +482,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         recordsButton?.visibility = View.VISIBLE
         doneButton?.visibility = View.VISIBLE
         actionRow?.visibility = View.VISIBLE
-        closeButton?.isEnabled = true
+        backButton?.isEnabled = true
         sendButton?.visibility = View.GONE
         bottomInfo?.visibility = View.GONE
     }
@@ -511,7 +496,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         recordsButton?.visibility = View.VISIBLE
         doneButton?.visibility = View.VISIBLE
         actionRow?.visibility = View.VISIBLE
-        closeButton?.isEnabled = true
+        backButton?.isEnabled = true
         sendButton?.visibility = View.GONE
         bottomInfo?.visibility = View.GONE
         pendingId = id
@@ -526,7 +511,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         recordsButton?.visibility = View.VISIBLE
         doneButton?.visibility = View.VISIBLE
         actionRow?.visibility = View.VISIBLE
-        closeButton?.isEnabled = true
+        backButton?.isEnabled = true
         sendButton?.visibility = View.GONE
         bottomInfo?.visibility = View.GONE
         pendingId = id
@@ -539,7 +524,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         recordsButton?.visibility = View.VISIBLE
         doneButton?.visibility = View.VISIBLE
         actionRow?.visibility = View.VISIBLE
-        closeButton?.isEnabled = true
+        backButton?.isEnabled = true
         sendButton?.visibility = View.GONE
         bottomInfo?.visibility = View.GONE
     }
@@ -571,7 +556,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         formContainer?.visibility = View.VISIBLE
         statusContainer?.visibility = View.GONE
         sendButton?.visibility = View.VISIBLE
-        closeButton?.isEnabled = true
+        backButton?.isEnabled = true
         bottomInfo?.visibility = if (resources.configuration.screenHeightDp >= 360) View.VISIBLE else View.GONE
         categoryButton?.isEnabled = true
         updateSendEnabled()

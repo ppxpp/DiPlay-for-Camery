@@ -1039,6 +1039,7 @@
     <string name="feedback_title">傳送回饋</string>
     <string name="feedback_send">一鍵回饋</string>
     <string name="feedback_send_action">傳送回饋</string>
+    <string name="feedback_send_short">傳送</string>
     <string name="feedback_save_offline">儲存，連網後傳送</string>
     <string name="feedback_close">關閉</string>
     <string name="feedback_cancel">取消</string>
