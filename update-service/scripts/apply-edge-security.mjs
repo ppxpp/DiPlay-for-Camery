@@ -28,7 +28,9 @@ if (values.help) {
 Usage: node scripts/apply-edge-security.mjs [--apply] [--with-cache-rules] [--full-rate-rules] [--zone <zone_id>]
 
 Rate limiting defaults to ONE rule (admin API), which fits the Free plan's single
-rate limiting rule. Pass --full-rate-rules on plans that allow more rules.
+rate limiting rule. Pass --full-rate-rules on plans that allow more rules; that set
+also adds the anonymous feedback upload rule (POST .../feedback, 5 req / 60s). On
+the Free plan the in-Function KV limiter (5/hour, 20/day per IP) protects feedback.
 
 Environment:
   CF_ZONE_ID            Cloudflare zone id (or pass --zone)
@@ -90,6 +92,23 @@ const fullRateRules = [
       period: 60,
       requests_per_period: 30,
       mitigation_timeout: 60,
+    },
+  },
+  {
+    // Anonymous feedback upload. Keep the edge budget looser than the in-Function
+    // KV limit (5/hour, 20/day) so the application stays the source of truth;
+    // this rule only blunts bursts. On the Free plan the single allowed rule is
+    // spent on the admin surface, so feedback falls back to the KV limiter.
+    action: "block",
+    description: `${TAG} feedback upload`,
+    enabled: true,
+    expression:
+      'http.request.method eq "POST" and starts_with(http.request.uri.path, "/api/v1/apps/") and ends_with(http.request.uri.path, "/feedback")',
+    ratelimit: {
+      characteristics: ["ip.src", "cf.colo.id"],
+      period: 60,
+      requests_per_period: 5,
+      mitigation_timeout: 600,
     },
   },
 ];

@@ -13,6 +13,8 @@ branch; the threat model drives the order.
 | Availability | L7 flood | Cloudflare DDoS protection + WAF rate limits |
 | Rollout bypass | forged `?id=` probes | accepted by design (binaries are public); see “Known residual risks” |
 | Asset abuse | hotlinking APKs | immutable cache headers + edge rate limiting on the asset host |
+| Storage/cost abuse | anonymous feedback uploads | 6MB request + 5MB zip caps, zip entry/expansion limits, per-IP KV rate limit (5/h, 20/day), WAF upload rule, 90-day lifecycle |
+| Privacy leak | feedback archive exposure | private `META` bucket, admin-session-only reads, no public download URLs, no IP or device identifier stored |
 | Enumeration | walk appId/channel | low sensitivity; use unguessable appIds if needed |
 
 ## Layer 1 — Edge (one-time, needs a Cloudflare token)
@@ -32,6 +34,11 @@ Plan notes (current zone is on the Free plan):
   default rule set is a single block rule on `/api/v1/admin/` (20 requests / 10s per
   IP+colo). Pass `--full-rate-rules` after upgrading to get the public-API and
   heavy-endpoint rules too.
+- The feedback upload rule (`POST /api/v1/apps/*/feedback`, 5 requests / 60s per
+  IP+colo) is part of the full set only. On the Free plan the single rule is spent
+  on the admin surface, so anonymous feedback relies on the in-Function KV limiter
+  (5/hour, 20/day) plus Bot Fight Mode. Enable `--full-rate-rules` when the plan
+  allows more rules.
 - Rate limiting counts per `(ip.src, cf.colo.id)` — Cloudflare requires the colo
   characteristic, so counters are per data centre.
 - Cache rules are not affected by these limits.
@@ -74,6 +81,33 @@ Manual console steps that cannot be scripted:
 - Login throttling backstop: 10 failures per client IP per 10 minutes → 429. It
   needs a KV binding; without it the limiter is skipped and the edge rules remain
   the only control.
+
+### Anonymous feedback upload
+
+`POST /api/v1/apps/{appId}/feedback` is the only unauthenticated write path. Its
+abuse surface is bounded at several layers:
+
+- Request 6MB / zip 5MB, description 2000 characters, category whitelist, 32-hex
+  feedback id, and `feedback.json` identity must match the multipart `meta`.
+- The zip is inspected with `fflate`: at most 64 entries, at most 20MB expanded,
+  and any absolute, `.`/`..` or backslash path rejects the upload. Only
+  `feedback.json`, `report.txt` (must be UTF-8 text) and `manifest.json` are
+  decompressed; log entries are never expanded.
+- The declared `bundleSha256` and `bundleBytes` must match the received bytes.
+- Per-IP limiting is 5/hour and 20/day via `RATE_KV` (TTL 2h/2d). The client
+  address is SHA-256 hashed before use as a KV key, so raw IPs are not stored.
+  Without the binding the limiter is skipped; keep `RATE_KV` bound in production.
+- Idempotency: an existing feedback id returns `200 duplicate` without a write,
+  so retries cannot overwrite or amplify storage.
+- Writes are bundle → index → pointer; an index failure deletes the bundle. An
+  index object always resolves to an existing zip, and admin deletes remove all
+  three keys.
+- The archive lives in the private `META` bucket under `feedback/{appId}/` and is
+  readable only through `/api/v1/admin/feedback/*` after `isAdmin`. Downloads set
+  `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`; no
+  public or pre-signed URL is generated.
+- Retain for 90 days with an R2 lifecycle rule on the `feedback/` prefix. The
+  console can delete earlier; nothing is kept past that window.
 
 ### Enable the login failure counter (optional but recommended)
 
@@ -137,6 +171,15 @@ curl -s 'https://diplay.mgulu.com/api/v1/apps/diplay/android/stable/latest?id=ba
 curl -s 'https://diplay.mgulu.com/api/v1/apps/diplay/android/stable/latest?arch=arm64,x86' # invalid_arch
 
 # Derived objects (private bucket; check via a publish or the admin API).
+
+# Anonymous feedback: validation then rate limiting.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  -F 'meta={"schemaVersion":1}' -F 'bundle=@/dev/null' \
+  https://diplay.mgulu.com/api/v1/apps/diplay/feedback                  # 422 invalid_meta
+curl -s -o /dev/null -w "%{http_code}\n" https://diplay.mgulu.com/api/v1/admin/feedback  # 401
+
+# Feedback archive is private: use the admin console or a session cookie.
+# Confirm the R2 lifecycle rule on the feedback/ prefix keeps 90 days.
 ```
 
 ## Known residual risks
@@ -150,6 +193,10 @@ curl -s 'https://diplay.mgulu.com/api/v1/apps/diplay/android/stable/latest?arch=
 - **No WAF managed rules by default** — enable them manually (Layer 1 step 3).
 - **Derived objects are eventually consistent** with the latest pointer during a
   publish; both are written in the same script run and readers fall back safely.
+- **Anonymous feedback can still be polluted** by a determined sender rotating
+  addresses within the edge/KV budgets. It contains no device identity by design,
+  so the only response is deletion from the admin console, tightening the KV or
+  edge limits, and reviewing R2 `feedback/` volume.
 
 ## Incident runbook
 
@@ -161,3 +208,8 @@ curl -s 'https://diplay.mgulu.com/api/v1/apps/diplay/android/stable/latest?arch=
 3. **Rollback of a bad release**: use the admin console (POST
    `/api/v1/admin/releases` with the previous release key) or run
    `scripts/restore-release-snapshot.mjs`; derived objects are rebuilt by both.
+4. **Feedback upload abuse**: check the R2 `feedback/` object count and the
+   `/api/v1/apps/*/feedback` 4xx/5xx ratio; delete offending records in the admin
+   console, lower `RATE_LIMIT_PER_HOUR`/`RATE_LIMIT_PER_DAY` in
+   `functions/_shared/feedback.ts`, and apply the `--full-rate-rules` WAF set if the
+   plan allows it.
