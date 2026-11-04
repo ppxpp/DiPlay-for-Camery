@@ -13,7 +13,7 @@ import { site } from '../data/site.ts';
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>版本管理 · {site.shortName}</title>
+    <title>管理后台 · {site.shortName}</title>
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="/app-icon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -24,8 +24,10 @@ import { site } from '../data/site.ts';
     <main class="shell page-shell admin-shell">
       <div class="page-frame">
         <div class="admin-page-head">
-          <h1>版本管理</h1>
-          <p class="admin-page-note">版本信息由 CI 生成，不可编辑；新发布版本默认暂停自动下发。</p>
+          <h1>管理后台</h1>
+          <p class="admin-page-note">
+            版本下发与用户反馈归档。版本信息由 CI 生成，不可编辑；新发布版本默认暂停自动下发。
+          </p>
         </div>
 
         <AdminConsole client:load />

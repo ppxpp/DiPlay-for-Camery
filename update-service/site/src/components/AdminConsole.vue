@@ -2,9 +2,11 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { adminSession } from '../data/admin-session.ts';
 import { releaseDisplayName } from '../data/releases.ts';
+import FeedbackPanel from './FeedbackPanel.vue';
 
 type Channel = 'stable' | 'beta';
 type ChannelFilter = 'all' | Channel;
+type AdminTab = 'releases' | 'feedback';
 type Management = {
   enabled: boolean;
   published?: boolean;
@@ -26,6 +28,7 @@ type Release = {
 type ApiRelease = Omit<Release, 'channel' | 'releaseKey'> & { releaseKey?: string };
 
 const channel = ref<ChannelFilter>('all');
+const activeTab = ref<AdminTab>('releases');
 const authenticated = ref(false);
 const username = ref('');
 const password = ref('');
@@ -103,6 +106,20 @@ function setChannel(next: ChannelFilter) {
   if (channel.value === next) return;
   channel.value = next;
   load();
+}
+
+function setTab(next: AdminTab) {
+  if (activeTab.value === next) return;
+  activeTab.value = next;
+  message.value = '';
+}
+
+function handleUnauthorized() {
+  authenticated.value = false;
+  adminSession.authenticated = false;
+  releases.value = [];
+  activeTab.value = 'releases';
+  message.value = '';
 }
 
 function formatPublishedAt(value?: string) {
@@ -199,6 +216,7 @@ async function logout() {
   authenticated.value = false;
   adminSession.authenticated = false;
   releases.value = [];
+  activeTab.value = 'releases';
   message.value = '';
 }
 
@@ -217,7 +235,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="admin-console" aria-label="版本管理控制台">
+  <section class="admin-console" aria-label="管理控制台">
     <form v-if="!authenticated" class="admin-login" @submit.prevent="login">
       <div class="admin-login-head">
         <span class="admin-login-icon" aria-hidden="true">
@@ -242,7 +260,7 @@ onUnmounted(() => {
         </span>
         <div>
           <h2>管理员登录</h2>
-          <p>登录后可管理版本下发与回撤。</p>
+          <p>登录后可管理版本下发与用户反馈。</p>
         </div>
       </div>
 
@@ -270,164 +288,197 @@ onUnmounted(() => {
     </form>
 
     <template v-else>
-      <div class="admin-filter-row">
-        <div class="channel-switch" role="group" aria-label="版本渠道">
-          <button type="button" :aria-pressed="channel === 'all'" @click="setChannel('all')">
-            全部
+      <div class="admin-tab-row">
+        <div class="channel-switch" role="group" aria-label="管理模块">
+          <button
+            type="button"
+            :aria-pressed="activeTab === 'releases'"
+            @click="setTab('releases')"
+          >
+            版本管理
           </button>
           <button
             type="button"
-            :aria-pressed="channel === 'stable'"
-            @click="setChannel('stable')"
+            :aria-pressed="activeTab === 'feedback'"
+            @click="setTab('feedback')"
           >
-            正式版
+            用户反馈
           </button>
-          <button type="button" :aria-pressed="channel === 'beta'" @click="setChannel('beta')">
-            内测版
-          </button>
-        </div>
-        <p class="release-count">{{ releases.length }} 个版本</p>
-      </div>
-
-      <p v-if="message" class="admin-message" role="status">{{ message }}</p>
-
-      <div v-if="!releases.length" class="state-card">
-        <span class="state-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path
-              d="M4.5 8 12 4.5 19.5 8v8L12 19.5 4.5 16V8Z"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-            />
-            <path
-              d="m4.5 8 7.5 4 7.5-4M12 12v7.5"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </span>
-        <div>
-          <h2>暂无版本</h2>
-          <p>{{ channel === 'all' ? '当前没有已发布的版本。' : '该渠道还没有发布版本。' }}</p>
         </div>
       </div>
 
-      <div v-else class="release-list">
-        <article v-for="release in releases" :key="`${release.channel}-${release.releaseKey}`" class="release-card admin-release">
-          <header class="release-card-head">
-            <div class="release-identity">
-              <span class="release-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M4.5 8 12 4.5 19.5 8v8L12 19.5 4.5 16V8Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
-                  <path
-                    d="m4.5 8 7.5 4 7.5-4M12 12v7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </span>
-              <div class="release-title">
-                <div class="release-title-row">
-                  <h2>{{ releaseDisplayName(release) }}</h2>
-                  <span
-                    v-if="release.releaseKey === currentVersions[release.channel]"
-                    class="tag tag--brand"
-                  >
-                    当前推荐
-                  </span>
-                  <span v-if="channel === 'all'" class="tag">
-                    {{ release.channel === 'stable' ? '正式版' : '内测版' }}
-                  </span>
-                </div>
-                <p class="release-meta">
-                  <span>versionCode {{ release.versionCode }}</span>
-                  <span>{{ formatPublishedAt(release.publishedAt) }}</span>
-                </p>
-              </div>
-            </div>
-
-            <div class="release-actions">
-              <button
-                v-if="release.releaseKey !== currentVersions[release.channel]"
-                class="btn secondary btn--compact"
-                type="button"
-                @click="rollback(release)"
-              >
-                设为当前下发版本
-              </button>
-              <button
-                class="btn danger btn--compact"
-                type="button"
-                :disabled="busy"
-                @click="remove(release)"
-              >
-                删除
-              </button>
-            </div>
-          </header>
-
-          <div class="admin-release-grid">
-            <label class="toggle">
-              <input v-model="release.management!.enabled" type="checkbox" />
-              <span>允许自动下发</span>
-            </label>
-            <label>
-              下发模式
-              <select v-model="release.management!.mode">
-                <option value="all">全量</option>
-                <option value="percentage">按百分比</option>
-                <option value="whitelist">白名单</option>
-              </select>
-            </label>
-            <label v-if="release.management!.mode === 'percentage'">
-              下发比例（0–100%）
-              <input
-                v-model.number="release.management!.percentage"
-                type="number"
-                min="0"
-                max="100"
-              />
-            </label>
-            <label v-if="release.management!.mode === 'whitelist'" class="wide-field">
-              客户端 ID（每行一个）
-              <textarea
-                :value="(release.management!.ids ?? []).join('\n')"
-                rows="5"
-                @input="
-                  release.management!.ids = ($event.target as HTMLTextAreaElement).value
-                    .split(/[\n,，\s]+/)
-                    .map((id) => id.trim())
-                    .filter(Boolean)
-                "
-              />
-            </label>
-            <label class="wide-field">
-              发布说明
-              <textarea v-model="release.management!.notes" rows="4" maxlength="10000" />
-            </label>
-          </div>
-
-          <div class="admin-release-actions">
-            <span>修改后保存才会生效</span>
+      <template v-if="activeTab === 'releases'">
+        <div class="admin-filter-row">
+          <div class="channel-switch" role="group" aria-label="版本渠道">
+            <button type="button" :aria-pressed="channel === 'all'" @click="setChannel('all')">
+              全部
+            </button>
             <button
-              class="btn primary btn--compact"
               type="button"
-              :disabled="busy"
-              @click="save(release)"
+              :aria-pressed="channel === 'stable'"
+              @click="setChannel('stable')"
             >
-              保存设置
+              正式版
+            </button>
+            <button type="button" :aria-pressed="channel === 'beta'" @click="setChannel('beta')">
+              内测版
             </button>
           </div>
-        </article>
-      </div>
+          <p class="release-count">{{ releases.length }} 个版本</p>
+        </div>
+
+        <p v-if="message" class="admin-message" role="status">{{ message }}</p>
+
+        <div v-if="!releases.length" class="state-card">
+          <span class="state-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4.5 8 12 4.5 19.5 8v8L12 19.5 4.5 16V8Z"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linejoin="round"
+              />
+              <path
+                d="m4.5 8 7.5 4 7.5-4M12 12v7.5"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
+          <div>
+            <h2>暂无版本</h2>
+            <p>{{ channel === 'all' ? '当前没有已发布的版本。' : '该渠道还没有发布版本。' }}</p>
+          </div>
+        </div>
+
+        <div v-else class="release-list">
+          <article v-for="release in releases" :key="`${release.channel}-${release.releaseKey}`" class="release-card admin-release">
+            <header class="release-card-head">
+              <div class="release-identity">
+                <span class="release-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M4.5 8 12 4.5 19.5 8v8L12 19.5 4.5 16V8Z"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="m4.5 8 7.5 4 7.5-4M12 12v7.5"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <div class="release-title">
+                  <div class="release-title-row">
+                    <h2>{{ releaseDisplayName(release) }}</h2>
+                    <span
+                      v-if="release.releaseKey === currentVersions[release.channel]"
+                      class="tag tag--brand"
+                    >
+                      当前推荐
+                    </span>
+                    <span v-if="channel === 'all'" class="tag">
+                      {{ release.channel === 'stable' ? '正式版' : '内测版' }}
+                    </span>
+                  </div>
+                  <p class="release-meta">
+                    <span>versionCode {{ release.versionCode }}</span>
+                    <span>{{ formatPublishedAt(release.publishedAt) }}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div class="release-actions">
+                <button
+                  v-if="release.releaseKey !== currentVersions[release.channel]"
+                  class="btn secondary btn--compact"
+                  type="button"
+                  @click="rollback(release)"
+                >
+                  设为当前下发版本
+                </button>
+                <button
+                  class="btn danger btn--compact"
+                  type="button"
+                  :disabled="busy"
+                  @click="remove(release)"
+                >
+                  删除
+                </button>
+              </div>
+            </header>
+
+            <div class="admin-release-grid">
+              <label class="toggle">
+                <input v-model="release.management!.enabled" type="checkbox" />
+                <span>允许自动下发</span>
+              </label>
+              <label>
+                下发模式
+                <select v-model="release.management!.mode">
+                  <option value="all">全量</option>
+                  <option value="percentage">按百分比</option>
+                  <option value="whitelist">白名单</option>
+                </select>
+              </label>
+              <label v-if="release.management!.mode === 'percentage'">
+                下发比例（0–100%）
+                <input
+                  v-model.number="release.management!.percentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                />
+              </label>
+              <label v-if="release.management!.mode === 'whitelist'" class="wide-field">
+                客户端 ID（每行一个）
+                <textarea
+                  :value="(release.management!.ids ?? []).join('\n')"
+                  rows="5"
+                  @input="
+                    release.management!.ids = ($event.target as HTMLTextAreaElement).value
+                      .split(/[\n,，\s]+/)
+                      .map((id) => id.trim())
+                      .filter(Boolean)
+                  "
+                />
+              </label>
+              <label class="wide-field">
+                发布说明
+                <textarea v-model="release.management!.notes" rows="4" maxlength="10000" />
+              </label>
+            </div>
+
+            <div class="admin-release-actions">
+              <span>修改后保存才会生效</span>
+              <button
+                class="btn primary btn--compact"
+                type="button"
+                :disabled="busy"
+                @click="save(release)"
+              >
+                保存设置
+              </button>
+            </div>
+          </article>
+        </div>
+      </template>
+
+      <FeedbackPanel v-else :request="request" @unauthorized="handleUnauthorized" />
     </template>
   </section>
 </template>
+
+<style scoped>
+.admin-tab-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 16px;
+}
+</style>
