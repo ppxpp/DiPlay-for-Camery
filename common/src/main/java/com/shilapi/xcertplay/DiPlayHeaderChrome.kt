@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
@@ -9,6 +10,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.StateListDrawable
+import android.os.Build
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextUtils
@@ -18,6 +20,9 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.os.ConfigurationCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnLayout
 import com.shilapi.xcertplay.host.R
 import kotlin.math.min
@@ -82,6 +87,30 @@ internal object DiPlayHeaderChrome {
         onClick: () -> Unit,
         onCreated: (SettingButton) -> Unit = {},
     ): SettingButton = baseButton(context, palette, compact, title, primary, onClick, onCreated)
+
+    /**
+     * System-bar visibility used by every screen: the bars follow the same hide/show
+     * preferences, so a page never decides on its own whether the status bar is hidden.
+     */
+    fun applySystemBars(activity: Activity, palette: DiPlayPalette) {
+        val multiWindow = Build.VERSION.SDK_INT >= 24 && activity.isInMultiWindowMode
+        WindowInsetsControllerCompat(activity.window, activity.window.decorView).apply {
+            isAppearanceLightStatusBars = palette.systemBarIconsAreDark
+            isAppearanceLightNavigationBars = palette.systemBarIconsAreDark
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (AirPlayPersistence.loadHideTopBar(activity) && !multiWindow) {
+                hide(WindowInsetsCompat.Type.statusBars())
+            } else {
+                show(WindowInsetsCompat.Type.statusBars())
+            }
+            if (AirPlayPersistence.loadHideBottomBar(activity) && !multiWindow) {
+                hide(WindowInsetsCompat.Type.navigationBars())
+            } else {
+                show(WindowInsetsCompat.Type.navigationBars())
+            }
+        }
+        ViewCompat.requestApplyInsets(activity.window.decorView)
+    }
 
     fun title(context: Context, palette: DiPlayPalette, compact: Boolean, text: String): TextView =
         HeaderTitleView(context).apply {

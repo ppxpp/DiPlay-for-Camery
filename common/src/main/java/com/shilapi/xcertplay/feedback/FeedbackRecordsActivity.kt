@@ -45,6 +45,7 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
         window.statusBarColor = palette.background
         window.navigationBarColor = palette.background
         setContentView(buildContent())
+        DiPlayHeaderChrome.applySystemBars(this, palette)
         render()
     }
 

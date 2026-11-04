@@ -698,23 +698,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun applyFullscreenMode() {
-        val multiWindow = Build.VERSION.SDK_INT >= 24 && isInMultiWindowMode
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = palette.systemBarIconsAreDark
-            isAppearanceLightNavigationBars = palette.systemBarIconsAreDark
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (AirPlayPersistence.loadHideTopBar(this@DiPlayActivity) && !multiWindow) {
-                hide(WindowInsetsCompat.Type.statusBars())
-            } else {
-                show(WindowInsetsCompat.Type.statusBars())
-            }
-            if (AirPlayPersistence.loadHideBottomBar(this@DiPlayActivity) && !multiWindow) {
-                hide(WindowInsetsCompat.Type.navigationBars())
-            } else {
-                show(WindowInsetsCompat.Type.navigationBars())
-            }
-        }
-        ViewCompat.requestApplyInsets(window.decorView)
+        DiPlayHeaderChrome.applySystemBars(this, palette)
     }
 
     private val isNaturallyExpandedSettingsLayout: Boolean

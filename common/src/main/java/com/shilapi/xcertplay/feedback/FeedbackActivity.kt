@@ -121,6 +121,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         window.navigationBarColor = palette.background
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
         setContentView(buildContent())
+        DiPlayHeaderChrome.applySystemBars(this, palette)
         window.decorView.isFocusableInTouchMode = true
         window.decorView.requestFocus()
         refreshNetwork()
