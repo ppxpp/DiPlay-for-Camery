@@ -39,18 +39,20 @@ internal object DiagnosticBundle {
                     items.forEach { archive.text("system/${it.name}.txt", it.status) { it.text } }
                 }, { archive.unavailable("system/root", "collection_failed", it.javaClass.simpleName) })
                 // Read only OS-shipped code, never Bluetooth databases, hotspot configuration or app data.
+                // Bluetooth/Blueforce binaries are intentionally excluded; bluetooth/state.txt keeps the
+                // read-only state snapshot without copying the vendor stack or its compiled code.
                 val libraries = listOf("/system/lib", "/system/lib64", "/vendor/lib", "/vendor/lib64", "/system/framework")
-                val names = Regex("(?i).*(blueforce|bluetooth|pioneer|ceam|wifi|tether).*(\\.so|\\.jar)$")
-                val components = libraries.flatMap { File(it).listFiles()?.filter { f -> f.isFile && names.matches(f.name) }.orEmpty() }
-                    .toMutableList()
-                listOf("/system/lib/libblueforce.so", "/system/lib/libbluetooth_jni.so", "/system/framework/framework.jar", "/system/framework/services.jar", "/system/bin/hostapd",
-                    "/system/bin/wpa_supplicant", "/system/bin/dnsmasq", "/system/bin/blueforce",
-                    "/system/bin/blueforcemanage").forEach { components += File(it) }
+                val components = libraries.flatMap { directory ->
+                    File(directory).listFiles()
+                        ?.filter { file -> file.isFile && DiagnosticComponentPolicy.isSelectedLibrary(file.name) }
+                        .orEmpty()
+                }.toMutableList()
+                DiagnosticComponentPolicy.explicitFiles.forEach { components += File(it) }
                 @Suppress("DEPRECATION")
                 val packages = runCatching { app.packageManager.getInstalledApplications(0) }
                 packages.onSuccess { installed ->
                     val selected = installed.filter { it.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
-                        Regex("(?i).*(pioneer|ceam|bluetooth|wifi|tether).*").matches(it.packageName) }
+                        DiagnosticComponentPolicy.isSelectedPackage(it.packageName) }
                     archive.text("system/packages.txt") {
                         selected.joinToString("\n") { info ->
                             val version = runCatching { app.packageManager.getPackageInfo(info.packageName, 0).versionName }.getOrNull()
@@ -72,7 +74,7 @@ internal object DiagnosticBundle {
                     }
                 }
                 val candidates = components.distinctBy { it.absolutePath }.sortedWith(
-                    compareBy<File> { if (it.name.contains("blueforce", ignoreCase = true)) 0 else if (it.extension in setOf("so", "jar")) 1 else 2 }
+                    compareBy<File> { if (it.extension in setOf("so", "jar")) 1 else 2 }
                         .thenBy { it.absolutePath })
                 archive.text("system/component_inventory.txt") { candidates.joinToString("\n") { it.absolutePath } }
                 candidates.take(60).forEach { archive.component(it) }
@@ -80,6 +82,7 @@ internal object DiagnosticBundle {
                 archive.text("README.txt") {
                     "DiPlay diagnostic bundle\nSee manifest.json for collection status, source paths, byte counts and SHA-256.\n" +
                         "Missing/denied/timeout entries are not successful collections. System logcat is a filtered current buffer, not a complete boot history.\n" +
+                        "Bluetooth/Blueforce system components are intentionally excluded; bluetooth/state.txt is a read-only state snapshot.\n" +
                         "Only readable OS code is included; protected components are recorded as unavailable.\n" +
                         "No settings database, pairing keys, hotspot passwords or protocol payloads are intentionally exported.\n"
                 }
