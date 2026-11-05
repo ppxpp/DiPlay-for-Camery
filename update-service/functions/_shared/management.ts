@@ -41,19 +41,56 @@ export interface Env {
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD_HASH: string;
   ADMIN_SESSION_SECRET: string;
+  RATE_KV?: KVNamespace;
 }
 
-export function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      "cdn-cache-control": "no-store",
-      "access-control-allow-origin": "*",
-      "x-content-type-options": "nosniff",
-    },
-  });
+interface JsonOptions {
+  cors?: boolean;
+  // Public endpoints pass a TTL so the edge may cache the response; everything
+  // else stays no-store (per-client manifests and admin data must not be shared).
+  cacheTtl?: number;
+}
+
+function cacheHeaders(ttl?: number): Record<string, string> {
+  if (ttl !== undefined && ttl > 0) {
+    return {
+      "cache-control": `public, max-age=${ttl}, s-maxage=${ttl}`,
+      "cdn-cache-control": `public, max-age=${ttl}`,
+    };
+  }
+  return { "cache-control": "no-store", "cdn-cache-control": "no-store" };
+}
+
+export function json(body: unknown, status = 200, options: JsonOptions = {}): Response {
+  const headers: Record<string, string> = {
+    "content-type": "application/json; charset=utf-8",
+    ...cacheHeaders(options.cacheTtl),
+    "x-content-type-options": "nosniff",
+  };
+  if (options.cors !== false) headers["access-control-allow-origin"] = "*";
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+// Serves a JSON body with a weak ETag so conditional clients and edge caches
+// can revalidate instead of re-downloading the whole payload.
+export async function jsonWithEtag(
+  request: Request,
+  body: unknown,
+  status = 200,
+  options: JsonOptions = {},
+): Promise<Response> {
+  const text = JSON.stringify(body);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  const etag = `W/"${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}"`;
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, {
+      status: 304,
+      headers: { etag, ...cacheHeaders(options.cacheTtl) },
+    });
+  }
+  const response = json(body, status, options);
+  response.headers.set("etag", etag);
+  return response;
 }
 
 export function releasePrefix(appId: string, platform: string, channel: string): string {
@@ -105,10 +142,14 @@ export async function readManifest(bucket: R2Bucket, key: string): Promise<Store
   }
 }
 
-export async function writeManifest(bucket: R2Bucket, key: string, manifest: StoredManifest): Promise<void> {
-  await bucket.put(key, `${JSON.stringify(manifest, null, 2)}\n`, {
+export async function putJson(bucket: R2Bucket, key: string, value: unknown): Promise<void> {
+  await bucket.put(key, `${JSON.stringify(value, null, 2)}\n`, {
     httpMetadata: { contentType: "application/json; charset=utf-8", cacheControl: "no-store" },
   });
+}
+
+export async function writeManifest(bucket: R2Bucket, key: string, manifest: StoredManifest): Promise<void> {
+  await putJson(bucket, key, manifest);
 }
 
 export async function allReleaseManifests(

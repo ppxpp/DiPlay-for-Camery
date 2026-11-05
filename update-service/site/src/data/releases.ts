@@ -27,7 +27,7 @@ export function releaseDisplayName(release: {
 }
 
 export async function fetchReleases(channel: ChannelKey, base = ''): Promise<Release[]> {
-  const response = await fetch(`${base}/api/v1/apps/diplay/android/${channel}/releases`, {
+  const response = await fetch(`${base}/api/v1/apps/diplay/android/${channel}/releases?limit=500`, {
     cache: 'no-store',
   });
   if (!response.ok) throw new Error(`请求失败（${response.status}）`);

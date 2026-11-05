@@ -47,7 +47,7 @@ class WheelMediaKeyWindowTest {
         host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
         // A session has to exist: outside one the wheel keeps the car's own action.
         controller = mock(CarPlayController::class.java)
-        `when`(controller.sendMediaButton(anyInt())).thenReturn(true)
+        `when`(controller.sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))).thenReturn(true)
         field("controller", controller)
         field("activeAirPlaySession", mock(AirPlaySession::class.java))
     }
@@ -65,9 +65,9 @@ class WheelMediaKeyWindowTest {
 
     @Test fun theWheelTrackKeysReachCarPlay() {
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
-        verify(controller).sendMediaButton(CarPlayMediaButton.NEXT)
+        verify(controller).sendMediaButton(org.mockito.ArgumentMatchers.eq(CarPlayMediaButton.NEXT), (org.mockito.ArgumentMatchers.anyString() ?: ""))
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_PREVIOUS, true)))
-        verify(controller).sendMediaButton(CarPlayMediaButton.PREVIOUS)
+        verify(controller).sendMediaButton(org.mockito.ArgumentMatchers.eq(CarPlayMediaButton.PREVIOUS), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun oneTapSendsOnePress() {
@@ -76,7 +76,7 @@ class WheelMediaKeyWindowTest {
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true, repeat = 1)))
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
-        verify(controller, times(1)).sendMediaButton(anyInt())
+        verify(controller, times(1)).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun theKeysKeepTheCarsOwnActionDuringACall() {
@@ -86,20 +86,20 @@ class WheelMediaKeyWindowTest {
         assertEquals(AudioManager.MODE_NORMAL, host.getSystemService(AudioManager::class.java).mode)
         assertTrue(inCall(host))
         assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun theKeysKeepTheCarsOwnActionWithoutASession() {
         field("activeAirPlaySession", null)
         assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun playPauseIsLeftAlone() {
         // The wheel key service and BYD itself both own this key; the window must not take it.
         assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, true)))
         assertFalse(host.dispatchKeyEvent(key(CarPlayMediaButton.KEYCODE_BYD_AUTO_MEDIA_PLAY_PAUSE, true)))
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun assignedNonMediaKeyTogglesCarPlayPlaybackOnceWithoutAccessibilityService() {
@@ -109,7 +109,7 @@ class WheelMediaKeyWindowTest {
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, true)))
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, true, repeat = 1)))
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, false)))
-        verify(controller, times(1)).sendMediaButton(CarPlayMediaButton.PLAY_PAUSE)
+        verify(controller, times(1)).sendMediaButton(org.mockito.ArgumentMatchers.eq(CarPlayMediaButton.PLAY_PAUSE), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun remappedPlayPauseKeyNeverStealsACallOrAnAbsentSession() {
@@ -123,7 +123,7 @@ class WheelMediaKeyWindowTest {
             u8(2, 4); string(4, "call")
         })
         assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, true)))
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun fireTvNavigationRemoteButtonsRemainReservedEvenIfMappedToPlayPause() {
@@ -139,7 +139,7 @@ class WheelMediaKeyWindowTest {
             assertFalse("TV navigation key must not be remapped: $code",
                 WheelZoomSettings.isMediaPlayPauseKey(host, WheelKey(code, 0, "?")))
         }
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun googleTvHomeAssistantVolumeAndMediaSessionKeysAreNotHijacked() {
@@ -157,7 +157,7 @@ class WheelMediaKeyWindowTest {
             assertFalse("reserved TV key $code was incorrectly mapped",
                 WheelZoomSettings.isMediaPlayPauseKey(host, WheelKey(code, 0, "?")))
         }
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun originalTrackSkipAndMediaSessionPlayPauseRemainWhenRemapIsEnabled() {
@@ -176,9 +176,9 @@ class WheelMediaKeyWindowTest {
                 assertTrue("existing next/previous must still reach CarPlay", consumed)
             }
         }
-        verify(controller).sendMediaButton(CarPlayMediaButton.NEXT)
-        verify(controller).sendMediaButton(CarPlayMediaButton.PREVIOUS)
-        verify(controller, never()).sendMediaButton(CarPlayMediaButton.PLAY_PAUSE)
+        verify(controller).sendMediaButton(org.mockito.ArgumentMatchers.eq(CarPlayMediaButton.NEXT), (org.mockito.ArgumentMatchers.anyString() ?: ""))
+        verify(controller).sendMediaButton(org.mockito.ArgumentMatchers.eq(CarPlayMediaButton.PREVIOUS), (org.mockito.ArgumentMatchers.anyString() ?: ""))
+        verify(controller, never()).sendMediaButton(org.mockito.ArgumentMatchers.eq(CarPlayMediaButton.PLAY_PAUSE), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun enablingMediaRemapWithoutAnAssignedKeyLeavesExistingTvControlsUnchanged() {
@@ -194,7 +194,7 @@ class WheelMediaKeyWindowTest {
         assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_DPAD_CENTER, false)))
         verify(controller, times(2)).sendKnob(AirPlayKnobState(select = true), false)
         verify(controller, times(2)).sendKnob(AirPlayKnobState(), false)
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     @Test fun fireTvOkAndDirectionStillControlCarPlayAfterMediaFeatureEnabled() {
@@ -214,7 +214,7 @@ class WheelMediaKeyWindowTest {
             verify(controller).sendKnob(press, momentary)
             assertTrue(host.dispatchKeyEvent(key(keyCode, false)))
         }
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), (org.mockito.ArgumentMatchers.anyString() ?: ""))
     }
 
     private fun field(name: String, value: Any?) = host.javaClass.getDeclaredField(name)

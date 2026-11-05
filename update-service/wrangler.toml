@@ -13,3 +13,7 @@ bucket_name = "gtmc-app-updates-meta-prod"
 [[r2_buckets]]
 binding = "RELEASE_ASSETS"
 bucket_name = "gtmc-app-updates-assets-prod"
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "057332673bd5472fa2f75cc9d5434292"

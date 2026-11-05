@@ -104,6 +104,10 @@ import com.shilapi.xcertplay.update.UpdateLookupResult
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import com.shilapi.xcertplay.update.StableClientId
+import com.shilapi.xcertplay.feedback.FeedbackActivity
+import com.shilapi.xcertplay.feedback.FeedbackOutbox
+import com.shilapi.xcertplay.feedback.FeedbackRecordsActivity
+import com.shilapi.xcertplay.feedback.FeedbackScheduler
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -229,6 +233,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var testToneTrack: AudioTrack? = null
     private var toneStop: Runnable? = null
     private var exportButton: Button? = null
+    private val feedbackBadges = mutableListOf<TextView>()
+    private var feedbackSummary: TextView? = null
     private var rootScroll: ScrollView? = null
     private var settingsRailScroll: ScrollView? = null
     private var reconnectBar: View? = null
@@ -638,6 +644,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     if (intent.getStringExtra(com.shilapi.xcertplay.analytics.ConnectionAnalytics.SOURCE_EXTRA) == "boot_auto") "boot_auto" else "app_auto") }
             }
         }
+        FeedbackScheduler.schedule(this)
+        refreshFeedbackBadges()
     }
     override fun onPause() {
         appearanceUpdatesResumed = false
@@ -693,23 +701,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun applyFullscreenMode() {
-        val multiWindow = Build.VERSION.SDK_INT >= 24 && isInMultiWindowMode
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = palette.systemBarIconsAreDark
-            isAppearanceLightNavigationBars = palette.systemBarIconsAreDark
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (AirPlayPersistence.loadHideTopBar(this@DiPlayActivity) && !multiWindow) {
-                hide(WindowInsetsCompat.Type.statusBars())
-            } else {
-                show(WindowInsetsCompat.Type.statusBars())
-            }
-            if (AirPlayPersistence.loadHideBottomBar(this@DiPlayActivity) && !multiWindow) {
-                hide(WindowInsetsCompat.Type.navigationBars())
-            } else {
-                show(WindowInsetsCompat.Type.navigationBars())
-            }
-        }
-        ViewCompat.requestApplyInsets(window.decorView)
+        DiPlayHeaderChrome.applySystemBars(this, palette)
     }
 
     private val isNaturallyExpandedSettingsLayout: Boolean
@@ -781,6 +773,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         reconnectBar = null
         readinessCard = null
         exportButton = null
+        feedbackBadges.clear()
+        feedbackSummary = null
         bydAdbControls = null
         adbSwitches.clear()
         adbStatus = null
@@ -838,6 +832,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         renderedPage = page
         renderedSettingsCategory = settingsCategory.takeIf { page == "settings" }
         refreshStatus()
+        refreshFeedbackBadges()
         focusSnapshot?.let { snapshot ->
             root.doOnLayout {
                 descendants(root).firstOrNull { candidate ->
@@ -956,12 +951,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         gravity = Gravity.CENTER_VERTICAL
         addView(headerButton(getString(R.string.back), R.drawable.ic_dp_back, compact, ::navigateBack),
             LinearLayout.LayoutParams(-2, if (compact) dp(44) else dp(52)))
-        val settingsTitle = label(getString(R.string.settings), if (compact) 20 else 26, TEXT, true,
-            centreGlyphs = true).apply {
-            setPadding(dp(12), 0, dp(12), 0)
-            setSingleLine(true)
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
+        val settingsTitle = DiPlayHeaderChrome.title(this@DiPlayActivity, palette, compact, getString(R.string.settings))
         // Reserve the action buttons first; only the title may shrink in a narrow header.
         addView(settingsTitle, LinearLayout.LayoutParams(
             if (settingsSearchExpanded) -2 else 0, controlHeight,
@@ -1238,6 +1228,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             addView(label(title, 16, if (selected) ACCENT else TEXT, true,
                 centreGlyphs = usesChineseGlyphAlignment(androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]!!.language, title)),
                 LinearLayout.LayoutParams(0, -1, 1f))
+            if (category == SettingsCategory.DIAGNOSTICS) {
+                addView(feedbackBadge(), LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(8) })
+            }
             setOnClickListener {
                 openSettingsCategory(category)
             }
@@ -1453,8 +1446,46 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 addView(label(settingsCategoryTitle(category), 17, if (warning) WARNING else TEXT, true))
                 addView(label(summary, 13, MUTED).apply { setPadding(0, dp(3), 0, 0) })
             }, LinearLayout.LayoutParams(0, -2, 1f))
+            if (category == SettingsCategory.DIAGNOSTICS) {
+                addView(feedbackBadge(), LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(8) })
+            }
         })
         setOnClickListener { openSettingsCategory(category) }
+    }
+
+    private fun feedbackBadge() = TextView(this).apply {
+        gravity = Gravity.CENTER
+        textSize = 11f
+        setTextColor(ON_ACCENT)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(ACCENT)
+            cornerRadius = dp(11).toFloat()
+        }
+        visibility = View.GONE
+        feedbackBadges += this
+    }
+
+    private fun refreshFeedbackBadges() {
+        val count = runCatching { FeedbackOutbox.pendingCount(this) }.getOrDefault(0)
+        val text = if (count > 99) "99+" else count.toString()
+        feedbackBadges.forEach { badge ->
+            badge.text = text
+            badge.contentDescription = getString(R.string.feedback_pending_count, count)
+            badge.visibility = if (count > 0) View.VISIBLE else View.GONE
+        }
+        feedbackSummary?.apply {
+            this.text = if (count > 0) getString(R.string.feedback_pending_count, count) else ""
+            visibility = if (count > 0) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun openFeedback() {
+        startActivity(FeedbackActivity.intent(this))
+    }
+
+    private fun openFeedbackRecords() {
+        startActivity(FeedbackRecordsActivity.intent(this))
     }
 
     private fun settingsPageTitle(content: LinearLayout, title: String, subtitle: String) {
@@ -1932,6 +1963,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.hidesBottomArrow(this)) { hide ->
                 com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.setHidesBottomArrow(this, hide)
             }
+
             if (com.shilapi.xcertplay.pioneer.PioneerAdbDebug.supported()) {
                 card.addView(label(getString(R.string.settings_camry_usb_adb_description), 14, MUTED))
                 lateinit var adbButton: SettingButton
@@ -2027,6 +2059,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(button(getString(R.string.feedback_send), true) { openFeedback() }, matchButton(0, 60))
+            card.addView(label(getString(R.string.feedback_network_requirement), 14, MUTED).apply {
+                setPadding(0, dp(6), 0, dp(10))
+            })
+            val summary = label("", 14, ACCENT).apply {
+                isClickable = true
+                setOnClickListener { openFeedbackRecords() }
+                setPadding(0, 0, 0, dp(8))
+            }
+            feedbackSummary = summary
+            card.addView(summary)
+            card.addView(button(getString(R.string.feedback_records_title), false) { openFeedbackRecords() }, matchButton(6, 56))
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }
@@ -6870,23 +6914,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private class HeaderTitleView(context: android.content.Context) : TextView(context) {
-        private val glyphBounds = android.graphics.Rect()
-
-        override fun onDraw(canvas: android.graphics.Canvas) {
-            val value = text.toString()
-            paint.getTextBounds(value, 0, value.length, glyphBounds)
-            val checkpoint = canvas.save()
-            if (layout?.lineCount == 1 && !glyphBounds.isEmpty && baseline >= 0) {
-                val textCentre = alignedTextCentreY(this, value, glyphBounds)
-                val contentCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                canvas.translate(0f, contentCentre - textCentre)
-            }
-            super.onDraw(canvas)
-            canvas.restoreToCount(checkpoint)
-        }
-    }
-
     private fun label(value: String, size: Int, color: Int, bold: Boolean = false, centreGlyphs: Boolean = false) =
         (if (centreGlyphs) HeaderTitleView(this) else TextView(this)).apply {
         text = value; textSize = size.toFloat(); setTextColor(color); gravity = Gravity.CENTER_VERTICAL
@@ -6895,33 +6922,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
     private fun headerIconSize(compact: Boolean) = dp(if (compact) 20 else 24)
 
-    private fun headerButton(title: String, icon: Int, compact: Boolean, click: () -> Unit) = button(title, false, click).apply {
-        alignVisibleGlyphs = false
-        if (compact) textSize = 16f
-        includeFontPadding = false
-        setTextColor(TEXT)
-        setSingleLine(true)
-        gravity = Gravity.CENTER
-        val iconSize = headerIconSize(compact)
-        val drawable = getDrawable(icon)?.mutate()?.apply {
-            setTint(TEXT)
-            setBounds(0, 0, iconSize, iconSize)
+    private fun headerButton(title: String, icon: Int, compact: Boolean, click: () -> Unit) =
+        DiPlayHeaderChrome.headerButton(this, palette, compact, title, icon, click) {
+            searchIndexSink?.add(title.substringBefore(VALUE_SEPARATOR))
         }
-        setCompoundDrawablesRelative(drawable, null, null, null)
-        compoundDrawablePadding = dp(8)
-        doOnLayout {
-            // Use the same text alignment reference as other buttons in this locale.
-            if (baseline >= 0 && text.isNotEmpty()) {
-                val glyphCentre = textAlignmentCentreY()
-                val drawableCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                val offset = (glyphCentre - drawableCentre).roundToInt()
-                drawable?.setBounds(0, offset, iconSize, iconSize + offset)
-                // Move the aligned icon/text group to the button's visual centre.
-                contentOffsetY = drawableCentre - glyphCentre
-                invalidate()
-            }
-        }
-    }
 
     private fun layoutCornerRadius(): Float {
         val compact = isCompactLayout && (page != "settings" || !SettingsLayoutPreferences.isActive(this))
@@ -6983,62 +6987,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
      * start-aligned, muted value, chevron. Any other text stays a centred action button.
      * The plain text is unchanged, so callers and tests keep matching "Title · Value".
      */
-    private class SettingButton(
-        context: android.content.Context,
-        private val muted: Int,
-        private val accent: Int,
-    ) : Button(context) {
-        var action = false
-        var contentOffsetY = 0f
-        var alignVisibleGlyphs = true
-        private val glyphBounds = android.graphics.Rect()
-
-        fun textAlignmentCentreY(): Float {
-            return alignedTextCentreY(this, text, glyphBounds)
-        }
-
-        override fun onDraw(canvas: android.graphics.Canvas) {
-            var offset = contentOffsetY
-            if (alignVisibleGlyphs) {
-                offset = 0f
-                // Wrapped labels keep Android's multiline layout. Measure single-line labels
-                // on every draw so changing a setting value also updates its visual centre.
-                if (layout?.lineCount == 1 && baseline >= 0) {
-                    val textCentre = textAlignmentCentreY()
-                    val contentCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                    offset = contentCentre - textCentre
-                }
-                // The chevron is already centred by TextView; compensate for the text shift.
-                compoundDrawablesRelative.filterNotNull().forEach { drawable ->
-                    val bounds = drawable.bounds
-                    val top = -offset.roundToInt()
-                    drawable.setBounds(bounds.left, top, bounds.right, top + bounds.height())
-                }
-            }
-            val checkpoint = canvas.save()
-            canvas.translate(0f, offset)
-            super.onDraw(canvas)
-            canvas.restoreToCount(checkpoint)
-        }
-
-        override fun setText(text: CharSequence?, type: BufferType?) {
-            val split = if (action) -1 else text?.indexOf(VALUE_SEPARATOR) ?: -1
-            if (text == null || split <= 0) {
-                super.setText(text, type)
-                gravity = Gravity.CENTER
-                setCompoundDrawablesRelative(null, null, null, null)
-                return
-            }
-            val styled = android.text.SpannableString(text).apply {
-                setSpan(android.text.style.ForegroundColorSpan(muted), split, text.length,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            super.setText(styled, BufferType.SPANNABLE)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            setCompoundDrawablesRelativeWithIntrinsicBounds(null, null,
-                context.getDrawable(R.drawable.ic_dp_chevron)?.mutate()?.apply { setTint(accent) }, null)
-        }
-    }
     // Remote and D-pad users need to see where they are; touch mode never shows it.
     private fun focusRing(radiusDp: Int = 20) = android.graphics.drawable.StateListDrawable().apply {
         addState(intArrayOf(android.R.attr.state_focused), GradientDrawable().apply {
@@ -7208,27 +7156,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val FOCUS_RING get() = palette.focusRing
 
     companion object {
-        private fun alignedTextCentreY(
-            view: TextView,
-            text: CharSequence,
-            bounds: android.graphics.Rect,
-            drawingBaseline: Int = view.baseline,
-        ): Float {
-            if (usesChineseGlyphAlignment(androidx.core.os.ConfigurationCompat.getLocales(view.resources.configuration)[0]!!.language, text)) {
-                val value = text.toString()
-                view.paint.getTextBounds(value, 0, value.length, bounds)
-                return drawingBaseline + (bounds.top + bounds.bottom) / 2f
-            }
-            // Keep the baseline stable when labels contain descenders or accents.
-            val metrics = view.paint.fontMetrics
-            return drawingBaseline + (metrics.ascent + metrics.descent) / 2f
-        }
-
-        private fun usesChineseGlyphAlignment(language: String, text: CharSequence): Boolean {
-            return language == "zh" && text.isNotBlank() &&
-                text.none { it in 'A'..'Z' || it in 'a'..'z' }
-        }
-
         internal fun isLauncherIntent(intent: Intent): Boolean =
             intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) &&
                 !intent.hasExtra("page")
@@ -7259,7 +7186,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val SETTINGS_SEARCH_RESULTS_GAP_DP = 6
         private const val SETTINGS_SEARCH_RESULTS_SHORT_HEIGHT_DP = 200
         private const val SETTINGS_SEARCH_RESULTS_HEIGHT_DP = 380
-        private const val VALUE_SEPARATOR = " · "
         private const val SEARCH_HIGHLIGHT_MILLIS = 900L
         private const val SPACER = "spacer"
         private const val CONTROL_HEIGHT_DP = 60

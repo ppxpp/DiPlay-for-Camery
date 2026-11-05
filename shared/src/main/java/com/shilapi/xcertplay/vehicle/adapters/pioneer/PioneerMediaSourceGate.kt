@@ -18,7 +18,9 @@ internal object PioneerMediaSourceGate {
             // CEAM source callbacks reset RecordToken asynchronously. Finish this transition
             // before asking for the microphone, matching the measured recording-test gate.
             Thread.sleep(com.shilapi.xcertplay.pioneer.PioneerAudioExperiments.current().sourceDelayMs.toLong())
-            check(source() == 300) { "Pioneer media source transition did not complete" }
+            val actual = source()
+            runCatching { report("Audio: Pioneer source verified previous=$current requested=300 actual=$actual elapsedMs=${android.os.SystemClock.elapsedRealtime()}") }
+            check(actual == 300) { "Pioneer media source transition did not complete" }
         }
         action()
     }

@@ -47,7 +47,7 @@ describe("install-kits latest", () => {
       context({ [diplayBetaKey]: manifest("0.2.21", 2001, "beta") }, kitParams),
     );
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("cache-control")).toContain("s-maxage=60");
 
     const body = (await response.json()) as any;
     expect(body.kitId).toBe("camry-a");

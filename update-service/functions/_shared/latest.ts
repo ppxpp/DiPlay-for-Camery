@@ -33,6 +33,8 @@ interface StoredManifest {
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const CLIENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const ARCH = /^[a-z0-9_-]{1,32}$/;
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -111,6 +113,26 @@ async function loadManifest(env: Env, key: string): Promise<ManifestLoad> {
   return { kind: "ok", stored };
 }
 
+// One derived object keeps the legacy cross-channel lookup at a single read.
+async function readLatestAny(
+  env: Env,
+  appId: string,
+  platform: string,
+): Promise<{ stable: StoredManifest | null; beta: StoredManifest | null } | null> {
+  const object = await env.META.get(`apps/${appId}/${platform}/latest-any.json`);
+  if (!object) return null;
+  try {
+    const value = await object.json<Record<string, unknown>>();
+    if (!value || value.schemaVersion !== 1) return null;
+    return {
+      stable: isManagedManifest(value.stable) ? value.stable : null,
+      beta: isManagedManifest(value.beta) ? value.beta : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function latestManifestResponse(
   request: Request,
   env: Env,
@@ -128,7 +150,15 @@ export async function latestManifestResponse(
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return json({ error: "asset_base_url_not_configured" }, 500);
 
-  const clientId = new URL(request.url).searchParams.get("id")?.trim() || null;
+  const clientIdParam = new URL(request.url).searchParams.get("id")?.trim() || null;
+  if (clientIdParam !== null && !CLIENT_ID.test(clientIdParam)) {
+    return json({ error: "invalid_client_id" }, 400);
+  }
+  const clientId = clientIdParam;
+  const archParam = new URL(request.url).searchParams.get("arch")?.trim() || null;
+  if (archParam !== null && !ARCH.test(archParam)) {
+    return json({ error: "invalid_arch" }, 400);
+  }
   // The historical versionCode 1000 client queried stable without an id or a
   // channel choice. New clients always send their client id, including the
   // persisted fallback when Android ID is unavailable.
@@ -140,10 +170,18 @@ export async function latestManifestResponse(
   if (legacyStable) {
     // The legacy client cannot choose a channel, so serve whichever published
     // channel carries the newer version. Equal versions keep stable first.
-    const [stable, beta] = await Promise.all([
-      loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
-      loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
-    ]);
+    let stable: ManifestLoad;
+    let beta: ManifestLoad;
+    const snapshot = await readLatestAny(env, appId, platform);
+    if (snapshot) {
+      stable = snapshot.stable ? { kind: "ok", stored: snapshot.stable } : { kind: "missing" };
+      beta = snapshot.beta ? { kind: "ok", stored: snapshot.beta } : { kind: "missing" };
+    } else {
+      [stable, beta] = await Promise.all([
+        loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
+        loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
+      ]);
+    }
     const candidates: Array<{ channel: string; stored: StoredManifest }> = [];
     for (const [candidateChannel, loaded] of [
       ["stable", stable],
@@ -200,7 +238,7 @@ export async function latestManifestResponse(
     }
   }
 
-  const arch = new URL(request.url).searchParams.get("arch")?.trim() || null;
+  const arch = archParam;
   const selected = arch
     ? stored.artifacts.filter((artifact) => !artifact.arch || artifact.arch === "universal" || artifact.arch === arch)
     : stored.artifacts;

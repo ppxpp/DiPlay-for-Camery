@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/feedback-v1.json",
+  "title": "DiPlay one-click feedback v1",
+  "description": "Contracts for the multipart `meta` field, the `feedback.json` inside the bundle, the archived index object and the by-id pointer. `meta`, `index` and `pointer` are closed (additionalProperties: false); `feedback.json` is client-authored and only its identity fields are constrained.",
+  "anyOf": [
+    { "$ref": "#/$defs/meta" },
+    { "$ref": "#/$defs/feedbackFile" },
+    { "$ref": "#/$defs/index" },
+    { "$ref": "#/$defs/pointer" }
+  ],
+  "$defs": {
+    "category": {
+      "enum": ["connection", "display", "audio", "navigation", "vehicle", "other"]
+    },
+    "entry": {
+      "enum": ["settings", "connection_failure"]
+    },
+    "feedbackId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "app": {
+      "type": "object",
+      "required": ["versionName", "versionCode", "channel"],
+      "additionalProperties": false,
+      "properties": {
+        "versionName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "versionCode": { "type": "integer", "minimum": 0 },
+        "channel": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "device": {
+      "type": "object",
+      "required": ["manufacturer", "model", "board", "androidRelease", "api"],
+      "additionalProperties": false,
+      "properties": {
+        "manufacturer": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "board": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "androidRelease": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "api": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": ["mode", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "state": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "meta": {
+      "title": "multipart meta (also the shape of feedback.json)",
+      "type": "object",
+      "required": [
+        "schemaVersion", "id", "createdAt", "category", "description", "entry",
+        "app", "device", "session", "bundleBytes", "bundleSha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "id": { "$ref": "#/$defs/feedbackId" },
+        "createdAt": { "type": "integer", "minimum": 0 },
+        "category": { "$ref": "#/$defs/category" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "entry": { "$ref": "#/$defs/entry" },
+        "failureStage": { "type": "string", "maxLength": 200 },
+        "app": { "$ref": "#/$defs/app" },
+        "device": { "$ref": "#/$defs/device" },
+        "session": { "$ref": "#/$defs/session" },
+        "bundleBytes": { "type": "integer", "minimum": 1, "maximum": 5242880 },
+        "bundleSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "feedbackFile": {
+      "title": "feedback.json inside bundle.zip",
+      "type": "object",
+      "required": ["schemaVersion", "id", "category"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "id": { "$ref": "#/$defs/feedbackId" },
+        "category": { "$ref": "#/$defs/category" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "entry": { "$ref": "#/$defs/entry" },
+        "app": { "$ref": "#/$defs/app" },
+        "device": { "$ref": "#/$defs/device" },
+        "session": { "$ref": "#/$defs/session" }
+      }
+    },
+    "index": {
+      "title": "R2 index object (feedback/{appId}/index/{descendingTs}-{id}.json)",
+      "type": "object",
+      "required": [
+        "schemaVersion", "id", "receivedAt", "category", "description", "entry",
+        "app", "device", "session", "bundleKey", "bundleBytes", "bundleSha256",
+        "reportPreview", "previewTruncated"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "id": { "$ref": "#/$defs/feedbackId" },
+        "receivedAt": { "type": "integer", "minimum": 0 },
+        "category": { "$ref": "#/$defs/category" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "entry": { "$ref": "#/$defs/entry" },
+        "failureStage": { "type": "string", "maxLength": 200 },
+        "app": { "$ref": "#/$defs/app" },
+        "device": { "$ref": "#/$defs/device" },
+        "session": { "$ref": "#/$defs/session" },
+        "bundleKey": {
+          "type": "string",
+          "pattern": "^feedback/[a-z0-9][a-z0-9-]{0,63}/objects/[0-9a-f]{32}/bundle\\.zip$"
+        },
+        "bundleBytes": { "type": "integer", "minimum": 1, "maximum": 5242880 },
+        "bundleSha256": { "$ref": "#/$defs/sha256" },
+        "reportPreview": { "type": "string", "maxLength": 65536 },
+        "previewTruncated": { "type": "boolean" }
+      }
+    },
+    "pointer": {
+      "title": "R2 by-id pointer (feedback/{appId}/by-id/{id}.json)",
+      "type": "object",
+      "required": ["schemaVersion", "id", "receivedAt", "indexKey", "bundleKey"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "id": { "$ref": "#/$defs/feedbackId" },
+        "receivedAt": { "type": "integer", "minimum": 0 },
+        "indexKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "bundleKey": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    }
+  }
+}

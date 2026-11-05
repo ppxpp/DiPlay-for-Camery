@@ -6,13 +6,18 @@ Generic app update manifest service for Cloudflare Pages Functions + R2, located
 
 ```
 functions/api/v1/apps/[appId]/[platform]/[channel]/latest.ts   read-only manifest API
+functions/api/v1/apps/[appId]/feedback.ts                      anonymous feedback upload
+functions/api/v1/admin/feedback/                               feedback list/detail/download/delete
 site/                                                          Astro download site
 public/404.html                                                static 404 override
 dist/                                                          generated Pages output
-schema/                                                        v1 manifest and response contracts
+schema/                                                        v1 manifest, response and feedback contracts
 scripts/build-site.mjs                                         build site and assemble dist
 scripts/publish-update.mjs                                     generic publisher
+scripts/derived.mjs                                            rebuild releases-index/latest-any read models
+scripts/apply-edge-security.mjs                                WAF rate limiting + cache rules (dry-run by default)
 scripts/restore-release-snapshot.mjs                           restore a history snapshot from an existing artifact
+SECURITY.md                                                    threat model, edge/app controls, rotation runbook
 test/                                                          Function tests
 wrangler.toml                                                  Pages project + R2 binding
 ```
@@ -25,7 +30,12 @@ GET /api/v1/apps/{appId}/{platform}/{channel}/latest?arch=arm64-v8a
 GET /api/v1/apps/{appId}/{platform}/{channel}/public-latest
 GET /api/v1/apps/{appId}/{platform}/{channel}/releases
 GET /api/v1/install-kits/{kitId}/{channel}/latest
+POST /api/v1/apps/{appId}/feedback                                 (anonymous)
 DELETE /api/v1/admin/releases?channel={channel}&releaseKey={versionName}  (admin)
+GET    /api/v1/admin/feedback?app={appId}&limit=50&cursor=...      (admin)
+GET    /api/v1/admin/feedback/{id}                                 (admin)
+GET    /api/v1/admin/feedback/{id}/bundle                          (admin)
+DELETE /api/v1/admin/feedback/{id}                                 (admin)
 ```
 
 The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (installer) app. Its static parts — the device profile, the uninstall notice, and the 爱趣听 / 微信 replacement packages (fixed R2 asset URLs, sizes and SHA-256) — are authored in `functions/_shared/install-kits.ts`. The DiPlay entry is resolved at request time from the app update interface: the Function reads `apps/diplay/android/stable/latest.json` and `apps/diplay/android/beta/latest.json`, skips disabled channels, and uses whichever carries the higher `versionCode` (preferring stable on a tie), so the installer always gets the newest DiPlay build without republishing the kit. If no DiPlay release is available it returns `503 {"error":"diplay_release_unavailable"}`; an unknown `kitId` returns `404`. Responses use `Cache-Control: no-store`.
@@ -33,6 +43,8 @@ The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (inst
 `DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
 
 A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
+
+Public `latest`, `public-latest`, `releases` (with `?limit=`, default 100, max 500) and `install-kits` responses carry `Cache-Control: public, max-age=60, s-maxage=60` plus a weak `ETag`; per-client manifests and admin data stay `no-store`. `releases` serves the derived `releases-index.json` and the legacy no-id `latest` serves `latest-any.json`, so each request costs one bucket read; both are rebuilt by the publisher and by admin mutations. See `SECURITY.md` for edge rate limiting, caching and the secrets runbook.
 
 The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 
@@ -59,6 +71,64 @@ apps/{appId}/{platform}/{channel}/releases/{versionName}.json
 ```
 
 Both use the manifest `versionName` (falling back to `version` when no display name is supplied), so builds that share an app version but differ in display name keep separate assets and history entries.
+
+## User feedback
+
+DiPlay can upload an anonymous diagnostic bundle from Settings → Diagnostics → 一键反馈 (and from the CarPlay connection-failure panel). The client builds a trimmed, redacted zip and posts multipart form-data:
+
+```
+POST /api/v1/apps/diplay/feedback
+Content-Type: multipart/form-data
+
+meta    JSON, schemaVersion=1, 32-hex feedback id, category, description, entry, app/device/session, bundleBytes, bundleSha256
+bundle  application/zip, ≤5MB
+```
+
+The server validates the request before writing anything:
+
+| Check | Limit | Response |
+| --- | --- | --- |
+| request body | 6MB | `413 request_too_large` |
+| bundle size | 5MB | `413 bundle_too_large` |
+| description | 2000 characters | `422 description_too_long` |
+| feedback id | `^[0-9a-f]{32}$` | `422 invalid_meta` |
+| category | `connection display audio navigation vehicle other` | `422 invalid_meta` |
+| bundle SHA-256 / bytes | must match `meta` | `422 bundle_sha256_mismatch` / `bundle_size_mismatch` |
+| zip entries | ≤64 entries, ≤20MB expanded, no `.`/`..`/absolute/backslash paths | `422` |
+| required entries | `feedback.json`, `report.txt` (UTF-8 text), `manifest.json` | `422 missing_*` |
+| `feedback.json` identity | id, category and app version agree with `meta` | `422 bundle_meta_mismatch` |
+| per-IP rate limit | 5 per hour, 20 per day | `429 rate_limited` + `Retry-After` |
+
+Only `feedback.json`, `report.txt` and `manifest.json` are decompressed; logs are never expanded on the server. A valid upload returns `201 {"ok":true,"id":"…","receivedAt":…}`. Re-posting the same feedback id returns `200` with `duplicate: true` and never overwrites the archived bundle.
+
+The route is deliberately anonymous: no account, StableClientId, phone name, IP or other device identifier is written into the bundle, the index or the admin console. The client address is only used as a hashed, short-TTL counter key in `RATE_KV`. Feedback data is private and served only to a signed-in admin session. The contract lives in `schema/feedback-v1.schema.json`.
+
+### Storage and retention
+
+Archives share the private `META` bucket, scoped per app:
+
+```
+feedback/{appId}/objects/{id}/bundle.zip          uploaded zip
+feedback/{appId}/index/{descendingTs}-{id}.json   index + report.txt preview (≤64KB)
+feedback/{appId}/by-id/{id}.json                  pointer from id to index/bundle
+```
+
+The index key embeds a descending millisecond timestamp (`9999999999999 - receivedAt`, zero-padded), so an ascending R2 listing is newest first. Index objects include the received time, category, full description, app/device/session summary, bundle size and SHA-256, and the preview plus `previewTruncated`.
+
+Retention is 90 days: configure an R2 lifecycle rule on the `META` bucket for the `feedback/` prefix (R2 dashboard → bucket → Settings → Object lifecycle rules → delete after 90 days). Admin deletes remove the zip, the index and the pointer immediately.
+
+### Admin API
+
+All four endpoints require the admin session cookie used by `/admin/`. Mutating and reading admin responses are `no-store` and send no CORS header.
+
+```
+GET    /api/v1/admin/feedback?app=diplay&limit=50&cursor=...
+GET    /api/v1/admin/feedback/{id}
+GET    /api/v1/admin/feedback/{id}/bundle
+DELETE /api/v1/admin/feedback/{id}
+```
+
+The list returns `{items, cursor, truncated}` newest first; `limit` defaults to 50 and is capped at 100. List items omit `reportPreview` to keep the response small; the detail endpoint returns the full index including the preview. The bundle endpoint streams the R2 object as `application/zip` with `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`; it never issues a public URL. Delete returns `{ok:true}`, or `404` when the feedback id is unknown.
 
 ## Initial setup
 

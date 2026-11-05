@@ -1,6 +1,8 @@
 package com.shilapi.xcertplay
 
 import com.shilapi.xcertplay.analytics.ConnectionAnalytics
+import com.shilapi.xcertplay.feedback.FeedbackActivity
+import com.shilapi.xcertplay.feedback.FeedbackCategory
 
 import android.app.AlertDialog
 import android.Manifest
@@ -228,6 +230,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private val connectionProgressPanel by lazy { com.shilapi.xcertplay.connection.ConnectionProgressPanel(this) }
     private var connectionInstructionsView: TextView? = null
     private var connectionHelpView: TextView? = null
+    private var feedbackButton: DiPlayButton? = null
     private var wifiRecoveryButton: View? = null
     private var reconnectAttempts = 0
     private val siriKey = WheelSiriKey()
@@ -1828,7 +1831,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 !WheelZoomSettings.isMediaPlayPauseKey(this, WheelKey.of(event))) {
                 WheelZoomKeys.Action.PASS
             } else {
-                val sent = controller?.sendMediaButton(CarPlayMediaButton.PLAY_PAUSE) == true
+                val sent = controller?.sendMediaButton(CarPlayMediaButton.PLAY_PAUSE, "host_play_pause") == true
                 appendLog("Media: assigned wheel key ${event.keyCode} -> CarPlay play/pause sent=$sent")
                 WheelZoomKeys.Action.CONSUME
             }
@@ -1942,7 +1945,7 @@ class CarPlayHostActivity : ComponentActivity() {
             // on the press. The release is swallowed rather than passed on, or BYD's own player would
             // receive an unpaired key.
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                val sent = controller?.sendMediaButton(mediaPress) == true
+                val sent = controller?.sendMediaButton(mediaPress, "host_key") == true
                 appendLog("Media: wheel key ${event.keyCode} -> CarPlay $mediaPress sent=$sent")
             }
             return true
@@ -2255,6 +2258,19 @@ class CarPlayHostActivity : ComponentActivity() {
             visibility = View.GONE
         }
         panel.addView(help)
+        val feedback = DiPlayButton(this).apply {
+            text = getString(R.string.feedback_send_this_issue)
+            visibility = View.GONE
+            setOnClickListener {
+                startActivity(FeedbackActivity.intent(
+                    this@CarPlayHostActivity,
+                    FeedbackCategory.CONNECTION,
+                    connectionHelpView?.text?.toString(),
+                ))
+            }
+            feedbackButton = this
+        }
+        panel.addView(feedback, LinearLayout.LayoutParams(dp(300), dp(64)).apply { bottomMargin = dp(12) })
         val recovery = DiPlayButton(this).apply {
             text = getString(R.string.reset_carplay_wi_fi)
             visibility = View.GONE
@@ -2308,6 +2324,7 @@ class CarPlayHostActivity : ComponentActivity() {
             back.style(DiPlayButtonKind.PRIMARY, buttonPalette, overlay = false)
             retry.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
+            feedback.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
         val preparationScroll = ScrollView(this).apply {
@@ -2338,7 +2355,7 @@ class CarPlayHostActivity : ComponentActivity() {
             fun spacing(short: Float, regular: Float) = dp(size(short, regular).toInt())
             val availableWidth = viewport.width - viewport.paddingLeft - viewport.paddingRight - dp(48)
             val buttonWidth = minOf(dp(300), availableWidth.coerceAtLeast(dp(48)))
-            for (button in listOf(back, recovery, retry)) {
+            for (button in listOf(back, feedback, recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
                     button.layoutParams = button.layoutParams.apply { width = buttonWidth }
                 }
@@ -6979,7 +6996,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     }.show()
                 true
             }
-            "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE) == true
+            "MEDIA_PAUSE" -> controller?.sendMediaButton(CarPlayMediaButton.PAUSE, "host_media_pause") == true
             "AUDIO_TAKE", "AUDIO_RELEASE" -> {
                 check(com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice())
                 val session = checkNotNull(activeAirPlaySession) { "No active CarPlay session" }
@@ -7279,6 +7296,7 @@ class CarPlayHostActivity : ComponentActivity() {
             visibility = if (failure == null) View.GONE else View.VISIBLE
             if (failure != null) text = getString(ConnectionFailureGuidance.message(failure, wirelessEnabled, wirelessHotspotMode))
         }
+        feedbackButton?.visibility = if (failure == null) View.GONE else View.VISIBLE
     }
 
     /** [englishMessage] is [message] in English, which [friendlyStage] reads for its keywords. */

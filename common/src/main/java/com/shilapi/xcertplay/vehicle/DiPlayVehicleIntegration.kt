@@ -44,7 +44,7 @@ internal object DiPlayVehicleIntegration {
                     MediaCommand.PAUSE -> CarPlayMediaButton.PAUSE
                     MediaCommand.NEXT -> CarPlayMediaButton.NEXT
                     MediaCommand.PREVIOUS -> CarPlayMediaButton.PREVIOUS
-                })
+                }, "vehicle_companion")
             }, { message ->
                 Log.e("DiPlay-Vehicle", message)
                 com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, message)
