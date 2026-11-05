@@ -145,19 +145,34 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
   const latest = await readManifest(env.META, latestKey);
   const deletingCurrent = latest !== null && releaseKeyOf(latest) === releaseKey;
-  let fallback: StoredManifest | null = null;
+  let fallback: { key: string; manifest: StoredManifest } | null = null;
   if (deletingCurrent) {
     const remaining = (await allReleaseManifests(env.META, prefix)).filter(({ key }) => key !== targetKey);
     // Prefer a release that is still eligible for delivery, then any previously published one.
-    fallback = remaining.find(({ manifest }) => manifest.management?.enabled !== false)?.manifest
-      ?? remaining.find(({ manifest }) => isPublishedRelease(manifest))?.manifest
+    fallback = remaining.find(({ manifest }) => manifest.management?.enabled !== false)
+      ?? remaining.find(({ manifest }) => isPublishedRelease(manifest))
       ?? null;
   }
 
   await env.META.delete(targetKey);
   if (deletingCurrent) {
-    if (fallback) await writeManifest(env.META, latestKey, fallback);
-    else await env.META.delete(latestKey);
+    if (fallback) {
+      // The replacement becomes the delivered release: without this the pointer
+      // would name a demoted (enabled: false) snapshot, and clients would skip
+      // it and fall back to an older release.
+      const delivered: StoredManifest = {
+        ...fallback.manifest,
+        management: {
+          ...(fallback.manifest.management ?? { enabled: false, mode: "all", notes: "" }),
+          enabled: true,
+          published: true,
+        },
+      };
+      await writeManifest(env.META, fallback.key, delivered);
+      await writeManifest(env.META, latestKey, delivered);
+    } else {
+      await env.META.delete(latestKey);
+    }
   }
 
   const assetKeys = new Set<string>();
@@ -172,5 +187,5 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
     assetsRemoved = false;
   }
   await rebuildDerived(env, app, platform, channel);
-  return json({ ok: true, deleted: releaseKey, currentVersion: fallback ? releaseKeyOf(fallback) : (deletingCurrent ? null : (latest ? releaseKeyOf(latest) : null)), assetsRemoved }, 200, { cors: false });
+  return json({ ok: true, deleted: releaseKey, currentVersion: fallback ? releaseKeyOf(fallback.manifest) : (deletingCurrent ? null : (latest ? releaseKeyOf(latest) : null)), assetsRemoved }, 200, { cors: false });
 };

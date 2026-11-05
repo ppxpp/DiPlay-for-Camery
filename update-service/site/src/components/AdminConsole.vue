@@ -189,7 +189,7 @@ async function rollback(release: Release) {
 async function remove(release: Release) {
   const label = release.versionName ?? release.version;
   const current = release.releaseKey === currentVersions[release.channel];
-  const note = current ? '它当前是推荐版本，删除后会自动回退到上一个可用版本。' : '';
+  const note = current ? '它是当前版本，删除后会自动切到上一个可用版本并立即对它开启下发。' : '';
   if (!window.confirm(`删除 ${label}？版本记录和安装包文件会一并删除，且不可恢复。${note}`)) return;
   message.value = '';
   try {
