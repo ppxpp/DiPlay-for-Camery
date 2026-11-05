@@ -402,6 +402,16 @@ describe("latest update manifest", () => {
     expect(body.versionCode).toBe(120);
   });
 
+  it("serves the test channel when the request names no usable channel", async () => {
+    const response = await onRequestGet(keyedContext(
+      { appId: "diplay", platform: "android", channel: "Beta" },
+      { [betaKey]: { ...manifest, versionCode: 110, management: full } },
+    ));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).channel).toBe("beta");
+  });
+
   it("counts a 100 percent rollout as a full release", async () => {
     const response = await onRequestGet(keyedContext(params, {
       [stableKey]: {
