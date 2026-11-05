@@ -187,18 +187,17 @@ class PioneerDebugService : Service() {
                 }, "self-restart-probe").start()
             }
             "navigation-hud" -> {
-                check(BuildConfig.DEBUG) { "HUD lab controls are debug-only" }
+                check(BuildConfig.DEBUG) { "HUD diagnostics are debug-only" }
                 require(PioneerUsbPolicy.matchesDevice())
                 val action = request.optString("action", "STATUS")
-                require(action in listOf("STATUS", "OPEN", "PROBE", "METER", "CLEAR"))
-                if (action != "STATUS") {
-                    require(request.toString().length <= 4096)
-                    startActivity(Intent().setClassName(packageName, "com.shilapi.xcertplay.NavigationHudLabActivity")
-                        .putExtra("hud_debug_request", request.toString())
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                require(action in listOf("STATUS", "START_CAPTURE", "STOP_CAPTURE", "MARK", "READ_CAPTURE"))
+                if (action == "READ_CAPTURE") {
+                    send(socket, reply.put("captureEvents", PioneerHudCapture.read(request.optLong("afterSeq", 0)))
+                        .put("navigationHud", PioneerDebugRuntime.hudSnapshot()))
+                } else {
+                    send(socket, reply.put("capture", PioneerHudCapture.command(this, action, request.optString("label")))
+                        .put("navigationHud", PioneerDebugRuntime.hudSnapshot()))
                 }
-                send(socket, reply.put("scheduled", action != "STATUS")
-                    .put("lab", JSONObject(PioneerDebugRuntime.navigationHudLabState)))
             }
             "car-mic-test" -> {
                 val action = request.optString("action", "STATUS")
@@ -457,7 +456,8 @@ class PioneerDebugService : Service() {
                 else if (PioneerLwipRuntime.enabled(this)) "LWIP" else "VPN")
             .put("usbLaunchPolicy", PioneerUsbLaunchPolicy.snapshot(this))
             .put("sampledAtMs", System.currentTimeMillis())
-            .put("navigationHud", JSONObject(PioneerDebugRuntime.navigationHudState))
+            .put("navigationHud", PioneerDebugRuntime.hudSnapshot())
+            .put("navigationHudCapture", PioneerHudCapture.status())
             .put("steeringWheel", JSONObject(PioneerDebugRuntime.steeringWheelState)
                 .put("relayedWheelEventsIgnored", PioneerDebugRuntime.relayedWheelEventsIgnored.get()))
             .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
@@ -562,6 +562,7 @@ class PioneerDebugService : Service() {
         ZipOutputStream(target.outputStream()).use { zip ->
             fun add(name: String, data: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(data); zip.closeEntry() }
             add("status.json", status().toString(2).toByteArray())
+            PioneerHudCapture.archive(this).forEach { (name, bytes) -> add("pioneer-hud/$name", bytes) }
             add("network.json", networkDiagnostics().toString(2).toByteArray())
             add("vpn-permission.json", PioneerVpnPermissionGrant.status(this).toString(2).toByteArray())
             for (family in listOf("vpn-firewall", "vpn-permission")) {

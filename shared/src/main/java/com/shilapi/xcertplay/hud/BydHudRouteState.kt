@@ -55,9 +55,25 @@ internal class BydHudRouteState(
     private var lastRouteUpdateNs: Long? = null
     private var noRouteSinceNs: Long? = null
     private var holdingAcrossDrop = false
+    var distanceUpdated = false
+        private set
+    var lastFrameValid = true
+        private set
+
+    fun diagnosticReason(): String {
+        if (!routeActive) return "no_route"
+        if (activeIndex < 0) return "no_active_maneuver"
+        val now = nanoTime()
+        if (lastRouteUpdateNs?.let { now - it >= staleRouteNs } != false) return "stale_route"
+        if (emptyListSinceNs?.let { now - it >= emptyListHideNs } == true) return "empty_maneuver_list"
+        if (!maneuvers.containsKey(activeIndex)) return "missing_maneuver_details"
+        return "guidance"
+    }
 
     fun accept(messageId: Int, payload: ByteArray): BydHudRouteChange {
-        if (!validTlvs(payload)) return BydHudRouteChange.NONE
+        distanceUpdated = false
+        lastFrameValid = validTlvs(payload)
+        if (!lastFrameValid) return BydHudRouteChange.NONE
         return when (messageId) {
             ROUTE_GUIDANCE_UPDATE -> parseRouteUpdate(payload)
             ROUTE_GUIDANCE_MANEUVER_UPDATE -> parseManeuverUpdate(payload)
@@ -78,6 +94,8 @@ internal class BydHudRouteState(
     }
 
     /** Next maneuver as Apple sent it, for outputs with a richer icon set than the HUD. */
+    fun currentManeuverIndex(): Int? = activeIndex.takeIf { activeManeuver() != null }
+
     fun currentApple(): BydAppleManeuver? {
         val maneuver = activeManeuver() ?: return null
         return BydAppleManeuver(
@@ -157,6 +175,7 @@ internal class BydHudRouteState(
                 type == 0x07 && valueLength >= 4 -> remainingMeters = u32(data, value)
                 type == 0x0a && valueLength >= 4 -> {
                     distance = u32(data, value).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    distanceUpdated = true
                 }
                 type == 0x0d -> {
                     listPresent = true

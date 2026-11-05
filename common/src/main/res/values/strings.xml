@@ -973,7 +973,6 @@
     <string name="bluetooth_will_not_stay_on_hint">If Bluetooth will not stay on there, this head unit keeps Bluetooth for its own calls and music, and apps cannot use it. Wireless CarPlay cannot work in that case: use a USB cable.</string>
     <string name="settings_fce_cluster_guidance">Guidance in the FCE cluster (experimental)</string>
     <string name="settings_fce_cluster_guidance_description">Shows CarPlay arrows and the next-turn distance in the instrument cluster’s navigation view on FCE head units, by writing to the head unit’s vehicle service. Tested on one car only; turn it off if the cluster behaves unexpectedly.</string>
-    <string name="settings_pioneer_lan_debug">Local network debugging</string>
     <string name="settings_cluster_music">Music on cluster (experimental)</string>
     <string name="settings_cluster_music_description">Show a square album cover over the cluster map. Choose temporary (8 seconds) or permanent artwork; the title and artist always appear over the cover for 8 seconds when the song changes. Position and size apply immediately. Requires cluster projection and iPhone metadata.</string>
     <string name="settings_cluster_music_mode">Album cover visibility</string>

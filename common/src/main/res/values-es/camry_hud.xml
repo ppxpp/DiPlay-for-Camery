@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_category">Camry</string>
+    <string name="settings_camry_summary">Ajustes específicos de este Camry y su unidad Pioneer</string>
+    <string name="settings_camry_hud_title">Proyección de navegación en el HUD</string>
+    <string name="settings_camry_hud_description">Proyecta CarPlay en el HUD y el cuadro. Desactivarlo detiene la proyección de inmediato.</string>
+    <string name="settings_camry_hud_strategy">Estrategia de aviso</string>
+    <string name="settings_camry_hud_fixed">Distancia fija</string>
+    <string name="settings_camry_hud_by_turn">Por tipo de maniobra</string>
+    <string name="settings_camry_hud_adaptive">Antelación adaptativa (experimental)</string>
+    <string name="settings_camry_hud_fixed_hint">Inicia el aviso dentro de la distancia elegida y mantiene la instrucción actual hasta que cambie.</string>
+    <string name="settings_camry_hud_by_turn_hint">Configura distancias para giros, maniobras complejas y rectas. No se deduce la categoría de la vía.</string>
+    <string name="settings_camry_hud_adaptive_hint">Estima el tiempo a la maniobra con los cambios de distancia. Usa la distancia al detenerse o si los datos no son fiables.</string>
+    <string name="settings_camry_hud_distance">Distancia de aviso</string>
+    <string name="settings_camry_hud_turn_distance">Distancia para giros</string>
+    <string name="settings_camry_hud_complex_distance">Distancia para bifurcaciones, rampas, rotondas y cambios de sentido</string>
+    <string name="settings_camry_hud_straight_distance">Distancia para seguir recto</string>
+    <string name="settings_camry_hud_advance">Antelación</string>
+    <string name="settings_camry_hud_later">Más tarde</string>
+    <string name="settings_camry_hud_standard">Estándar</string>
+    <string name="settings_camry_hud_earlier">Antes</string>
+    <string name="settings_camry_hud_apply_hint">Los cambios se aplican en la siguiente instrucción. La actual se mantiene. No requiere reconectar.</string>
+    <string name="settings_camry_hud_experience_note">CarPlay no expone datos de tipo de vía ni semáforos, así que el momento de proyección se calcula solo según la distancia a la instrucción. La experiencia HUD no puede igualar por completo a la navegación de fábrica.</string>
+    <string name="settings_camry_hud_meters">%1$d m</string>
+</resources>

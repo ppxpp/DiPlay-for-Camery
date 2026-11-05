@@ -56,21 +56,22 @@ class CamryDisplaySettingsTest {
 
     private fun texts(screen: DiPlayActivity) = descendants(screen.window.decorView).filterIsInstance<TextView>()
 
-    @Test fun camryArrowIsOnlyInDisplayAndItsChoicePersists() {
+    @Test fun camryArrowLivesOnTheCamryPageAndItsChoicePersists() {
         val screen = open()
         val title = screen.getString(R.string.settings_camry_hide_bottom_arrow)
-        for (value in listOf(SettingsCategory.VEHICLE, SettingsCategory.ADVANCED, SettingsCategory.CONNECTION)) {
+        for (value in listOf(SettingsCategory.VEHICLE, SettingsCategory.ADVANCED, SettingsCategory.CONNECTION,
+            SettingsCategory.DISPLAY)) {
             category(screen, value)
             assertFalse(texts(screen).any { it.text == title })
         }
-        category(screen, SettingsCategory.DISPLAY)
+        category(screen, SettingsCategory.CAMRY)
         fun control() = descendants(screen.window.decorView).filterIsInstance<Switch>()
             .single { it.contentDescription == title }
         assertTrue(control().isChecked)
         control().performClick()
         assertFalse(ShortcutBarPolicy.hidesBottomArrow(screen))
         category(screen, SettingsCategory.AUDIO)
-        category(screen, SettingsCategory.DISPLAY)
+        category(screen, SettingsCategory.CAMRY)
         assertFalse(control().isChecked)
     }
 
@@ -107,7 +108,7 @@ class CamryDisplaySettingsTest {
     private fun screenshots(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)
         val screen = open()
-        for (value in listOf(SettingsCategory.DISPLAY, SettingsCategory.CONNECTION)) {
+        for (value in listOf(SettingsCategory.CAMRY, SettingsCategory.CONNECTION)) {
             category(screen, value)
             val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
             val metrics = screen.resources.displayMetrics
@@ -115,7 +116,7 @@ class CamryDisplaySettingsTest {
                 View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, View.MeasureSpec.EXACTLY))
             root.layout(0, 0, metrics.widthPixels, metrics.heightPixels)
             shadowOf(Looper.getMainLooper()).idle()
-            val id = if (value == SettingsCategory.DISPLAY) R.string.settings_camry_hide_bottom_arrow
+            val id = if (value == SettingsCategory.CAMRY) R.string.settings_camry_hide_bottom_arrow
                 else R.string.settings_camry_usb_charging_advice
             val label = texts(screen).single { it.text == screen.getString(id) }
             assertTrue(label.width > 0)

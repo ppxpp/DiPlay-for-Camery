@@ -3118,6 +3118,7 @@ class CarPlayHostActivity : ComponentActivity() {
             "display" to R.string.settings_display,
             "navigation" to R.string.settings_navigation,
             "vehicle" to R.string.settings_vehicle,
+            "camry" to R.string.settings_camry_category,
             "diagnostics" to R.string.diagnostics,
             "advanced" to R.string.settings_advanced,
             "more" to R.string.settings_more,
@@ -3234,6 +3235,9 @@ class CarPlayHostActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(12) },
         )
+
+        content = pageFor("camry")
+        content.addView(com.shilapi.xcertplay.settings.CamryHudSettingsSection.create(this, overlayPalette, overlay = true))
 
         if (advancedAudioChannelMappingSupported) {
             content = pageFor("advanced")

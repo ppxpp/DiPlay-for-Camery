@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_category">Camry</string>
+    <string name="settings_camry_summary">Настройки только для этого Camry и его головного устройства Pioneer</string>
+    <string name="settings_camry_hud_title">Проекция навигации на HUD</string>
+    <string name="settings_camry_hud_description">Выводит навигацию CarPlay на HUD и приборную панель. Выключение действует сразу.</string>
+    <string name="settings_camry_hud_strategy">Стратегия подсказок</string>
+    <string name="settings_camry_hud_fixed">Фиксированное расстояние</string>
+    <string name="settings_camry_hud_by_turn">По типу манёвра</string>
+    <string name="settings_camry_hud_adaptive">Адаптивное опережение (экспериментально)</string>
+    <string name="settings_camry_hud_fixed_hint">Подсказка появляется на выбранном расстоянии и сохраняется до смены манёвра.</string>
+    <string name="settings_camry_hud_by_turn_hint">Отдельные расстояния для поворотов, сложных манёвров и движения прямо. Класс дороги не определяется.</string>
+    <string name="settings_camry_hud_adaptive_hint">Время до манёвра оценивается по изменению расстояния. При остановке или ненадёжных данных используется расстояние.</string>
+    <string name="settings_camry_hud_distance">Расстояние опережения</string>
+    <string name="settings_camry_hud_turn_distance">Расстояние для поворотов</string>
+    <string name="settings_camry_hud_complex_distance">Расстояние для развилок, съездов, кругов и разворотов</string>
+    <string name="settings_camry_hud_straight_distance">Расстояние для движения прямо</string>
+    <string name="settings_camry_hud_advance">Опережение подсказок</string>
+    <string name="settings_camry_hud_later">Позже</string>
+    <string name="settings_camry_hud_standard">Обычное</string>
+    <string name="settings_camry_hud_earlier">Раньше</string>
+    <string name="settings_camry_hud_apply_hint">Изменения действуют со следующей инструкции. Текущая сохраняется. Переподключение не требуется.</string>
+    <string name="settings_camry_hud_experience_note">CarPlay не предоставляет данные о категории дороги и светофорах, поэтому момент проекции рассчитывается только по расстоянию до указания, и HUD не может полностью повторить заводскую навигацию.</string>
+    <string name="settings_camry_hud_meters">%1$d м</string>
+</resources>

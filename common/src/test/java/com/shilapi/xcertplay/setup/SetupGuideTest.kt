@@ -102,4 +102,9 @@ class SetupGuideTest {
         assertFalse(SetupGuide.shouldOpenOnLaunch(seen = false, phoneChosen = true))
         assertFalse(SetupGuide.shouldOpenOnLaunch(seen = true, phoneChosen = false))
     }
+
+    @Test fun activeCamryAdaptationSkipsTheLaunchGuide() {
+        assertFalse(SetupGuide.shouldOpenOnLaunch(seen = false, phoneChosen = false, camryAdapted = true))
+        assertTrue(SetupGuide.shouldOpenOnLaunch(seen = false, phoneChosen = false, camryAdapted = false))
+    }
 }

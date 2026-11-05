@@ -931,7 +931,6 @@
     <string name="bluetooth_will_not_stay_on_hint">如果藍牙在那裡開不起來，或開了又自己關掉，代表這台車機的藍牙只供它自己的通話和音樂使用，App 無法使用。這種情況下無法使用無線 CarPlay，請改用 USB 線。</string>
     <string name="settings_fce_cluster_guidance">FCE 儀表導航（實驗性）</string>
     <string name="settings_fce_cluster_guidance_description">在 FCE 平台車機上，透過車機的車輛服務把 CarPlay 轉向箭頭和到下一路口的距離顯示在儀表的導航畫面。僅在一輛車上測試過；如果儀表顯示異常，請關閉。</string>
-    <string name="settings_pioneer_lan_debug">區域網路除錯</string>
     <string name="settings_cluster_music">儀表音樂（實驗性）</string>
     <string name="settings_cluster_music_description">在儀表地圖上顯示方形專輯封面。可選擇暫時（8秒）或常駐封面；切歌時，歌曲名稱和藝人始終在封面上顯示8秒。位置和大小變更立即生效。需要儀表投影及iPhone歌曲資訊。</string>
     <string name="settings_cluster_music_mode">封面顯示模式</string>

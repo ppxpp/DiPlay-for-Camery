@@ -17,3 +17,4 @@ mkdir -p "$wireless_output"
 "$wireless_cc" -fPIE -pie -O2 -Wall -Wextra -Werror "$wireless_source/pioneer_ap_frequency_gate.c" -o "$wireless_output/pioneer-ap-frequency-gate"
 
 "$wireless_cc" -fPIE -pie -O2 -Wall -Wextra -Werror "$wireless_source/pioneer_command_runner.c" -o "$wireless_output/pioneer-command-runner"
+"$wireless_cc" -fPIE -pie -O2 -Wall -Wextra -Werror "$wireless_source/pioneer_hud_runtime_host.c" -o "$wireless_output/pioneer-hud-runtime-host"

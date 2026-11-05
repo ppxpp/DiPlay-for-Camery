@@ -870,7 +870,6 @@
     <string name="bluetooth_will_not_stay_on_hint">إذا لم يبقَ البلوتوث مُشغّلًا هناك، فهذه الوحدة تحتفظ بالبلوتوث لمكالماتها وموسيقاها فقط ولا تستطيع التطبيقات استخدامه. في هذه الحالة لا يمكن أن يعمل CarPlay اللاسلكي: استخدم كابل USB.</string>
     <string name="settings_fce_cluster_guidance">الإرشاد في عدادات FCE (تجريبي)</string>
     <string name="settings_fce_cluster_guidance_description">يعرض أسهم CarPlay ومسافة المنعطف التالي في واجهة الملاحة بلوحة العدادات على وحدات FCE، عبر الكتابة إلى خدمة المركبة في الوحدة. جُرّب على سيارة واحدة فقط؛ أوقفه إذا تصرفت لوحة العدادات بشكل غير متوقع.</string>
-    <string name="settings_pioneer_lan_debug">تصحيح الأخطاء عبر الشبكة المحلية</string>
     <string name="settings_cluster_music">الموسيقى في لوحة العدادات (تجريبي)</string>
     <string name="settings_cluster_music_description">يعرض غلافاً مربعاً فوق خريطة العدادات. اختر غلافاً مؤقتاً لمدة 8 ثوان أو دائماً؛ يظهر العنوان والفنان فوق الغلاف لمدة 8 ثوان عند تغيير الأغنية. تُطبّق تغييرات الموضع والحجم فوراً. يتطلب إسقاط الشاشة وبيانات iPhone.</string>
     <string name="settings_cluster_music_mode">ظهور غلاف الألبوم</string>

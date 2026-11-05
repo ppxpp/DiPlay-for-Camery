@@ -703,14 +703,21 @@ class AdaptiveSettingsUiTest {
         val display = visibleIn(R.string.settings_display)
         val audio = visibleIn(R.string.audio)
         val vehicle = visibleIn(R.string.settings_vehicle)
+        val camry = visibleIn(R.string.settings_camry_category)
+        assertTrue(text(R.string.settings_camry_hud_title) in camry)
+        assertTrue(text(R.string.settings_camry_section) in camry)
+        assertFalse(text(R.string.settings_camry_hud_title) in vehicle)
         val advanced = visibleIn(R.string.settings_advanced)
         val connection = visibleIn(R.string.connection)
 
         assertTrue(display.any { it.startsWith(text(R.string.carplay_dock)) })
         assertFalse(vehicle.any { it.startsWith(text(R.string.carplay_dock)) })
-        assertTrue(text(R.string.settings_camry_hide_bottom_arrow) in display)
+        assertTrue(text(R.string.settings_camry_hide_bottom_arrow) in camry)
+        assertFalse(text(R.string.settings_camry_hide_bottom_arrow) in display)
         assertFalse(text(R.string.settings_camry_hide_bottom_arrow) in vehicle)
         assertFalse(text(R.string.settings_camry_hide_bottom_arrow) in advanced)
+        assertTrue(text(R.string.settings_camry_hotspot_retention_title) in camry)
+        assertFalse(text(R.string.settings_camry_hotspot_retention_title) in connection)
 
         assertTrue(connection.any { it.startsWith(text(R.string.settings_usb_charging)) })
         assertFalse(advanced.any { it.startsWith(text(R.string.settings_usb_charging)) })
@@ -1003,7 +1010,7 @@ class AdaptiveSettingsUiTest {
                 destination.contentDescription?.endsWith(" settings") == true &&
                 descendants(destination).filterIsInstance<ImageView>().count() == 1
         }.toList()
-        assertEquals(10, destinations.size)
+        assertEquals(SettingsCategory.entries.size, destinations.size)
         destinations.forEach { destination ->
             assertEquals(1, descendants(destination).filterIsInstance<ImageView>().count())
         }

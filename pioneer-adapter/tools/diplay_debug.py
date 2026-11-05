@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import subprocess
 import sys
 import time
 
@@ -54,12 +55,18 @@ def request(args, cmd, **fields):
 
 def main():
     parser = argparse.ArgumentParser(description="DiPlay TCP 调试，车机与本机需在同一局域网")
-    parser.add_argument("--host", required=True, help="车机首页显示的 LAN IPv4")
+    parser.add_argument("--host", default="127.0.0.1", help="车机 LAN IPv4；ADB 转发默认使用 127.0.0.1")
+    parser.add_argument("--adb", action="store_true", help="自动建立临时 ADB 端口转发，退出时移除")
+    parser.add_argument("--serial", help="ADB 设备序列号，与 --adb 配合")
     parser.add_argument("--port", type=int, default=8721, help="以 APP 显示的实际端口为准")
     parser.add_argument("--token", default=os.environ.get("DIPLAY_DEBUG_TOKEN"), help="仅兼容旧版服务；新版无需口令")
     parser.add_argument("--timeout", type=float, default=45)
     commands = parser.add_subparsers(dest="cmd", required=True)
     commands.add_parser("status")
+    hud = commands.add_parser("navigation-hud", help="只读 HUD 状态与可选日志采集，不发送模拟导航")
+    hud.add_argument("--action", choices=["STATUS", "START_CAPTURE", "STOP_CAPTURE", "MARK", "READ_CAPTURE"], default="STATUS")
+    hud.add_argument("--label", default="", help="采集批次或事件标记")
+    hud.add_argument("--after-seq", type=int, default=0, help="READ_CAPTURE 的日志游标")
     audio_experiments = commands.add_parser("audio-experiments", help="调试版音频策略；SET/RESET前先stop并等待音频线程退出")
     audio_experiments.add_argument("--action", choices=["STATUS", "SET", "RESET", "FEEDBACK"], default="STATUS")
     audio_experiments.add_argument("--test-id", help="FEEDBACK对应的当前测试编号")
@@ -146,7 +153,14 @@ def main():
     update = commands.add_parser("update")
     update.add_argument("apk")
     args = parser.parse_args()
+    if args.serial and not args.adb:
+        parser.error("--serial requires --adb")
+    adb = ["adb"] + (["-s", args.serial] if args.serial else [])
+    forwarded_port = None
     try:
+        if args.adb:
+            forwarded_port = subprocess.check_output(adb + ["forward", "tcp:0", f"tcp:{args.port}"], text=True).strip()
+            args.host, args.port = "127.0.0.1", int(forwarded_port)
         if args.cmd == "logs":
             offset = args.offset
             decoder = __import__("codecs").getincrementaldecoder("utf-8")(errors="replace")
@@ -162,6 +176,9 @@ def main():
                 time.sleep(1)
         else:
             fields = {"mode": args.mode} if args.cmd in ("audio-source", "usb-mode", "usb-configuration", "network-backend", "lwip-diagnostics", "phone-diagnostics", "native-crypto", "video-priority", "touch-coalescing", "async-session-logs", "freescale-reorder", "audio-clock-trim") else {}
+            if args.cmd == "navigation-hud":
+                fields = {"action": args.action, "label": args.label}
+                if args.action == "READ_CAPTURE": fields["afterSeq"] = args.after_seq
             if args.cmd == "audio-experiments":
                 fields = {"action": args.action}
                 if args.action == "FEEDBACK":
@@ -198,9 +215,12 @@ def main():
                 print(json.dumps(reply, ensure_ascii=False, indent=2))
     except KeyboardInterrupt:
         pass
-    except (OSError, ValueError, RuntimeError) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"失败: {error}", file=sys.stderr)
         return 1
+    finally:
+        if forwarded_port:
+            subprocess.run(adb + ["forward", "--remove", f"tcp:{forwarded_port}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return 0
 
 

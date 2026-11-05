@@ -22,7 +22,9 @@ object PioneerDebugRuntime {
     @Volatile var steeringWheelState = "{}"
     val relayedWheelEventsIgnored = java.util.concurrent.atomic.AtomicLong()
     @Volatile var navigationHudState = "{}"
-    @Volatile var navigationHudLabState = "{}"
+    @Volatile var navigationHudSnapshot: (() -> JSONObject)? = null
+    fun hudSnapshot(): JSONObject = navigationHudSnapshot?.invoke() ?: JSONObject(navigationHudState)
+
     @Volatile var carMicTestState = "{}"
     @Volatile var microphoneUplinkState = "{}"
     @Volatile var siriTestState = "{}"
