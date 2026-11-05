@@ -86,7 +86,7 @@ internal class OwnedPioneerHotspot(private val context: Context, @Volatile priva
             checkCurrent()
             val initial=apState()
             check(initial==11 || initial==13) { "Vehicle hotspot is changing state; retry after it settles" }
-            val config=PioneerHotspotConfiguration.ensure(wifi)
+            val config=PioneerHotspotConfiguration.ensure(context, wifi)
             // SoftApManager on this verified firmware ignores allowedKeyManagement and always
             // configures WPA-PSK + proto WPA2 + CCMP. Verify the running supplicant instead.
             log("Vehicle AP saved keyManagement=${config.allowedKeyManagement}; validating live AP security")
