@@ -1,12 +1,6 @@
-import type { Env, StoredManifest } from "../../../../../../_shared/management";
-import {
-  allReleaseManifests,
-  assetUrl,
-  isManifest,
-  isPublishedRelease,
-  jsonWithEtag,
-  releasePrefix,
-} from "../../../../../../_shared/management";
+import type { Env } from "../../../../../../_shared/management";
+import { assetUrl, jsonWithEtag } from "../../../../../../_shared/management";
+import { openReleaseFor } from "../../../../../../_shared/derived";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ARCH = /^[a-z0-9_-]{1,32}$/;
@@ -19,24 +13,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   if (!appId || !platform || !channel || ![appId, platform, channel].every((value) => SLUG.test(value))) return jsonWithEtag(request, { error: "invalid_path" }, 400);
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return jsonWithEtag(request, { error: "asset_base_url_not_configured" }, 500);
-  const object = await env.META.get(`apps/${appId}/${platform}/${channel}/latest.json`);
-  if (!object) return jsonWithEtag(request, { error: "not_found" }, 404);
-  let manifest: unknown;
-  try { manifest = await object.json(); } catch { return jsonWithEtag(request, { error: "invalid_manifest" }, 502); }
-  if (!isManifest(manifest)) return jsonWithEtag(request, { error: "invalid_manifest" }, 502);
 
-  let stored: StoredManifest = manifest;
-  if (!isPublishedRelease(stored)) {
-    // Keep the last published release visible while a new candidate waits for review.
-    const fallback = (await allReleaseManifests(env.META, releasePrefix(appId, platform, channel)))
-      .filter(({ manifest: release }) => isPublishedRelease(release))
-      .sort((left, right) =>
-        (right.manifest.publishedAt ?? "").localeCompare(left.manifest.publishedAt ?? "") ||
-        right.manifest.versionCode - left.manifest.versionCode,
-      )[0];
-    if (!fallback) return jsonWithEtag(request, { error: "not_found" }, 404);
-    stored = fallback.manifest;
-  }
+  // A release held to a whitelist or a partial rollout is delivered only by the
+  // app's own update check, so the public download keeps the newest full release.
+  const stored = await openReleaseFor(env.META, appId, platform, channel);
+  if (!stored) return jsonWithEtag(request, { error: "not_found" }, 404);
 
   const archParam = new URL(request.url).searchParams.get("arch")?.trim() || null;
   if (archParam !== null && !ARCH.test(archParam)) return jsonWithEtag(request, { error: "invalid_arch" }, 400);

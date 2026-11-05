@@ -6,7 +6,7 @@ import {
   jsonWithEtag,
   releasePrefix,
 } from "../../../../../../_shared/management";
-import { releasesIndexKey, type ReleasesIndex } from "../../../../../../_shared/derived";
+import { isUnrestricted, releasesIndexKey, type ReleasesIndex } from "../../../../../../_shared/derived";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const DEFAULT_LIMIT = 100;
@@ -66,9 +66,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
     return jsonWithEtag(request, { releases }, 200, { cacheTtl: 60 });
   }
 
-  // Unpublished candidates stay out of the public history; published versions keep their entry.
+  // Public history lists delivered and fully rolled out releases; unpublished
+  // candidates and grey releases stay out until they reach everyone.
   const releases = (await allReleaseManifests(env.META, releasePrefix(appId, platform, channel)))
-    .filter(({ manifest }) => isPublishedRelease(manifest))
+    .filter(({ manifest }) => isPublishedRelease(manifest) && isUnrestricted(manifest))
     .slice(0, limit);
   return jsonWithEtag(request, { releases: releases.map(({ manifest }) => ({
     version: manifest.version,
