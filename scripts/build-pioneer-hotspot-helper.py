@@ -9,7 +9,14 @@ if not sdk:
     sdk = re.search(r"(?m)^sdk.dir=(.*)$", (root / "local.properties").read_text())[1]
 sdk = Path(sdk)
 version = re.search(r'(?m)^kotlin = "([^"]+)"', (root / "gradle/libs.versions.toml").read_text())[1]
-stdlib = next(p for p in (Path.home()/".gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib"/version).glob("*/*.jar") if not p.name.endswith(("-sources.jar", "-javadoc.jar")))
+stdlib_cache = Path.home()/".gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib"/version
+# Only the runtime artifact contains bytecode. A generic glob can select the empty -all jar.
+stdlib = next(stdlib_cache.glob(f"*/kotlin-stdlib-{version}.jar"), None)
+if stdlib is None:
+    raise RuntimeError(f"Kotlin runtime {version} is not cached; resolve project dependencies first")
+with zipfile.ZipFile(stdlib) as runtime:
+    if "kotlin/Unit.class" not in runtime.namelist():
+        raise RuntimeError(f"Kotlin runtime artifact has no kotlin.Unit bytecode: {stdlib.name}")
 output.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory() as tmp:
     tmp = Path(tmp)
