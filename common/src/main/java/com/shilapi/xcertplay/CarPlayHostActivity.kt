@@ -6775,7 +6775,7 @@ class CarPlayHostActivity : ComponentActivity() {
         val oldController = controller ?: pendingVehicleTeardown
         val oldSink = sink
         CarPlayMediaKeys.detach(oldController)
-        CarPlayBackgroundSession.clear(oldController)
+        CarPlayBackgroundSession.clear(oldController, expectedOwner = this)
         controller = null
         oldSink?.let(retiringSinks::add)
         sink = null
@@ -7616,8 +7616,12 @@ internal object CarPlayBackgroundSession {
     }
 
     @Synchronized
-    fun clear(expected: CarPlayController? = null, keepOwner: Boolean = false) {
-        if (expected != null && controller !== expected) return
+    fun clear(expected: CarPlayController? = null, keepOwner: Boolean = false, expectedOwner: Any? = null) {
+        if (expected != null && controller !== expected) {
+            // Restart deliberately clears the controller while retaining its owner. That same
+            // owner must still be able to finish shutdown, without clearing a replacement session.
+            if (controller != null || expectedOwner == null || owner !== expectedOwner) return
+        }
         controller = null
         sink = null
         if (!keepOwner) { stopAction = null; owner = null }
