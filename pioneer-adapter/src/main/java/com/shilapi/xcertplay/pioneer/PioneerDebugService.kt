@@ -458,6 +458,8 @@ class PioneerDebugService : Service() {
             .put("usbLaunchPolicy", PioneerUsbLaunchPolicy.snapshot(this))
             .put("sampledAtMs", System.currentTimeMillis())
             .put("navigationHud", JSONObject(PioneerDebugRuntime.navigationHudState))
+            .put("steeringWheel", JSONObject(PioneerDebugRuntime.steeringWheelState)
+                .put("relayedWheelEventsIgnored", PioneerDebugRuntime.relayedWheelEventsIgnored.get()))
             .put("availableWiredBackends", JSONArray(PioneerWiredBackend.availableModes().map { it.name }))
             .put("usbPermissionProbe", PioneerUsbPermissionProbe.status(this))
             .put("vpnPermission", PioneerVpnPermissionGrant.status(this))

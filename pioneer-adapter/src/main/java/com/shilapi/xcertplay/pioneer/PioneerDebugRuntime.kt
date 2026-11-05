@@ -19,6 +19,8 @@ object PioneerDebugRuntime {
     @Volatile var port: Int = 0
     @Volatile var listenerState = "未启动"
     @Volatile var lastCommand = ""
+    @Volatile var steeringWheelState = "{}"
+    val relayedWheelEventsIgnored = java.util.concurrent.atomic.AtomicLong()
     @Volatile var navigationHudState = "{}"
     @Volatile var navigationHudLabState = "{}"
     @Volatile var carMicTestState = "{}"

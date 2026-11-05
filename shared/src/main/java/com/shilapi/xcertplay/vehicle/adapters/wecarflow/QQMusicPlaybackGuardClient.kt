@@ -36,16 +36,20 @@ internal class QQMusicPlaybackGuardClient(
                 4 -> MediaCommand.NEXT; 5 -> MediaCommand.PREVIOUS
                 else -> null
             }
-            val duplicate = if (code == 2) {
-                val signature = data.readString().orEmpty()
-                !com.shilapi.xcertplay.vehicle.adapters.pioneer.PalSteeringWheelInputAdapter.acceptBridgeEvent(signature)
-            } else false
+            // Code 2 is a physical wheel event relayed by the companion. Acknowledge it
+            // without dispatching: only DiPlay's own PAL listener may drive previous/next.
+            // Code 1 remains the companion's explicit playback/UI command channel.
+            val relayedWheel = code == 2
+            if (relayedWheel) data.readString() // Consume the legacy signature; never let it dedupe direct PAL input.
             val client = owner.get()
-            if (client != null && !client.closed && command != null) {
-                client.report("Audio playback: companion command=$command bridgeCode=$code duplicate=$duplicate")
+            val available = client != null && !client.closed && command != null
+            if (available) {
+                if (relayedWheel) {
+                    com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.relayedWheelEventsIgnored.incrementAndGet()
+                    client!!.report("Vehicle: companion wheel relay ignored command=$command policy=PAL_DIRECT")
+                } else client!!.report("Audio playback: companion UI command=$command bridgeCode=$code")
             }
-            val accepted = client != null && !client.closed && command != null &&
-                (duplicate || client.onCommand(command))
+            val accepted = available && (relayedWheel || client!!.onCommand(command!!))
             reply?.writeNoException()
             reply?.writeInt(if (accepted) 1 else 0)
             return true

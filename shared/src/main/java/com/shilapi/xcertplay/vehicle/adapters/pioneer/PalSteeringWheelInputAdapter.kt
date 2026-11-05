@@ -21,8 +21,7 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     private var registeredManager: Any? = null
     private var serviceCallback: Any? = null
     private var keyCallback: Any? = null
-    private var lastEvent: String? = null
-    private var lastAt = 0L
+    private var directEvents = 0L
     private val recentEvents = LinkedHashMap<String, Long>()
 
     fun configure(context: Context) { appContext = context.applicationContext }
@@ -31,7 +30,7 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     override fun start(onCommand: (MediaCommand) -> Unit, report: (String) -> Unit) {
         consumer = onCommand
         this.report = report
-        lastEvent = null
+        publishInputState("starting")
         if (initialized || initializing) return
         val context = appContext ?: return
         initializing = true
@@ -56,6 +55,7 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
                     "onConnected" -> synchronized(this) { register(loader, manager) }
                     "onDisconnected" -> synchronized(this) {
                         registeredManager = null
+                        publishInputState("disconnected")
                         this.report("Vehicle: PAL disconnected")
                     }
                     "onError" -> this.report("Vehicle: PAL service error")
@@ -86,7 +86,7 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     }
 
     @Synchronized
-    override fun stop() { consumer = null; lastEvent = null }
+    override fun stop() { consumer = null; publishInputState("inactive") }
 
     /** Diagnostic microphone access shares the already provisioned SDK and connection. */
     internal fun audioServiceForTest(context: Context): Pair<ClassLoader, Any> {
@@ -172,7 +172,8 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
             }
             cabinType.getMethod("a", listenerType).invoke(cabin, keyCallback)
             registeredManager = cabin
-            report("Vehicle: PAL previous/next listener registered (shared input)")
+            publishInputState("registered")
+            report("Vehicle: PAL previous/next listener registered source=PAL_DIRECT")
         } catch (error: Exception) {
             report("Vehicle: PAL registration failed ${error.javaClass.simpleName}: ${error.message}")
         }
@@ -186,23 +187,37 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
             val key = type.getMethod("getKeyCode").invoke(event) as Int
             val action = type.getMethod("getAction").invoke(event) as Int
             report("Vehicle: PAL key=$key action=$action")
+            publishInputState("event", key, action)
             if (action != 1) return
             val command = when (key) { 8 -> MediaCommand.PREVIOUS; 9 -> MediaCommand.NEXT; else -> return }
             val signature = "$key:${type.getMethod("getSource").invoke(event)}:" +
                 "${type.getMethod("getDownTime").invoke(event)}:${type.getMethod("getEventTime").invoke(event)}"
-            if (acceptBridgeEvent(signature)) target(command)
+            if (acceptDirectEvent(signature)) {
+                directEvents++
+                publishInputState("dispatched", key, action)
+                report("Vehicle: wheel command=$command source=PAL_DIRECT")
+                target(command)
+            }
         }.onFailure { report("Vehicle: PAL event rejected ${it.javaClass.simpleName}") }
     }
 
-    /** Deduplicate one physical event delivered directly and through WeCarFlow's bridge. */
+    /** Deduplicate repeated deliveries from our own PAL subscription only. */
     @Synchronized
-    internal fun acceptBridgeEvent(signature: String): Boolean {
+    internal fun acceptDirectEvent(signature: String): Boolean {
         val now = SystemClock.elapsedRealtime()
         recentEvents.entries.removeAll { now - it.value > 2_000 }
         if (recentEvents.containsKey(signature)) return false
         if (recentEvents.size >= 64) recentEvents.remove(recentEvents.keys.first())
         recentEvents[signature] = now
         return true
+    }
+
+    private fun publishInputState(state: String, key: Int? = null, action: Int? = null) {
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.steeringWheelState = org.json.JSONObject()
+            .put("policy", "PAL_DIRECT").put("state", state).put("registered", registeredManager != null)
+            .put("accepting", consumer != null).put("directEvents", directEvents)
+            .put("lastKey", key ?: org.json.JSONObject.NULL).put("lastAction", action ?: org.json.JSONObject.NULL)
+            .put("updatedAtMs", System.currentTimeMillis()).toString()
     }
 
     private fun proxy(loader: ClassLoader, type: Class<*>, label: String,
