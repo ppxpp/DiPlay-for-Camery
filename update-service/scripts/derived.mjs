@@ -19,7 +19,8 @@ function isManifest(value) {
 
 export function buildReleaseIndex(appId, platform, channel, manifests, now = new Date()) {
   const releases = manifests
-    .filter(isPublishedManifest)
+    // Grey releases join the public history only once they reach everyone.
+    .filter((manifest) => isPublishedManifest(manifest) && isUnrestricted(manifest))
     .sort((left, right) =>
       (right.publishedAt ?? "").localeCompare(left.publishedAt ?? "") ||
       right.versionCode - left.versionCode,

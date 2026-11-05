@@ -99,7 +99,9 @@ export function pickLatestAll(manifests: StoredManifest[]): StoredManifest | nul
 
 export function buildReleaseIndex(appId: string, platform: string, channel: string, manifests: StoredManifest[]): ReleasesIndex {
   const releases = manifests
-    .filter(isPublishedRelease)
+    // A release still held to a whitelist or a partial percentage is not part
+    // of the public history until it rolls out to everyone.
+    .filter((manifest) => isPublishedRelease(manifest) && isUnrestricted(manifest))
     .sort((left, right) =>
       (right.publishedAt ?? "").localeCompare(left.publishedAt ?? "") ||
       right.versionCode - left.versionCode,
@@ -146,6 +148,28 @@ export function pickLatestAny(
     return left.channel === "stable" ? -1 : 1;
   });
   return candidates[0];
+}
+
+// The release a public surface may show: an open live release, otherwise the
+// newest full release. A grey release reaches clients only through the app's
+// own update check, never the download page or the installer.
+export async function openReleaseFor(
+  bucket: R2Bucket,
+  appId: string,
+  platform: string,
+  channel: string,
+): Promise<StoredManifest | null> {
+  const live = await readManifest(bucket, `apps/${appId}/${platform}/${channel}/latest.json`);
+  // No live pointer means the channel has never delivered a release.
+  if (!live) return null;
+  if (isOpenDelivery(live)) return live;
+  const pointer = await readLatestAll(bucket, appId, platform, channel);
+  if (pointer !== undefined) return pointer;
+  // Pointer from an older deploy: derive the answer from the snapshots.
+  const manifests = (await allReleaseManifests(bucket, releasePrefix(appId, platform, channel)))
+    .map(({ manifest }) => manifest)
+    .filter((manifest) => manifest.version !== live.version);
+  return pickLatestAll(manifests);
 }
 
 export async function rebuildReleasesIndex(env: Env, appId: string, platform: string, channel: string): Promise<void> {

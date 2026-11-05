@@ -185,11 +185,13 @@ curl -s -o /dev/null -w "%{http_code}\n" https://diplay.mgulu.com/api/v1/admin/f
 ## Known residual risks
 
 - **Rollout gating is not secrecy.** `percentage`/`whitelist` rely on a
-  self-reported `?id=`; an attacker can probe ids, and `public-latest` still
-  exposes the newest build regardless of the pool. The legacy no-id `latest`
-  path only ever sees full releases, and a client outside a pool is served the
-  channel's newest full release rather than the grey one. Accepted because APKs
-  are public artifacts. If gating must be enforced, move to server-issued tickets.
+  self-reported `?id=`; an attacker who knows a pool id can ask for the grey
+  build. Severity is limited because grey builds are not published anywhere
+  else: the legacy no-id `latest` path only sees full releases, a client outside
+  a pool is served the channel's newest full release, and `public-latest`,
+  `install-kits` and the public history all point at the newest full release.
+  Accepted because APKs are public artifacts. If gating must be enforced, move
+  to server-issued tickets.
 - **Asset bandwidth** is not rate limited by these rules unless you add a rule
   for the asset host; prefer Cloudflare edge caching (already `immutable`).
 - **No WAF managed rules by default** — enable them manually (Layer 1 step 3).

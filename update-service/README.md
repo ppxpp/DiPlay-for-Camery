@@ -48,7 +48,7 @@ A client that is not served the current release — because it misses the whitel
 
 Public `latest`, `public-latest`, `releases` (with `?limit=`, default 100, max 500) and `install-kits` responses carry `Cache-Control: public, max-age=60, s-maxage=60` plus a weak `ETag`; per-client manifests and admin data stay `no-store`. `releases` serves the derived `releases-index.json`, and `latest` serves `latest-any.json` (which mirrors each channel's `latest-all.json` full-release pointer), so a normal request costs one bucket read; a client outside a gray pool adds one read of `latest-all.json`. All three are rebuilt by the publisher and by admin mutations. See `SECURITY.md` for edge rate limiting, caching and the secrets runbook.
 
-The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
+The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. A release held to a whitelist or a partial percentage reaches clients only through this endpoint: `public-latest`, `install-kits` and the public `releases` history all point at the newest full release instead, so a grey build never appears on the download page or in the installer. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 
 The Function reads this private metadata object:
 
@@ -253,7 +253,7 @@ ADMIN_SESSION_SECRET=<local random value, for example from openssl rand -hex 32>
 
 Wrangler loads `.dev.vars` for `npm run dev`; the file is git-ignored. The local username remains the `ADMIN_USERNAME` value in `wrangler.toml` (`admin` by default). Use `http://localhost:8788/admin/` while the dev server is running.
 
-The public `/history/` page lists all permanent release snapshots. It reads a public history API and does not depend on automatic delivery being enabled. The homepage reads `public-latest`; the app update endpoint `latest` applies the release delivery policy and accepts the client's `id` query parameter.
+The public `/history/` page lists every delivered release that has rolled out to everyone; a grey release joins it once its mode becomes 全量. It reads a public history API and does not depend on automatic delivery being enabled. The homepage reads `public-latest`; the app update endpoint `latest` applies the release delivery policy and accepts the client's `id` query parameter.
 
 Repository secrets:
 

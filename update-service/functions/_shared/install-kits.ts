@@ -1,10 +1,9 @@
 import {
   assetUrl,
-  isManifest,
   json,
-  readManifest,
   type StoredManifest,
 } from "./management";
+import { openReleaseFor } from "./derived";
 
 export interface InstallKitEnv {
   META: R2Bucket;
@@ -198,15 +197,16 @@ async function latestDiplayManifest(
   appId: string,
   platform: string,
 ): Promise<{ channel: string; manifest: StoredManifest } | null> {
+  // The installer follows the same rule as the download page: a release in a
+  // whitelist or partial rollout is not public, so it serves the newest full one.
   const loaded: Array<{ channel: string; manifest: StoredManifest | null }> = await Promise.all(
-    KIT_CHANNELS.map(async (channel) => {
-      const manifest = await readManifest(env.META, `apps/${appId}/${platform}/${channel}/latest.json`);
-      return { channel, manifest };
-    }),
+    KIT_CHANNELS.map(async (channel) => ({
+      channel,
+      manifest: await openReleaseFor(env.META, appId, platform, channel),
+    })),
   );
   const candidates = loaded.filter(
-    (item): item is { channel: string; manifest: StoredManifest } =>
-      item.manifest !== null && isManifest(item.manifest) && item.manifest.management?.enabled !== false,
+    (item): item is { channel: string; manifest: StoredManifest } => item.manifest !== null,
   );
   if (candidates.length === 0) return null;
   candidates.sort((left, right) => {

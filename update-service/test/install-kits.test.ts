@@ -33,6 +33,7 @@ function context(bodies: Record<string, unknown>, params: Record<string, string>
           const body = bodies[key];
           return body === undefined ? null : { key, json: async () => body };
         },
+        list: async () => ({ objects: [], truncated: false }),
       },
     },
     params,
@@ -90,6 +91,31 @@ describe("install-kits latest", () => {
     const body = (await response.json()) as any;
     expect(body.apps[0].versionCode).toBe(2100);
     expect(body.apps[0].files[0].downloadUrl).toContain("/stable/");
+  });
+
+  it("serves the previous full release while the live one is grey", async () => {
+    const response = await onRequestGet(
+      context(
+        {
+          [diplayBetaKey]: {
+            ...manifest("0.4.1", 4001, "beta"),
+            management: { enabled: true, mode: "whitelist", ids: ["vghF7E4n8g"], notes: "" },
+          },
+          "apps/diplay/android/beta/latest-all.json": {
+            schemaVersion: 1,
+            updatedAt: "2026-11-05T05:02:07Z",
+            manifest: {
+              ...manifest("0.4.0", 4000, "beta"),
+              management: { enabled: false, published: true, mode: "all", notes: "" },
+            },
+          },
+        },
+        kitParams,
+      ),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.apps[0].versionCode).toBe(4000);
   });
 
   it("skips a disabled channel and serves the enabled one", async () => {
