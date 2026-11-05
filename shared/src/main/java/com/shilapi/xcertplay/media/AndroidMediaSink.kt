@@ -110,9 +110,14 @@ internal class AudioFocusCoordinator(
         runCatching { report("Audio: focus acquire channel=${if (channel == AudioChannel.PHONE) "CALL" else channel.name} streamType=$focusStream enabled=$enabled closed=$closed manager=${manager != null}") }
         if (closed || (!enabled && focusStream == null) || manager == null ||
             (channel == AudioChannel.NAVIGATION && focusStream == null)) return
-        // Pioneer speech uses an independent MIX focus request, but still needs TAI_AUDIO
-        // selected when Siri/navigation is the first sound after connection.
-        if (focusStream != null) ensureVehicleSource()
+        // Selecting TAI_AUDIO generates an automatic PLAY on Pioneer. Guidance and
+        // assistant output use the MIX bus without changing the current source.
+        if (focusStream != null) {
+            if (channel == AudioChannel.NAVIGATION || channel == AudioChannel.ASSISTANT) {
+                runCatching { report("Audio: preserving Pioneer source channel=$channel streamType=$focusStream") }
+            }
+            ensureVehicleSource(channel)
+        }
         if (channel != AudioChannel.PHONE && audioRouting.independentSpeechFocus(attributes)) {
             independentSpeechTracks.add(track)
             if (independentSpeechRequest == null) {
@@ -137,7 +142,8 @@ internal class AudioFocusCoordinator(
     }
 
     @Synchronized
-    fun ensureVehicleSource() {
+    fun ensureVehicleSource(channel: AudioChannel) {
+        if (channel == AudioChannel.NAVIGATION || channel == AudioChannel.ASSISTANT) return
         if (!closed && audioRouting.available) audioRouting.selectMediaSource(report)
     }
 
@@ -2174,7 +2180,9 @@ private class AudioRenderer(
                 diagnosticStage = "packet"
                 queue.poll(AUDIO_POLL_MILLIS, TimeUnit.MILLISECONDS)?.let {
                     val now = System.nanoTime()
-                    if (now - lastAudioInputNs >= 500_000_000L) audioFocusCoordinator.ensureVehicleSource()
+                    if (now - lastAudioInputNs >= 500_000_000L) {
+                        mappedChannel?.let(audioFocusCoordinator::ensureVehicleSource)
+                    }
                     lastAudioInputNs = now
                     com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
                     val decoding = System.nanoTime()
