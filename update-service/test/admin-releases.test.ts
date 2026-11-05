@@ -317,6 +317,25 @@ describe("admin release management", () => {
       .toEqual({ enabled: true, published: true, mode: "all", notes: "" });
   });
 
+  it("accepts the withdrawn scope", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: NEW_NAME,
+      version: "0.2.21",
+      management: { mode: "none", notes: "有问题，撤下" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
+      .toEqual({ enabled: false, mode: "none", notes: "有问题，撤下" });
+  });
+
   it("rejects the retired percentage scope", async () => {
     const bucket = memoryBucket({
       [LATEST_KEY]: manifest(NEW_NAME, 2001),

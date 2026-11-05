@@ -66,6 +66,7 @@ describe("derived models", () => {
     expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "percentage", percentage: 30, notes: "" }, ""))).toBe(false);
     expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "whitelist", ids: ["a"], notes: "" }, ""))).toBe(false);
     expect(isUnrestricted(manifest("0.4.0", 4000, undefined, ""))).toBe(true);
+    expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "none", notes: "" }, ""))).toBe(false);
     // A demoted release keeps its mode but stops being open for delivery.
     expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: false, published: true, mode: "all", notes: "" }, ""))).toBe(true);
     expect(isOpenDelivery(manifest("0.4.0", 4000, { enabled: false, published: true, mode: "all", notes: "" }, ""))).toBe(false);
@@ -83,6 +84,8 @@ describe("derived models", () => {
     // published:true; that demoted full release is still the fallback.
     const demoted = manifest("0.3.0", 3000, { enabled: false, published: true, mode: "all", notes: "" }, "2026-11-01T00:00:00Z");
     expect(pickLatestAll([grey, demoted])?.version).toBe("0.3.0");
+    // A withdrawn release never becomes the fallback.
+    expect(pickLatestAll([grey, manifest("0.3.0", 3000, { enabled: true, published: true, mode: "none", notes: "" }, "2026-11-02T00:00:00Z")])).toBeNull();
     // A candidate that was never delivered is not a fallback.
     expect(pickLatestAll([grey, manifest("0.3.0", 3000, { enabled: false, mode: "all", notes: "" }, "2026-11-01T00:00:00Z")])).toBeNull();
   });
