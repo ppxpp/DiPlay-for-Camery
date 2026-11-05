@@ -63,16 +63,23 @@ export function pickLatestAny(stable, beta) {
   return candidates[0];
 }
 
-export function isFullRollout(manifest) {
+// Mode holds nothing back: full rollout, or a percentage that already covers
+// every client. `enabled` stays out of this test because publishing a newer
+// release sets the previous snapshot to `enabled: false` without erasing it as
+// deliverable history.
+export function isUnrestricted(manifest) {
   const management = manifest?.management;
   if (!management) return true;
-  if (!management.enabled) return false;
   if (management.mode === "all") return true;
   return management.mode === "percentage" && (management.percentage ?? 0) >= 100;
 }
 
+export function isOpenDelivery(manifest) {
+  return manifest?.management?.enabled !== false && isUnrestricted(manifest);
+}
+
 export function pickLatestAll(manifests) {
-  const candidates = manifests.filter((manifest) => isPublishedManifest(manifest) && isFullRollout(manifest));
+  const candidates = manifests.filter((manifest) => isPublishedManifest(manifest) && isUnrestricted(manifest));
   if (candidates.length === 0) return null;
   return candidates.sort((left, right) =>
     (right.publishedAt ?? "").localeCompare(left.publishedAt ?? "") ||
@@ -127,15 +134,22 @@ export async function rebuildDerived({ client, metaBucket, appId, platform, chan
   const index = buildReleaseIndex(appId, platform, channel, manifests);
   await putJson(client, metaBucket, `apps/${appId}/${platform}/${channel}/releases-index.json`, index);
 
-  const fullRollout = pickLatestAll(manifests);
+  const stable = await getJson(client, metaBucket, `apps/${appId}/${platform}/stable/latest.json`);
+  const beta = await getJson(client, metaBucket, `apps/${appId}/${platform}/beta/latest.json`);
+  const live = isManifest(stable) ? stable : null;
+  const liveBeta = isManifest(beta) ? beta : null;
+  // The current release is judged on its own, so a release that was just
+  // switched off never falls back to itself.
+  const current = channel === "stable" ? live : liveBeta;
+  const fullRollout = pickLatestAll(
+    manifests.filter((manifest) => !current || manifest.version !== current.version),
+  );
   await putJson(client, metaBucket, `apps/${appId}/${platform}/${channel}/latest-all.json`, {
     schemaVersion: 1,
     updatedAt: new Date().toISOString(),
     manifest: fullRollout,
   });
 
-  const stable = await getJson(client, metaBucket, `apps/${appId}/${platform}/stable/latest.json`);
-  const beta = await getJson(client, metaBucket, `apps/${appId}/${platform}/beta/latest.json`);
   const otherChannel = channel === "stable" ? "beta" : "stable";
   const otherAll = await getJson(client, metaBucket, `apps/${appId}/${platform}/${otherChannel}/latest-all.json`);
   const all = {
@@ -145,8 +159,8 @@ export async function rebuildDerived({ client, metaBucket, appId, platform, chan
   await putJson(client, metaBucket, `apps/${appId}/${platform}/latest-any.json`, {
     schemaVersion: 1,
     updatedAt: new Date().toISOString(),
-    stable: isManifest(stable) ? stable : null,
-    beta: isManifest(beta) ? beta : null,
+    stable: live,
+    beta: liveBeta,
     ...all,
   });
   log(`Rebuilt derived objects for ${appId}/${platform}/${channel} (${index.releases.length} published releases).`);

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildReleaseIndex,
-  isFullRollout,
+  isOpenDelivery,
+  isUnrestricted,
   latestAllKey,
   pickLatestAll,
   pickLatestAny,
@@ -12,7 +13,8 @@ import { onRequestGet as publicReleases } from "../functions/api/v1/apps/[appId]
 import { latestManifestResponse } from "../functions/_shared/latest";
 import {
   buildReleaseIndex as scriptBuildReleaseIndex,
-  isFullRollout as scriptIsFullRollout,
+  isOpenDelivery as scriptIsOpenDelivery,
+  isUnrestricted as scriptIsUnrestricted,
   pickLatestAll as scriptPickLatestAll,
   pickLatestAny as scriptPickLatestAny,
 } from "../scripts/derived.mjs";
@@ -58,13 +60,16 @@ describe("derived models", () => {
     expect(pickLatestAny(null, null)).toBeNull();
   });
 
-  it("counts only an unrestricted release as full rollout", () => {
-    expect(isFullRollout(manifest("0.4.0", 4000, { enabled: true, mode: "all", notes: "" }, ""))).toBe(true);
-    expect(isFullRollout(manifest("0.4.0", 4000, { enabled: true, mode: "percentage", percentage: 100, notes: "" }, ""))).toBe(true);
-    expect(isFullRollout(manifest("0.4.0", 4000, { enabled: true, mode: "percentage", percentage: 30, notes: "" }, ""))).toBe(false);
-    expect(isFullRollout(manifest("0.4.0", 4000, { enabled: true, mode: "whitelist", ids: ["a"], notes: "" }, ""))).toBe(false);
-    expect(isFullRollout(manifest("0.4.0", 4000, { enabled: false, mode: "all", notes: "" }, ""))).toBe(false);
-    expect(isFullRollout(manifest("0.4.0", 4000, undefined, ""))).toBe(true);
+  it("separates an unrestricted mode from an open release", () => {
+    expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "all", notes: "" }, ""))).toBe(true);
+    expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "percentage", percentage: 100, notes: "" }, ""))).toBe(true);
+    expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "percentage", percentage: 30, notes: "" }, ""))).toBe(false);
+    expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: true, mode: "whitelist", ids: ["a"], notes: "" }, ""))).toBe(false);
+    expect(isUnrestricted(manifest("0.4.0", 4000, undefined, ""))).toBe(true);
+    // A demoted release keeps its mode but stops being open for delivery.
+    expect(isUnrestricted(manifest("0.4.0", 4000, { enabled: false, published: true, mode: "all", notes: "" }, ""))).toBe(true);
+    expect(isOpenDelivery(manifest("0.4.0", 4000, { enabled: false, published: true, mode: "all", notes: "" }, ""))).toBe(false);
+    expect(isOpenDelivery(manifest("0.4.0", 4000, { enabled: true, mode: "all", notes: "" }, ""))).toBe(true);
   });
 
   it("picks the newest full release and skips grey ones", () => {
@@ -74,20 +79,24 @@ describe("derived models", () => {
     expect(pickLatestAll([grey, full, older])?.version).toBe("0.4.0");
     expect(pickLatestAll([grey, older])?.version).toBe("0.3.0");
     expect(pickLatestAll([grey])).toBeNull();
-    expect(
-      pickLatestAll([manifest("0.4.0", 4000, { enabled: false, mode: "all", notes: "" }, "2026-11-04T00:00:00Z")]),
-    ).toBeNull();
+    // Publishing a newer release leaves the previous snapshot enabled:false but
+    // published:true; that demoted full release is still the fallback.
+    const demoted = manifest("0.3.0", 3000, { enabled: false, published: true, mode: "all", notes: "" }, "2026-11-01T00:00:00Z");
+    expect(pickLatestAll([grey, demoted])?.version).toBe("0.3.0");
+    // A candidate that was never delivered is not a fallback.
+    expect(pickLatestAll([grey, manifest("0.3.0", 3000, { enabled: false, mode: "all", notes: "" }, "2026-11-01T00:00:00Z")])).toBeNull();
   });
 
   it("keeps the publisher script's full-rollout rules in sync", () => {
     const inputs = [
       manifest("0.4.1", 4001, { enabled: true, mode: "whitelist", ids: ["a"], notes: "" }, "2026-11-05T00:00:00Z"),
       manifest("0.4.0", 4000, { enabled: true, mode: "percentage", percentage: 100, notes: "" }, "2026-11-04T00:00:00Z"),
-      manifest("0.3.0", 3000, { enabled: true, mode: "all", notes: "" }, "2026-11-01T00:00:00Z"),
+      manifest("0.3.0", 3000, { enabled: false, published: true, mode: "all", notes: "" }, "2026-11-01T00:00:00Z"),
     ];
     expect(scriptPickLatestAll(inputs)?.version).toBe(pickLatestAll(inputs)?.version);
     for (const input of inputs) {
-      expect(scriptIsFullRollout(input)).toBe(isFullRollout(input));
+      expect(scriptIsUnrestricted(input)).toBe(isUnrestricted(input));
+      expect(scriptIsOpenDelivery(input)).toBe(isOpenDelivery(input));
     }
   });
 
@@ -237,5 +246,34 @@ describe("admin mutation keeps derived objects fresh", () => {
     // The other channel was never derived, so its pointer stays absent rather
     // than claiming the channel has no full release.
     expect("betaAll" in any).toBe(false);
+  });
+
+  it("never points a full release at itself", async () => {
+    const current = manifest("0.4.0", 4000, { enabled: true, mode: "all", notes: "" }, "2026-11-04T00:00:00Z");
+    const demoted = manifest("0.3.0", 3000, { enabled: false, published: true, mode: "all", notes: "" }, "2026-11-01T00:00:00Z");
+    const bodies: Record<string, unknown> = {
+      "apps/diplay/android/stable/latest.json": current,
+      "apps/diplay/android/stable/releases/0.4.0.json": current,
+      "apps/diplay/android/stable/releases/0.3.0.json": demoted,
+    };
+    const writes = new Map<string, unknown>();
+    const env = {
+      META: {
+        get: async (key: string) => {
+          const body = bodies[key];
+          return body ? { key, json: async () => body } : null;
+        },
+        list: async ({ prefix }: { prefix: string }) => ({
+          objects: [`${prefix}0.4.0.json`, `${prefix}0.3.0.json`].map((key) => ({ key })),
+          truncated: false,
+        }),
+        put: async (key: string, body: string) => { writes.set(key, JSON.parse(body)); },
+      },
+    } as never;
+
+    await rebuildDerived(env, "diplay", "android", "stable");
+
+    const pointer = writes.get(latestAllKey("diplay", "android", "stable")) as { manifest: { version: string } | null };
+    expect(pointer.manifest?.version).toBe("0.3.0");
   });
 });
