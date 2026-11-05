@@ -13308,4 +13308,389 @@
             column="71"/>
     </issue>
 
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="    private val descriptionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->"
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/com/shilapi/xcertplay/feedback/FeedbackActivity.kt"
+            line="101"
+            column="39"/>
+    </issue>
+
 </issues>
