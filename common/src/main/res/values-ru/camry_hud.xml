@@ -22,4 +22,5 @@
     <string name="settings_camry_hud_apply_hint">Изменения действуют со следующей инструкции. Текущая сохраняется. Переподключение не требуется.</string>
     <string name="settings_camry_hud_experience_note">CarPlay не предоставляет данные о категории дороги и светофорах, поэтому момент проекции рассчитывается только по расстоянию до указания, и HUD не может полностью повторить заводскую навигацию.</string>
     <string name="settings_camry_hud_meters">%1$d м</string>
+    <string name="settings_camry_hud_adaptive_values">Повороты: %1$d с / %2$d м; сложные манёвры: %3$d с / %4$d м; прямо: %5$d с / %6$d м (время опережения / минимальная дистанция). Максимальные дистанции: %7$d / %8$d / %9$d м.</string>
 </resources>

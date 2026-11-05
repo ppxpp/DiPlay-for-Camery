@@ -5,7 +5,21 @@ import kotlin.math.abs
 
 /** User choices are independent of the OEM road/cross-image metadata. */
 enum class CamryHudStrategy { FIXED_DISTANCE, MANEUVER_DISTANCE, ADAPTIVE }
-enum class CamryHudAdvance(val factor: Double) { LATER(0.75), STANDARD(1.0), EARLIER(1.3) }
+enum class CamryHudAdvance(
+    val turnSeconds: Int, val turnFloorMeters: Int,
+    val complexSeconds: Int, val complexFloorMeters: Int,
+    val straightSeconds: Int, val straightFloorMeters: Int,
+) {
+    LATER(20, 200, 35, 400, 10, 100),
+    STANDARD(26, 250, 45, 500, 13, 120),
+    EARLIER(32, 300, 55, 600, 16, 150);
+
+    companion object {
+        const val TURN_MAX_METERS = 800
+        const val COMPLEX_MAX_METERS = 1500
+        const val STRAIGHT_MAX_METERS = 300
+    }
+}
 data class CamryHudConfig(
     val enabled: Boolean = true,
     val strategy: CamryHudStrategy = CamryHudStrategy.ADAPTIVE,
@@ -190,14 +204,15 @@ internal class CamryHudPolicy {
                 thresholdMeters = fallback
             }
             CamryHudStrategy.ADAPTIVE -> {
-                val seconds: Double
+                val seconds: Int
                 val maximum: Int
+                val advance = config.advance
                 when (kind) {
-                    Kind.TURN -> { fallback = 150; seconds = 20.0; maximum = 600 }
-                    Kind.COMPLEX -> { fallback = 300; seconds = 35.0; maximum = 1200 }
-                    Kind.STRAIGHT -> { fallback = 80; seconds = 10.0; maximum = 200 }
+                    Kind.TURN -> { fallback = advance.turnFloorMeters; seconds = advance.turnSeconds; maximum = CamryHudAdvance.TURN_MAX_METERS }
+                    Kind.COMPLEX -> { fallback = advance.complexFloorMeters; seconds = advance.complexSeconds; maximum = CamryHudAdvance.COMPLEX_MAX_METERS }
+                    Kind.STRAIGHT -> { fallback = advance.straightFloorMeters; seconds = advance.straightSeconds; maximum = CamryHudAdvance.STRAIGHT_MAX_METERS }
                 }
-                val lead = seconds * config.advance.factor
+                val lead = seconds.toDouble()
                 thresholdMeters = ((speedMps ?: 0.0) * lead).toInt().coerceIn(fallback, maximum)
                 timeReached = etaSeconds?.let { it <= lead && next.distance <= maximum } == true
             }

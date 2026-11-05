@@ -22,4 +22,5 @@
     <string name="settings_camry_hud_apply_hint">Strategy and parameter changes apply at the next instruction. Current guidance stays stable. No reconnection needed.</string>
     <string name="settings_camry_hud_experience_note">CarPlay does not expose road class or traffic-signal data, so projection timing is estimated from guidance distance only. The HUD experience cannot fully match the factory navigation.</string>
     <string name="settings_camry_hud_meters">%1$d m</string>
+    <string name="settings_camry_hud_adaptive_values">Turns: %1$d s / %2$d m; complex: %3$d s / %4$d m; straight: %5$d s / %6$d m (lead time / minimum distance). Maximum distances: %7$d / %8$d / %9$d m.</string>
 </resources>

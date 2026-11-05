@@ -22,4 +22,5 @@
     <string name="settings_camry_hud_apply_hint">Los cambios se aplican en la siguiente instrucción. La actual se mantiene. No requiere reconectar.</string>
     <string name="settings_camry_hud_experience_note">CarPlay no expone datos de tipo de vía ni semáforos, así que el momento de proyección se calcula solo según la distancia a la instrucción. La experiencia HUD no puede igualar por completo a la navegación de fábrica.</string>
     <string name="settings_camry_hud_meters">%1$d m</string>
+    <string name="settings_camry_hud_adaptive_values">Giros: %1$d s / %2$d m; maniobras complejas: %3$d s / %4$d m; recto: %5$d s / %6$d m (antelación / distancia mínima). Distancias máximas: %7$d / %8$d / %9$d m.</string>
 </resources>

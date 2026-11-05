@@ -22,4 +22,5 @@
     <string name="settings_camry_hud_apply_hint">策略和参数修改从下一引导点生效，当前提示保持稳定，无需重新连接。</string>
     <string name="settings_camry_hud_experience_note">CarPlay 不开放道路等级、红绿灯等数据，本应用只能按引导点距离推算投射时机，HUD 体验无法完全等同原车导航。</string>
     <string name="settings_camry_hud_meters">%1$d米</string>
+    <string name="settings_camry_hud_adaptive_values">普通转向：%1$d秒 / %2$d米；复杂路口：%3$d秒 / %4$d米；直行：%5$d秒 / %6$d米（提前时间 / 保底距离）。最大提前距离分别为%7$d / %8$d / %9$d米。</string>
 </resources>

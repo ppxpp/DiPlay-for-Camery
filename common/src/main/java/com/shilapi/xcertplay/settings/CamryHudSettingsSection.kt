@@ -25,9 +25,10 @@ internal object CamryHudSettingsSection {
         fun text(id: Int) = context.getString(id)
         val root = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val details = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        fun note(parent: LinearLayout, id: Int) {
+        fun note(parent: LinearLayout, id: Int, vararg args: Any) {
             parent.addView(TextView(context).apply {
-                setText(id); textSize = 14f; setTextColor(theme.textSecondary)
+                text = if (args.isEmpty()) context.getString(id) else context.getString(id, *args)
+                textSize = 14f; setTextColor(theme.textSecondary)
             }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = theme.dp(context, BLOCK_GAP_DP) })
         }
         fun button(parent: LinearLayout, title: String, click: () -> Unit) {
@@ -85,7 +86,13 @@ internal object CamryHudSettingsSection {
                         text(R.string.settings_camry_hud_standard), text(R.string.settings_camry_hud_earlier)), config.advance.ordinal) {
                         CamryHudSettings.save(context, CamryHudSettings.load(context).copy(advance = CamryHudAdvance.entries[it]))
                     }
-
+                    val timing = config.advance
+                    note(details, R.string.settings_camry_hud_adaptive_values,
+                        timing.turnSeconds, timing.turnFloorMeters,
+                        timing.complexSeconds, timing.complexFloorMeters,
+                        timing.straightSeconds, timing.straightFloorMeters,
+                        CamryHudAdvance.TURN_MAX_METERS, CamryHudAdvance.COMPLEX_MAX_METERS,
+                        CamryHudAdvance.STRAIGHT_MAX_METERS)
                 }
             }
             note(details, R.string.settings_camry_hud_apply_hint)

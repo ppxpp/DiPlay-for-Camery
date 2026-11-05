@@ -22,4 +22,5 @@
     <string name="settings_camry_hud_apply_hint">変更は次の案内から適用されます。現在の案内は維持され、再接続は不要です。</string>
     <string name="settings_camry_hud_experience_note">CarPlay は道路種別や信号などのデータを公開していないため、投射タイミングは案内地点までの距離から推定するしかなく、HUD の体験は純正ナビと完全には同等になりません。</string>
     <string name="settings_camry_hud_meters">%1$d m</string>
+    <string name="settings_camry_hud_adaptive_values">通常の曲がり角：%1$d秒 / %2$dm、複雑な分岐：%3$d秒 / %4$dm、直進：%5$d秒 / %6$dm（先行時間 / 最低案内距離）。最大距離はそれぞれ%7$dm / %8$dm / %9$dmです。</string>
 </resources>

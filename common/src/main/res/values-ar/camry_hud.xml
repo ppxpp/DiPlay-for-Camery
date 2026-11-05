@@ -22,4 +22,5 @@
     <string name="settings_camry_hud_apply_hint">تطبق التغييرات عند التعليمة التالية وتبقى الحالية مستقرة. لا حاجة لإعادة الاتصال.</string>
     <string name="settings_camry_hud_experience_note">لا يوفّر CarPlay بيانات فئة الطريق وإشارات المرور، لذلك يُحدَّد توقيت العرض على أساس المسافة إلى نقطة التوجيه فقط، ولا يمكن أن تطابق تجربة HUD تجربة ملاحة السيارة الأصلية بالكامل.</string>
     <string name="settings_camry_hud_meters">%1$d م</string>
+    <string name="settings_camry_hud_adaptive_values">الانعطاف: %1$d ث / %2$d م؛ المناورات المعقدة: %3$d ث / %4$d م؛ السير المستقيم: %5$d ث / %6$d م (زمن التنبيه المسبق / الحد الأدنى للمسافة). الحد الأقصى للمسافة: %7$d / %8$d / %9$d م.</string>
 </resources>
