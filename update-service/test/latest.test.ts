@@ -402,6 +402,38 @@ describe("latest update manifest", () => {
     expect(body.versionCode).toBe(120);
   });
 
+  it("falls back to the previous full release when the current one is withdrawn", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: true, mode: "none", notes: "" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      },
+    }, clientUrl));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).versionCode).toBe(120);
+  });
+
+  it("reports no update when the current release is withdrawn and nothing else is deliverable", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        management: { enabled: true, mode: "none", notes: "" },
+      },
+      [stableAllKey]: { schemaVersion: 1, updatedAt: "2026-11-05T00:00:00Z", manifest: null },
+    }, clientUrl));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "update_unavailable" });
+  });
+
   it("serves the test channel when the request names no usable channel", async () => {
     const response = await onRequestGet(keyedContext(
       { appId: "diplay", platform: "android", channel: "Beta" },

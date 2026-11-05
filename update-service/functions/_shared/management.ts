@@ -3,8 +3,9 @@ export interface ReleaseManagement {
   enabled: boolean;
   /** Set once an admin first enables delivery; stays true so history keeps every published version. */
   published?: boolean;
-  /** `percentage` is legacy data only: the admin API now accepts `all` and `whitelist`. */
-  mode: "all" | "percentage" | "whitelist";
+  /** `percentage` is legacy data only. `none` withdraws a release: it stays on record
+   *  but is never delivered, offered as a fallback, or listed publicly. */
+  mode: "all" | "percentage" | "whitelist" | "none";
   percentage?: number;
   ids?: string[];
   notes: string;
@@ -12,7 +13,7 @@ export interface ReleaseManagement {
 
 /** What an admin edits on a release. Whether clients see it is decided by it being the current release. */
 export interface ReleaseScope {
-  mode: "all" | "whitelist";
+  mode: "all" | "whitelist" | "none";
   ids?: string[];
   notes: string;
 }
@@ -120,7 +121,7 @@ export function isManifest(value: unknown): value is StoredManifest {
     const management = manifest.management as Record<string, unknown> | null;
     if (!management || typeof management !== "object" || typeof management.enabled !== "boolean" ||
       (management.published !== undefined && typeof management.published !== "boolean") ||
-      !["all", "percentage", "whitelist"].includes(String(management.mode)) ||
+      !["all", "percentage", "whitelist", "none"].includes(String(management.mode)) ||
       typeof management.notes !== "string" || management.notes.length > 10000) return false;
     if (management.mode === "percentage" && (!Number.isInteger(management.percentage) || Number(management.percentage) < 0 || Number(management.percentage) > 100)) return false;
     if (management.mode === "whitelist" && (!Array.isArray(management.ids) || management.ids.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)))) return false;
@@ -182,7 +183,7 @@ export async function allReleaseManifests(
 export function parseScope(value: unknown): ReleaseScope | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
-  if (input.mode !== "all" && input.mode !== "whitelist") return null;
+  if (input.mode !== "all" && input.mode !== "whitelist" && input.mode !== "none") return null;
   if (typeof input.notes !== "string" || input.notes.length > 10000) return null;
   if (input.mode === "whitelist" && (!Array.isArray(input.ids) || input.ids.length > 50000 || input.ids.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)))) return null;
   return {
@@ -194,6 +195,7 @@ export function parseScope(value: unknown): ReleaseScope | null {
 
 export async function mayDeliver(management: ReleaseManagement, id: string | null): Promise<boolean> {
   if (!management.enabled) return false;
+  if (management.mode === "none") return false;
   if (management.mode === "all") return true;
   if (!id) return false;
   if (management.mode === "whitelist") return management.ids?.includes(id) ?? false;

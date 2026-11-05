@@ -11,7 +11,7 @@ type Management = {
   enabled?: boolean;
   published?: boolean;
   // 'percentage' only survives on releases configured before it was retired.
-  mode: 'all' | 'percentage' | 'whitelist';
+  mode: 'all' | 'percentage' | 'whitelist' | 'none';
   ids?: string[];
   notes: string;
 };
@@ -420,6 +420,7 @@ onUnmounted(() => {
                 <select v-model="release.management!.mode">
                   <option value="all">全量</option>
                   <option value="whitelist">白名单</option>
+                  <option value="none">不下发（撤下）</option>
                   <option v-if="release.management!.mode === 'percentage'" value="percentage" disabled>
                     按比例（旧配置，请改为全量或白名单）
                   </option>
@@ -442,7 +443,10 @@ onUnmounted(() => {
                 该版本仍是旧的“按比例”配置：保存前请改成“全量”或“白名单”。
               </p>
               <p class="release-meta wide-field">
-                发布范围决定谁能拿到这个版本：命中的客户端通过 App 自动更新获取；未命中的客户端、以及不带 id 的客户端，都只拿本渠道最近的全量版本。官网下载和装车助手同样只使用全量版本。要停止下发当前版本，把“当前版本”设为其他版本。
+                发布范围决定谁能拿到这个版本：命中的客户端通过 App 自动更新获取；未命中的客户端、以及不带 id 的客户端，都只拿本渠道最近的全量版本。官网下载和装车助手同样只使用全量版本。
+              </p>
+              <p v-if="release.management!.mode === 'none'" class="release-meta wide-field">
+                该版本已撤下：保留发布记录，但不会下发给任何客户端，也不会出现在官网、装车助手和公开历史里。若是当前版本，客户端会回退到本渠道最近的全量版本。
               </p>
               <label class="wide-field">
                 发布说明

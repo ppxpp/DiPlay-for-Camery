@@ -71,6 +71,7 @@ export function pickLatestAny(stable, beta) {
 export function isUnrestricted(manifest) {
   const management = manifest?.management;
   if (!management) return true;
+  if (management.mode === "none") return false;
   if (management.mode === "all") return true;
   return management.mode === "percentage" && (management.percentage ?? 0) >= 100;
 }

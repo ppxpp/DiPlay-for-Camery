@@ -140,6 +140,27 @@ describe("public release visibility", () => {
     expect((await response.json() as { versionCode: number }).versionCode).toBe(4000);
   });
 
+  it("keeps a withdrawn release off the download page and the history", async () => {
+    const withdrawn = { ...release("0.4.1", 4001, true, "2026-11-05T05:02:07Z"), management: { enabled: true, mode: "none", notes: "" } };
+    const full = release("0.4.0", 4000, true, "2026-10-30T13:23:29Z");
+
+    const download = await publicLatest(context({
+      [latestKey]: withdrawn,
+      [`${snapshots}0.4.1.json`]: withdrawn,
+      [`${snapshots}0.4.0.json`]: full,
+    }));
+    expect(download.status).toBe(200);
+    expect((await download.json() as { versionCode: number }).versionCode).toBe(4000);
+
+    const history = await publicReleases(context({
+      [`${snapshots}0.4.1.json`]: withdrawn,
+      [`${snapshots}0.4.0.json`]: full,
+    }));
+    expect(history.status).toBe(200);
+    const body = await history.json() as { releases: Array<{ versionCode: number }> };
+    expect(body.releases.map((item) => item.versionCode)).toEqual([4000]);
+  });
+
   it("hides a grey release from the public history", async () => {
     const grey = { ...release("0.4.1", 4001, true, "2026-11-05T05:02:07Z"), management: { enabled: true, mode: "whitelist", ids: ["a"], notes: "" } };
     const full = release("0.4.0", 4000, true, "2026-10-30T13:23:29Z");

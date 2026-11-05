@@ -75,6 +75,7 @@ export function latestAllKey(appId: string, platform: string, channel: string): 
 export function isUnrestricted(manifest: StoredManifest): boolean {
   const management = manifest.management;
   if (!management) return true;
+  if (management.mode === "none") return false;
   if (management.mode === "all") return true;
   return management.mode === "percentage" && (management.percentage ?? 0) >= 100;
 }
