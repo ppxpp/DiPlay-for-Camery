@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createSession, sessionCookieName } from "../functions/_shared/admin-auth";
 import { onRequestDelete, onRequestGet, onRequestPost, onRequestPut } from "../functions/api/v1/admin/releases";
+import { latestManifestResponse } from "../functions/_shared/latest";
 
 const ADMIN_SECRET = "test-session-secret";
 const ADMIN_USERNAME = "admin";
@@ -218,6 +219,37 @@ describe("admin release management", () => {
     expect(response.status).toBe(200);
     expect(bucket.store.has(`${PREFIX}${NEW_NAME}.json`)).toBe(false);
     expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
+    // The replacement is delivered, not merely pointed at.
+    expect(stored(bucket, LATEST_KEY).management).toMatchObject({ enabled: true, published: true });
+    expect(stored(bucket, `${PREFIX}${OLD_NAME}.json`).management).toMatchObject({ enabled: true, published: true });
+  });
+
+  it("deleting the current grey release hands clients the previous full release", async () => {
+    const grey = { ...manifest(NEW_NAME, 2001), management: { enabled: true, mode: "whitelist", ids: ["vghF7E4n8g"], notes: "" } };
+    const demoted = { ...manifest(OLD_NAME, 2000), management: { enabled: false, published: true, mode: "all", notes: "" } };
+    const bucket = memoryBucket({
+      [LATEST_KEY]: grey,
+      [`${PREFIX}${NEW_NAME}.json`]: grey,
+      [`${PREFIX}${OLD_NAME}.json`]: demoted,
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await deleteCall(env, headers, `channel=beta&releaseKey=${encodeURIComponent(NEW_NAME)}&version=0.2.21`);
+    expect(response.status).toBe(200);
+
+    const delivered = stored(bucket, LATEST_KEY);
+    expect(delivered.versionName).toBe(OLD_NAME);
+    expect(delivered.management).toMatchObject({ enabled: true, published: true, mode: "all" });
+
+    const update = await latestManifestResponse(
+      new Request("https://upd.example.com/api/v1/apps/diplay/android/beta/latest?id=vghF7E4n8g"),
+      env,
+      "diplay",
+      "android",
+      "beta",
+    );
+    expect(update.status).toBe(200);
+    expect(((await update.json()) as { versionName: string }).versionName).toBe(OLD_NAME);
   });
 
   it("removes the pointer when the last release is deleted", async () => {
