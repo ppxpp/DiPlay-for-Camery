@@ -44,6 +44,16 @@ export interface LatestAnySnapshot {
   updatedAt: string;
   stable: StoredManifest | null;
   beta: StoredManifest | null;
+  // Newest full-rollout release per channel. Absent when the snapshot predates
+  // the pointer, which readers treat as "not derived yet" rather than "none".
+  stableAll?: StoredManifest | null;
+  betaAll?: StoredManifest | null;
+}
+
+export interface LatestAllSnapshot {
+  schemaVersion: 1;
+  updatedAt: string;
+  manifest: StoredManifest | null;
 }
 
 export function releasesIndexKey(appId: string, platform: string, channel: string): string {
@@ -52,6 +62,30 @@ export function releasesIndexKey(appId: string, platform: string, channel: strin
 
 export function latestAnyKey(appId: string, platform: string): string {
   return `apps/${appId}/${platform}/latest-any.json`;
+}
+
+export function latestAllKey(appId: string, platform: string, channel: string): string {
+  return `apps/${appId}/${platform}/${channel}/latest-all.json`;
+}
+
+// A release every client may receive: delivery is on and the release is not
+// held back by a whitelist or a rollout percentage. 100% counts as full because
+// it already reaches every client.
+export function isFullRollout(manifest: StoredManifest): boolean {
+  const management = manifest.management;
+  if (!management) return true;
+  if (!management.enabled) return false;
+  if (management.mode === "all") return true;
+  return management.mode === "percentage" && (management.percentage ?? 0) >= 100;
+}
+
+export function pickLatestAll(manifests: StoredManifest[]): StoredManifest | null {
+  const candidates = manifests.filter((manifest) => isPublishedRelease(manifest) && isFullRollout(manifest));
+  if (candidates.length === 0) return null;
+  return candidates.sort((left, right) =>
+    (right.publishedAt ?? "").localeCompare(left.publishedAt ?? "") ||
+    right.versionCode - left.versionCode,
+  )[0];
 }
 
 export function buildReleaseIndex(appId: string, platform: string, channel: string, manifests: StoredManifest[]): ReleasesIndex {
@@ -112,7 +146,46 @@ export async function rebuildReleasesIndex(env: Env, appId: string, platform: st
   await putJson(env.META, releasesIndexKey(appId, platform, channel), index);
 }
 
-export async function rebuildLatestAny(env: Env, appId: string, platform: string): Promise<void> {
+// undefined means the pointer object does not exist yet, which is different
+// from a pointer that says no full-rollout release exists.
+export async function readLatestAll(
+  bucket: R2Bucket,
+  appId: string,
+  platform: string,
+  channel: string,
+): Promise<StoredManifest | null | undefined> {
+  const object = await bucket.get(latestAllKey(appId, platform, channel));
+  if (!object) return undefined;
+  try {
+    const value = await object.json<Record<string, unknown>>();
+    if (!value || value.schemaVersion !== 1) return undefined;
+    if (value.manifest === null) return null;
+    return isManifest(value.manifest) ? value.manifest : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function rebuildLatestAll(
+  env: Env,
+  appId: string,
+  platform: string,
+  channel: string,
+): Promise<StoredManifest | null> {
+  const manifests = (await allReleaseManifests(env.META, releasePrefix(appId, platform, channel)))
+    .map(({ manifest }) => manifest);
+  const manifest = pickLatestAll(manifests);
+  const snapshot: LatestAllSnapshot = { schemaVersion: 1, updatedAt: new Date().toISOString(), manifest };
+  await putJson(env.META, latestAllKey(appId, platform, channel), snapshot);
+  return manifest;
+}
+
+export async function rebuildLatestAny(
+  env: Env,
+  appId: string,
+  platform: string,
+  all?: { stable: StoredManifest | null | undefined; beta: StoredManifest | null | undefined },
+): Promise<void> {
   const [stable, beta] = await Promise.all([
     readManifest(env.META, `apps/${appId}/${platform}/stable/latest.json`),
     readManifest(env.META, `apps/${appId}/${platform}/beta/latest.json`),
@@ -122,15 +195,25 @@ export async function rebuildLatestAny(env: Env, appId: string, platform: string
     updatedAt: new Date().toISOString(),
     stable,
     beta,
+    // Only write a pointer the rebuild actually resolved; an unknown one must
+    // stay absent so readers fall back instead of reporting "no full release".
+    ...(all?.stable !== undefined ? { stableAll: all.stable } : {}),
+    ...(all?.beta !== undefined ? { betaAll: all.beta } : {}),
   };
   await putJson(env.META, latestAnyKey(appId, platform), snapshot);
 }
 
 export async function rebuildDerived(env: Env, appId: string, platform: string, channel: string): Promise<void> {
   try {
+    const otherChannel = channel === "stable" ? "beta" : "stable";
+    const [mutated, other] = await Promise.all([
+      rebuildLatestAll(env, appId, platform, channel),
+      readLatestAll(env.META, appId, platform, otherChannel),
+    ]);
+    const all = channel === "stable" ? { stable: mutated, beta: other } : { stable: other, beta: mutated };
     await Promise.all([
       rebuildReleasesIndex(env, appId, platform, channel),
-      rebuildLatestAny(env, appId, platform),
+      rebuildLatestAny(env, appId, platform, all),
     ]);
   } catch (error) {
     // Derived objects are an optimisation; never fail the mutation because of them.

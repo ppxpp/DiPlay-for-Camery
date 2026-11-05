@@ -63,6 +63,23 @@ export function pickLatestAny(stable, beta) {
   return candidates[0];
 }
 
+export function isFullRollout(manifest) {
+  const management = manifest?.management;
+  if (!management) return true;
+  if (!management.enabled) return false;
+  if (management.mode === "all") return true;
+  return management.mode === "percentage" && (management.percentage ?? 0) >= 100;
+}
+
+export function pickLatestAll(manifests) {
+  const candidates = manifests.filter((manifest) => isPublishedManifest(manifest) && isFullRollout(manifest));
+  if (candidates.length === 0) return null;
+  return candidates.sort((left, right) =>
+    (right.publishedAt ?? "").localeCompare(left.publishedAt ?? "") ||
+    right.versionCode - left.versionCode,
+  )[0];
+}
+
 async function getJson(client, bucket, key) {
   try {
     const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
@@ -110,13 +127,27 @@ export async function rebuildDerived({ client, metaBucket, appId, platform, chan
   const index = buildReleaseIndex(appId, platform, channel, manifests);
   await putJson(client, metaBucket, `apps/${appId}/${platform}/${channel}/releases-index.json`, index);
 
+  const fullRollout = pickLatestAll(manifests);
+  await putJson(client, metaBucket, `apps/${appId}/${platform}/${channel}/latest-all.json`, {
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+    manifest: fullRollout,
+  });
+
   const stable = await getJson(client, metaBucket, `apps/${appId}/${platform}/stable/latest.json`);
   const beta = await getJson(client, metaBucket, `apps/${appId}/${platform}/beta/latest.json`);
+  const otherChannel = channel === "stable" ? "beta" : "stable";
+  const otherAll = await getJson(client, metaBucket, `apps/${appId}/${platform}/${otherChannel}/latest-all.json`);
+  const all = {
+    ...(otherAll?.schemaVersion === 1 ? { [`${otherChannel}All`]: otherAll.manifest ?? null } : {}),
+    [`${channel}All`]: fullRollout,
+  };
   await putJson(client, metaBucket, `apps/${appId}/${platform}/latest-any.json`, {
     schemaVersion: 1,
     updatedAt: new Date().toISOString(),
     stable: isManifest(stable) ? stable : null,
     beta: isManifest(beta) ? beta : null,
+    ...all,
   });
   log(`Rebuilt derived objects for ${appId}/${platform}/${channel} (${index.releases.length} published releases).`);
 }

@@ -447,6 +447,9 @@ onUnmounted(() => {
                   "
                 />
               </label>
+              <p v-if="release.management!.mode !== 'all'" class="release-meta wide-field">
+                未进入本次下发范围的客户端会收到本渠道最近的全量发布版本；本渠道没有全量版本时才提示暂无更新。
+              </p>
               <label class="wide-field">
                 发布说明
                 <textarea v-model="release.management!.notes" rows="4" maxlength="10000" />
