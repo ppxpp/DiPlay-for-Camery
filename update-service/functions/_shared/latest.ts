@@ -3,7 +3,7 @@ import {
   mayDeliver,
   type StoredManifest,
 } from "./management";
-import { isFullRollout, readLatestAll } from "./derived";
+import { isOpenDelivery, readLatestAll } from "./derived";
 
 export interface Env {
   META: R2Bucket;
@@ -121,11 +121,11 @@ async function readLatestAny(
   }
 }
 
-// The newest release every client may take, so a client outside a gray pool
-// still gets the current full release instead of nothing. A live release that
-// is already full needs no extra read; only a grey one has to consult the
-// per-channel pointer, and a pointer written by an older deploy falls back to
-// scanning the live manifest.
+// The newest release every client is entitled to, so a client outside a gray
+// pool, or one whose current release was switched off, still gets the current
+// full release instead of nothing. An open live release needs no extra read;
+// only a held or switched-off one consults the per-channel pointer, and a
+// pointer an older deploy never wrote falls back to the live manifest.
 async function fullRolloutRelease(
   env: Env,
   appId: string,
@@ -134,11 +134,11 @@ async function fullRolloutRelease(
   hints: { live?: StoredManifest | null; all?: StoredManifest | null } = {},
 ): Promise<StoredManifest | null> {
   if (hints.all !== undefined) return hints.all;
-  if (hints.live && isFullRollout(hints.live)) return hints.live;
+  if (hints.live && isOpenDelivery(hints.live)) return hints.live;
   const pointer = await readLatestAll(env.META, appId, platform, channel);
   if (pointer !== undefined) return pointer;
   const live = await loadManifest(env, `apps/${appId}/${platform}/${channel}/latest.json`);
-  return live.kind === "ok" && isFullRollout(live.stored) ? live.stored : null;
+  return live.kind === "ok" && isOpenDelivery(live.stored) ? live.stored : null;
 }
 
 export async function latestManifestResponse(
@@ -232,10 +232,10 @@ export async function latestManifestResponse(
   }
 
   let management = stored.management ?? { enabled: true, mode: "all" as const, notes: "" };
-  if (!management.enabled) return json({ error: "update_unavailable" }, 404);
   if (!legacyStable && !await mayDeliver(management, clientId)) {
-    // Outside the gray pool the client falls back to this channel's newest
-    // full release, and only reports no update when the channel has none.
+    // Outside the pool, or with delivery switched off for the current release,
+    // the client takes this channel's newest full release; only a channel that
+    // has none reports no update.
     const fallback = await fullRolloutRelease(env, appId, platform, channel);
     if (!fallback) return json({ error: "update_unavailable" }, 404);
     stored = fallback;

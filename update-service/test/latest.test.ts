@@ -341,6 +341,67 @@ describe("latest update manifest", () => {
     expect(body.releaseNotes).toBe("灰度");
   });
 
+  it("serves the previous full release when automatic delivery is switched off", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: false, published: true, mode: "all", notes: "" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      },
+    }, clientUrl));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.version).toBe("0.4.0");
+    expect(body.versionCode).toBe(120);
+  });
+
+  it("serves the previous full release to a pooled client when delivery is switched off", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: false, published: true, mode: "whitelist", ids: ["test-client"], notes: "" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      },
+    }, clientUrl));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).versionCode).toBe(120);
+  });
+
+  it("serves the previous full release to a legacy request when delivery is switched off", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: false, published: true, mode: "all", notes: "" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.channel).toBe("stable");
+    expect(body.versionCode).toBe(120);
+  });
+
   it("counts a 100 percent rollout as a full release", async () => {
     const response = await onRequestGet(keyedContext(params, {
       [stableKey]: {
