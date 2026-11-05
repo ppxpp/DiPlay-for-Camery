@@ -56,9 +56,10 @@ function context(
 function keyedContext(
   params: Record<string, string>,
   bodies: Record<string, unknown>,
+  url = "https://upd.example.com/api/v1/apps/diplay/android/stable/latest",
 ) {
   return {
-    request: new Request("https://upd.example.com/api/v1/apps/diplay/android/stable/latest"),
+    request: new Request(url),
     env: {
       ASSET_BASE_URL: "https://dl.example.com",
       META: {
@@ -75,6 +76,10 @@ function keyedContext(
 const params = { appId: "diplay", platform: "android", channel: "stable" };
 const stableKey = "apps/diplay/android/stable/latest.json";
 const betaKey = "apps/diplay/android/beta/latest.json";
+const anyKey = "apps/diplay/android/latest-any.json";
+const stableAllKey = "apps/diplay/android/stable/latest-all.json";
+const clientUrl = "https://upd.example.com/api/v1/apps/diplay/android/stable/latest?id=test-client";
+const full = { enabled: true, mode: "all", notes: "" };
 
 describe("latest update manifest", () => {
   it("expands stored keys into asset URLs without leaking keys", async () => {
@@ -206,12 +211,147 @@ describe("latest update manifest", () => {
     const response = await onRequestGet(keyedContext(params, {
       [betaKey]: {
         ...manifest,
-        management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
+        management: { enabled: true, mode: "all", notes: "" },
       },
     }));
 
     expect(response.status).toBe(200);
     expect(((await response.json()) as any).channel).toBe("beta");
+  });
+
+  it("withholds a whitelist-only release from a legacy request without a client id", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [betaKey]: {
+        ...manifest,
+        management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).updateAvailable).toBe(false);
+  });
+
+  it("serves the newer full release and ignores a grey one for the legacy request", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      [betaKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.channel).toBe("stable");
+    expect(body.versionCode).toBe(120);
+  });
+
+  it("serves the derived full-release pointers to the legacy request in one read", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [anyKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        stable: { ...manifest, versionCode: 130, management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" } },
+        beta: null,
+        stableAll: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+        betaAll: null,
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.versionCode).toBe(120);
+    expect(body.channel).toBe("stable");
+  });
+
+  it("falls back to the channel's full release when the client misses the whitelist", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      },
+    }, clientUrl));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.version).toBe("0.4.0");
+    expect(body.versionCode).toBe(120);
+    expect(body.channel).toBe("stable");
+  });
+
+  it("reports no update when the client misses the whitelist and the channel has no full release", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        management: { enabled: true, mode: "whitelist", ids: ["new-client"], notes: "" },
+      },
+      [stableAllKey]: { schemaVersion: 1, updatedAt: "2026-11-05T00:00:00Z", manifest: null },
+    }, clientUrl));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "update_unavailable" });
+  });
+
+  it("serves the full release to a client outside a percentage rollout", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: true, mode: "percentage", percentage: 5, notes: "" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, version: "0.4.0", versionCode: 120, management: full },
+      },
+    }, clientUrl));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).versionCode).toBe(120);
+  });
+
+  it("serves the grey release itself to a client inside the whitelist", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        version: "0.4.1",
+        versionCode: 130,
+        management: { enabled: true, mode: "whitelist", ids: ["test-client"], notes: "灰度" },
+      },
+      [stableAllKey]: {
+        schemaVersion: 1,
+        updatedAt: "2026-11-05T00:00:00Z",
+        manifest: { ...manifest, versionCode: 97, management: full },
+      },
+    }, clientUrl));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.versionCode).toBe(130);
+    expect(body.releaseNotes).toBe("灰度");
+  });
+
+  it("counts a 100 percent rollout as a full release", async () => {
+    const response = await onRequestGet(keyedContext(params, {
+      [stableKey]: {
+        ...manifest,
+        versionCode: 130,
+        management: { enabled: true, mode: "percentage", percentage: 100, notes: "" },
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).versionCode).toBe(130);
   });
 
   it("serves the newer stable release to the legacy stable request", async () => {
