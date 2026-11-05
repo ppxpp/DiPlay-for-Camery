@@ -112,12 +112,13 @@ describe("admin release management", () => {
       channel: "beta",
       releaseKey: NEW_NAME,
       version: "0.2.21",
-      management: { enabled: true, mode: "all", notes: "新版本说明" },
+      management: { mode: "all", notes: "新版本说明" },
     });
     expect(response.status).toBe(200);
 
+    // Editing the scope never makes a release current.
     expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
-      .toEqual({ enabled: true, published: true, mode: "all", notes: "新版本说明" });
+      .toEqual({ enabled: false, mode: "all", notes: "新版本说明" });
     expect(stored(bucket, `${PREFIX}${OLD_NAME}.json`).management)
       .toEqual({ enabled: false, mode: "all", notes: "" });
     expect(stored(bucket, LATEST_KEY).versionName).toBe(OLD_NAME);
@@ -136,7 +137,7 @@ describe("admin release management", () => {
       channel: "beta",
       releaseKey: NEW_NAME,
       version: "0.2.21",
-      management: { enabled: true, mode: "all", notes: "当前版本说明" },
+      management: { mode: "all", notes: "当前版本说明" },
     });
     expect(response.status).toBe(200);
     expect(stored(bucket, LATEST_KEY).management.notes).toBe("当前版本说明");
@@ -154,7 +155,7 @@ describe("admin release management", () => {
       channel: "beta",
       releaseKey: OLD_NAME,
       version: "0.2.21",
-      management: { enabled: true, mode: "all", notes: "旧版本补充说明" },
+      management: { mode: "all", notes: "旧版本补充说明" },
     });
     expect(response.status).toBe(200);
     expect(stored(bucket, `${PREFIX}0.2.21.json`).management.notes).toBe("旧版本补充说明");
@@ -242,8 +243,8 @@ describe("admin release management", () => {
     expect(response.status).toBe(404);
   });
 
-  it("keeps a previously enabled release published after delivery is turned off", async () => {
-    const current = { ...manifest(NEW_NAME, 2001), management: { enabled: true, mode: "all", notes: "" } };
+  it("keeps a current release deliverable when its scope is edited", async () => {
+    const current = { ...manifest(NEW_NAME, 2001), management: { enabled: true, published: true, mode: "all", notes: "" } };
     const bucket = memoryBucket({
       [LATEST_KEY]: current,
       [`${PREFIX}${NEW_NAME}.json`]: current,
@@ -254,13 +255,51 @@ describe("admin release management", () => {
       channel: "beta",
       releaseKey: NEW_NAME,
       version: "0.2.21",
-      management: { enabled: false, mode: "all", notes: "" },
+      management: { mode: "whitelist", ids: ["vghF7E4n8g"], notes: "" },
     });
 
     expect(response.status).toBe(200);
     expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
-      .toEqual({ enabled: false, published: true, mode: "all", notes: "" });
+      .toEqual({ enabled: true, published: true, mode: "whitelist", ids: ["vghF7E4n8g"], notes: "" });
     expect(stored(bucket, LATEST_KEY).management)
-      .toEqual({ enabled: false, published: true, mode: "all", notes: "" });
+      .toEqual({ enabled: true, published: true, mode: "whitelist", ids: ["vghF7E4n8g"], notes: "" });
+  });
+
+  it("drops the whitelist when the scope goes back to full rollout", async () => {
+    const current = { ...manifest(NEW_NAME, 2001), management: { enabled: true, mode: "whitelist", ids: ["a"], notes: "" } };
+    const bucket = memoryBucket({
+      [LATEST_KEY]: current,
+      [`${PREFIX}${NEW_NAME}.json`]: current,
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: NEW_NAME,
+      version: "0.2.21",
+      management: { mode: "all", notes: "" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(stored(bucket, `${PREFIX}${NEW_NAME}.json`).management)
+      .toEqual({ enabled: true, published: true, mode: "all", notes: "" });
+  });
+
+  it("rejects the retired percentage scope", async () => {
+    const bucket = memoryBucket({
+      [LATEST_KEY]: manifest(NEW_NAME, 2001),
+      [`${PREFIX}${NEW_NAME}.json`]: manifest(NEW_NAME, 2001),
+    });
+    const { env, headers } = await context(bucket);
+
+    const response = await call(onRequestPut as never, env, headers, {
+      channel: "beta",
+      releaseKey: NEW_NAME,
+      version: "0.2.21",
+      management: { mode: "percentage", percentage: 30, notes: "" },
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_management" });
   });
 });

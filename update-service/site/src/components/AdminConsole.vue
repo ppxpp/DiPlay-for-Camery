@@ -8,10 +8,10 @@ type Channel = 'stable' | 'beta';
 type ChannelFilter = 'all' | Channel;
 type AdminTab = 'releases' | 'feedback';
 type Management = {
-  enabled: boolean;
+  enabled?: boolean;
   published?: boolean;
+  // 'percentage' only survives on releases configured before it was retired.
   mode: 'all' | 'percentage' | 'whitelist';
-  percentage?: number;
   ids?: string[];
   notes: string;
 };
@@ -152,10 +152,12 @@ async function save(release: Release) {
         channel: release.channel,
         releaseKey: release.releaseKey,
         version: release.version,
+        // Only the scope is editable; whether clients see the release is
+        // decided by it being the channel's current version.
         management: {
-          ...management,
+          mode: management.mode,
           ids: management.mode === 'whitelist' ? (management.ids ?? []) : undefined,
-          percentage: management.mode === 'percentage' ? Number(management.percentage ?? 0) : undefined,
+          notes: management.notes,
         },
       }),
     });
@@ -167,7 +169,7 @@ async function save(release: Release) {
 }
 
 async function rollback(release: Release) {
-  if (!window.confirm(`将自动更新推荐版本设为 ${release.versionName ?? release.version}？原推荐版本会停止下发，该版本会立即开启下发。`)) return;
+  if (!window.confirm(`将当前版本设为 ${release.versionName ?? release.version}？原当前版本会停止下发，该版本按“发布范围”立即对客户端生效。`)) return;
   try {
     await request('/api/v1/admin/releases', {
       method: 'POST',
@@ -177,7 +179,7 @@ async function rollback(release: Release) {
         version: release.version,
       }),
     });
-    message.value = `已设为当前下发版本：${release.versionName ?? release.version}`;
+    message.value = `已设为当前版本：${release.versionName ?? release.version}`;
     await load();
   } catch (cause) {
     message.value = cause instanceof Error ? cause.message : '回撤失败';
@@ -379,7 +381,7 @@ onUnmounted(() => {
                       v-if="release.releaseKey === currentVersions[release.channel]"
                       class="tag tag--brand"
                     >
-                      当前推荐
+                      当前版本
                     </span>
                     <span v-if="channel === 'all'" class="tag">
                       {{ release.channel === 'stable' ? '正式版' : '内测版' }}
@@ -399,7 +401,7 @@ onUnmounted(() => {
                   type="button"
                   @click="rollback(release)"
                 >
-                  设为当前下发版本
+                  设为当前版本
                 </button>
                 <button
                   class="btn danger btn--compact"
@@ -413,26 +415,15 @@ onUnmounted(() => {
             </header>
 
             <div class="admin-release-grid">
-              <label class="toggle">
-                <input v-model="release.management!.enabled" type="checkbox" />
-                <span>允许自动下发</span>
-              </label>
               <label>
-                下发模式
+                发布范围
                 <select v-model="release.management!.mode">
                   <option value="all">全量</option>
-                  <option value="percentage">按百分比</option>
                   <option value="whitelist">白名单</option>
+                  <option v-if="release.management!.mode === 'percentage'" value="percentage" disabled>
+                    按比例（旧配置，请改为全量或白名单）
+                  </option>
                 </select>
-              </label>
-              <label v-if="release.management!.mode === 'percentage'">
-                下发比例（0–100%）
-                <input
-                  v-model.number="release.management!.percentage"
-                  type="number"
-                  min="0"
-                  max="100"
-                />
               </label>
               <label v-if="release.management!.mode === 'whitelist'" class="wide-field">
                 客户端 ID（每行一个）
@@ -447,8 +438,11 @@ onUnmounted(() => {
                   "
                 />
               </label>
-              <p v-if="release.management!.mode !== 'all'" class="release-meta wide-field">
-                未进入本次下发范围的客户端会收到本渠道最近的全量发布版本；取消“允许自动下发”时同样回退到该版本，本渠道没有全量版本时才提示暂无更新。
+              <p v-if="release.management!.mode === 'percentage'" class="release-meta wide-field">
+                该版本仍是旧的“按比例”配置：保存前请改成“全量”或“白名单”。
+              </p>
+              <p class="release-meta wide-field">
+                发布范围决定谁能拿到这个版本：命中的客户端通过 App 自动更新获取；未命中的客户端、以及不带 id 的客户端，都只拿本渠道最近的全量版本。官网下载和装车助手同样只使用全量版本。要停止下发当前版本，把“当前版本”设为其他版本。
               </p>
               <label class="wide-field">
                 发布说明

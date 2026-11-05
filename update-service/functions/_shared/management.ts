@@ -1,9 +1,18 @@
 export interface ReleaseManagement {
+  /** True only for the channel's current release; publishing or demoting a release sets it. */
   enabled: boolean;
   /** Set once an admin first enables delivery; stays true so history keeps every published version. */
   published?: boolean;
+  /** `percentage` is legacy data only: the admin API now accepts `all` and `whitelist`. */
   mode: "all" | "percentage" | "whitelist";
   percentage?: number;
+  ids?: string[];
+  notes: string;
+}
+
+/** What an admin edits on a release. Whether clients see it is decided by it being the current release. */
+export interface ReleaseScope {
+  mode: "all" | "whitelist";
   ids?: string[];
   notes: string;
 }
@@ -170,18 +179,14 @@ export async function allReleaseManifests(
   return results.sort((a, b) => (b.manifest.publishedAt ?? "").localeCompare(a.manifest.publishedAt ?? ""));
 }
 
-export function parseManagement(value: unknown): ReleaseManagement | null {
+export function parseScope(value: unknown): ReleaseScope | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
-  if (typeof input.enabled !== "boolean" || !["all", "percentage", "whitelist"].includes(String(input.mode))) return null;
+  if (input.mode !== "all" && input.mode !== "whitelist") return null;
   if (typeof input.notes !== "string" || input.notes.length > 10000) return null;
-  if (input.mode === "percentage" && (!Number.isInteger(input.percentage) || Number(input.percentage) < 0 || Number(input.percentage) > 100)) return null;
   if (input.mode === "whitelist" && (!Array.isArray(input.ids) || input.ids.length > 50000 || input.ids.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)))) return null;
   return {
-    enabled: input.enabled,
-    ...(typeof input.published === "boolean" ? { published: input.published } : {}),
-    mode: input.mode as ReleaseManagement["mode"],
-    ...(input.mode === "percentage" ? { percentage: Number(input.percentage) } : {}),
+    mode: input.mode,
     ...(input.mode === "whitelist" ? { ids: [...new Set(input.ids as string[])] } : {}),
     notes: input.notes,
   };

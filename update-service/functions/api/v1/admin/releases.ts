@@ -1,7 +1,7 @@
 import { isAdmin } from "../../../_shared/admin-auth";
 import { rebuildDerived } from "../../../_shared/derived";
 import type { Env, StoredManifest } from "../../../_shared/management";
-import { allReleaseManifests, isPublishedRelease, json, parseManagement, readManifest, releasePrefix, writeManifest } from "../../../_shared/management";
+import { allReleaseManifests, isPublishedRelease, json, parseScope, readManifest, releasePrefix, writeManifest } from "../../../_shared/management";
 
 const SEGMENT = /^[a-z0-9][a-z0-9-]{0,63}$/;
 // Snapshot keys use the display version when present, so releases that share an
@@ -60,18 +60,24 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const version = typeof input.version === "string" ? input.version : "";
   const releaseKey = requestedReleaseKey(input);
   if (![app, platform, channel].every((part) => SEGMENT.test(part)) || !releaseKey) return json({ error: "invalid_release" }, 400, { cors: false });
-  const management = parseManagement(input.management);
-  if (!management) return json({ error: "invalid_management" }, 400, { cors: false });
+  const scope = parseScope(input.management);
+  if (!scope) return json({ error: "invalid_management" }, 400, { cors: false });
   const releaseKeyPath = await findSnapshotKey(env.META, releasePrefix(app, platform, channel), releaseKey);
   if (!releaseKeyPath) return json({ error: "release_not_found" }, 404, { cors: false });
   const manifest = await readManifest(env.META, releaseKeyPath);
   if (!manifest) return json({ error: "release_not_found" }, 404, { cors: false });
   if (version && manifest.version !== version) return json({ error: "release_not_found" }, 404, { cors: false });
-  const wasPublished = manifest.management?.published === true || manifest.management?.enabled === true;
-  const nextManagement = { ...management };
-  delete nextManagement.published;
-  if (wasPublished || management.enabled) nextManagement.published = true;
-  manifest.management = nextManagement;
+  // Visibility follows the current-version pointer, so editing a release never
+  // changes whether it is delivered: only publishing does.
+  const previous = manifest.management;
+  const wasPublished = previous?.published === true || previous?.enabled === true;
+  manifest.management = {
+    enabled: previous?.enabled ?? false,
+    ...(wasPublished ? { published: true } : {}),
+    mode: scope.mode,
+    ...(scope.mode === "whitelist" ? { ids: scope.ids ?? [] } : {}),
+    notes: scope.notes,
+  };
   await writeManifest(env.META, releaseKeyPath, manifest);
   const latestKey = `apps/${app}/${platform}/${channel}/latest.json`;
   const latest = await readManifest(env.META, latestKey);

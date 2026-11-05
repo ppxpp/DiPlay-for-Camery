@@ -132,7 +132,7 @@ break login.
 `releases-index.json`, `latest-all.json` and `latest-any.json` are written by:
 
 - `scripts/publish-update.mjs` after each publish (`scripts/derived.mjs`), and
-- the admin API after enable/disable, rollback, and delete.
+- the admin API after publishing a current version, a scope change, and delete.
 
 Readers use them when present and fall back to the legacy multi-read paths when
 they are missing or invalid. If a derived object is ever stale, delete it; the
@@ -184,7 +184,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://diplay.mgulu.com/api/v1/admin/f
 
 ## Known residual risks
 
-- **Rollout gating is not secrecy.** `percentage`/`whitelist` rely on a
+- **Rollout gating is not secrecy.** `whitelist` (and legacy `percentage`) rely on a
   self-reported `?id=`; an attacker who knows a pool id can ask for the grey
   build. Severity is limited because grey builds are not published anywhere
   else: the legacy no-id `latest` path only sees full releases, a client outside

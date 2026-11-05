@@ -151,9 +151,11 @@ export async function latestManifestResponse(
   const appId = first(appIdValue);
   const platform = first(platformValue);
   const requestedChannel = first(channelValue);
-  if (!appId || !platform || !requestedChannel || ![appId, platform, requestedChannel].every((value) => SLUG.test(value))) {
+  if (!appId || !platform || !SLUG.test(appId) || !SLUG.test(platform)) {
     return json({ error: "invalid_path" }, 400);
   }
+  // A request that names no usable channel is treated as the test channel.
+  const channelParam = requestedChannel && SLUG.test(requestedChannel) ? requestedChannel : "beta";
 
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return json({ error: "asset_base_url_not_configured" }, 500);
@@ -170,9 +172,9 @@ export async function latestManifestResponse(
   // The historical versionCode 1000 client queried stable without an id or a
   // channel choice. New clients always send their client id, including the
   // persisted fallback when Android ID is unavailable.
-  const legacyStable = requestedChannel === "stable" && !clientId;
+  const legacyStable = channelParam === "stable" && !clientId;
 
-  let channel = requestedChannel;
+  let channel = channelParam;
   let stored: StoredManifest;
 
   if (legacyStable) {
@@ -212,7 +214,7 @@ export async function latestManifestResponse(
         schemaVersion: 1,
         appId,
         platform,
-        channel: requestedChannel,
+        channel: channelParam,
         updateAvailable: false,
       });
     }
