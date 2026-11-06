@@ -10,9 +10,21 @@ import android.os.Build
 object PioneerUsbPolicy {
     fun matchesDevice(): Boolean = CamryAdaptation.enabled()
 
-    fun matchesModel(): Boolean = Build.VERSION.SDK_INT == 25 &&
-        Build.MODEL.replace('-', '_').equals("SABRESD_MX6DQ", true) &&
-        Build.DEVICE.startsWith("tamago", ignoreCase = true)
+    // Cache normalization; identity reads stay cheap and also support changed test identities.
+    private data class ModelMatch(val sdk: Int, val model: String, val device: String, val matches: Boolean)
+    @Volatile private var cachedModel: ModelMatch? = null
+
+    fun matchesModel(): Boolean {
+        val sdk = Build.VERSION.SDK_INT
+        if (sdk != 25) return false
+        val model = Build.MODEL
+        val device = Build.DEVICE
+        cachedModel?.let { if (it.sdk == sdk && it.model === model && it.device === device) return it.matches }
+        val matches = model.replace('-', '_').equals("SABRESD_MX6DQ", true) &&
+            device.startsWith("tamago", ignoreCase = true)
+        cachedModel = ModelMatch(sdk, model, device, matches)
+        return matches
+    }
 
     fun enabled(context: Context): Boolean = CamryAdaptation.enabled()
     fun mode(context: Context): String = CamryAdaptation.mode(context).name

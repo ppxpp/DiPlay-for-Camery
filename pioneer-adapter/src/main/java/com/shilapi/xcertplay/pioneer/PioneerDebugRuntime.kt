@@ -19,6 +19,12 @@ object PioneerDebugRuntime {
     @Volatile var port: Int = 0
     @Volatile var listenerState = "未启动"
     @Volatile var lastCommand = ""
+    @Volatile var steeringWheelState = "{}"
+    val relayedWheelEventsIgnored = java.util.concurrent.atomic.AtomicLong()
+    @Volatile var navigationHudState = "{}"
+    @Volatile var navigationHudSnapshot: (() -> JSONObject)? = null
+    fun hudSnapshot(): JSONObject = navigationHudSnapshot?.invoke() ?: JSONObject(navigationHudState)
+
     @Volatile var carMicTestState = "{}"
     @Volatile var microphoneUplinkState = "{}"
     @Volatile var siriTestState = "{}"
@@ -56,6 +62,7 @@ object PioneerDebugRuntime {
         context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     fun start(context: Context) {
+        check(automaticStartEnabled(context)) { "LAN diagnostics are available only in debug builds" }
         ContextCompat.startForegroundService(context, Intent(context, PioneerDebugService::class.java))
     }
     fun logFile(context: Context) = File(context.filesDir, "pioneer-debug/adapter.log")

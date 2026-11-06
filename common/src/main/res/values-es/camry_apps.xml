@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">Aplicaciones del vehículo</string>
+    <string name="settings_camry_apps_description">Estas aplicaciones pueden consumir muchos recursos en segundo plano y causar saltos en el vídeo o audio de CarPlay. Desactívalas si no las necesitas. La desactivación se mantiene tras reiniciar y puede revertirse sin borrar datos.</string>
+    <string name="settings_camry_apps_amap">Desactivar Amap</string>
+    <string name="settings_camry_apps_amap_description">Detiene Amap en el equipo del vehículo, sin afectar a Amap en el iPhone.</string>
+    <string name="settings_camry_apps_tencent_map">Desactivar Tencent Maps</string>
+    <string name="settings_camry_apps_tencent_map_description">Detiene Tencent Maps en el equipo del vehículo, sin afectar a la aplicación del iPhone.</string>
+    <string name="settings_camry_apps_tencent_speech">Desactivar Tencent Voice</string>
+    <string name="settings_camry_apps_tencent_speech_description">Detiene Tencent Voice en el vehículo. Puede afectar a la activación y los controles de voz originales.</string>
+    <string name="settings_camry_apps_enabled">Activada</string>
+    <string name="settings_camry_apps_disabled">Desactivada</string>
+    <string name="settings_camry_apps_not_installed">No instalada</string>
+    <string name="settings_camry_apps_loading">Leyendo estado…</string>
+    <string name="settings_camry_apps_disabling">Desactivando…</string>
+    <string name="settings_camry_apps_enabling">Activando…</string>
+    <string name="settings_camry_apps_unknown">Estado no disponible. Actualiza para reintentar.</string>
+    <string name="settings_camry_apps_failed">Error de operación. Actualiza el estado e inténtalo de nuevo.</string>
+    <string name="settings_camry_apps_refresh">Actualizar estado</string>
+    <string name="settings_camry_apps_adaptation_required">Activa primero la adaptación de Camry.</string>
+</resources>

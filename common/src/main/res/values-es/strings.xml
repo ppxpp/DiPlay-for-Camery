@@ -870,7 +870,6 @@
     <string name="bluetooth_will_not_stay_on_hint">Si el Bluetooth no se queda activado ahí, esta unidad principal reserva el Bluetooth para sus propias llamadas y música, y las apps no pueden usarlo. En ese caso CarPlay inalámbrico no puede funcionar: usa un cable USB.</string>
     <string name="settings_fce_cluster_guidance">Indicaciones en el cuadro FCE (experimental)</string>
     <string name="settings_fce_cluster_guidance_description">Muestra las flechas de CarPlay y la distancia al próximo giro en la vista de navegación del cuadro de instrumentos en unidades FCE, escribiendo en el servicio del vehículo de la unidad. Probado solo en un coche; desactívalo si el cuadro se comporta de forma inesperada.</string>
-    <string name="settings_pioneer_lan_debug">Depuración en la red local</string>
     <string name="settings_cluster_music">Música en el cuadro (experimental)</string>
     <string name="settings_cluster_music_description">Muestra la portada cuadrada sobre el mapa del cuadro. Elige portada temporal (8 segundos) o permanente; el título y artista siempre aparecen sobre ella durante 8 segundos al cambiar de canción. La posición y el tamaño se aplican al instante. Requiere proyección al cuadro y datos del iPhone.</string>
     <string name="settings_cluster_music_mode">Visibilidad de la portada</string>

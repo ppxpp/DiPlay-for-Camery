@@ -4,10 +4,8 @@ import android.content.Context
 import android.os.SystemClock
 import com.shilapi.xcertplay.vehicle.api.MediaCommand
 import com.shilapi.xcertplay.vehicle.api.SteeringWheelInputSource
-import dalvik.system.DexClassLoader
 import java.io.File
 import java.lang.reflect.Proxy
-import java.security.MessageDigest
 
 /** One PAL registration per process. A stopped session leaves an inert callback. */
 internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
@@ -21,8 +19,7 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     private var registeredManager: Any? = null
     private var serviceCallback: Any? = null
     private var keyCallback: Any? = null
-    private var lastEvent: String? = null
-    private var lastAt = 0L
+    private var directEvents = 0L
     private val recentEvents = LinkedHashMap<String, Long>()
 
     fun configure(context: Context) { appContext = context.applicationContext }
@@ -31,19 +28,17 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     override fun start(onCommand: (MediaCommand) -> Unit, report: (String) -> Unit) {
         consumer = onCommand
         this.report = report
-        lastEvent = null
+        publishInputState("starting")
         if (initialized || initializing) return
         val context = appContext ?: return
         initializing = true
-        // Android 7 verifies/optimizes this provisioned DEX at first use. That can take seconds;
-        // steering-wheel integration must never block the host UI or USB startup callbacks.
+        // Keep vendor class initialization and service binding off startup callbacks.
+        // SDK bytecode is part of the APK and is optimized by Android during installation.
         Thread({ initializeSdk(context) }, "pioneer-pal-init").apply { isDaemon = true; start() }
     }
 
     private fun initializeSdk(context: Context) {
         runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND) }
-        val started = SystemClock.elapsedRealtime()
-        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, "PAL_SDK_LOAD begin background=true")
         report("Vehicle: PAL SDK initialization starting asynchronously")
         try {
             val loader = loadSdk(context)
@@ -56,22 +51,19 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
                     "onConnected" -> synchronized(this) { register(loader, manager) }
                     "onDisconnected" -> synchronized(this) {
                         registeredManager = null
+                        publishInputState("disconnected")
                         this.report("Vehicle: PAL disconnected")
                     }
                     "onError" -> this.report("Vehicle: PAL service error")
                 }
                 null
             }
-            val loadMillis = SystemClock.elapsedRealtime() - started
-            com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, "PAL_SDK_LOAD loaded elapsedMs=$loadMillis")
-            // Preserve the SDK's original main-thread invocation; only DEX loading/verification
-            // moves to the worker. Some SDK versions create a Handler during initialization.
+            // Preserve the SDK's main-thread invocation: it may create a Handler during initialization.
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 try {
                     manager.getMethod("a", Context::class.java, callbackType).invoke(null, context, serviceCallback)
                     synchronized(this) { initialized = true }
-                    com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, "PAL_SDK_LOAD connectedRequest totalMs=${SystemClock.elapsedRealtime() - started}")
-                    report("Vehicle: PAL initialization requested loadMs=$loadMillis totalMs=${SystemClock.elapsedRealtime() - started}")
+                    report("Vehicle: PAL initialization requested")
                 } catch (error: Exception) {
                     report("Vehicle: PAL unavailable ${error.javaClass.simpleName}: ${error.message}")
                 } finally {
@@ -86,7 +78,7 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
     }
 
     @Synchronized
-    override fun stop() { consumer = null; lastEvent = null }
+    override fun stop() { consumer = null; publishInputState("inactive") }
 
     /** Diagnostic microphone access shares the already provisioned SDK and connection. */
     internal fun audioServiceForTest(context: Context): Pair<ClassLoader, Any> {
@@ -115,39 +107,32 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
 
     private fun loadSdk(context: Context): ClassLoader = synchronized(sdkLoadLock) {
         cachedLoader?.let { return@synchronized it }
-        // Provision this asset locally; proprietary SDK bytes are not committed to the fork.
-        val bytes = context.assets.open("vehicle/pal-client.dex").use { it.readBytes() }
-        val digest = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        // Android 7 names optimized output after the input DEX. Sharing a directory
-        // makes the optimizer overwrite/delete its input (DexPathList then becomes empty).
-        val directory = File(context.filesDir, "vehicle-pal-sdk").apply { mkdirs() }
-        val optimized = File(context.codeCacheDir, "vehicle-pal-opt").apply { mkdirs() }
-        val dex = File(directory, "pal-$digest.dex")
-        File(directory, "pal.tmp").delete()
-        if (!dex.exists()) {
-            val temporary = File(directory, "pal.tmp")
-            try {
-                temporary.outputStream().use { it.write(bytes) }
-                check(temporary.renameTo(dex)) { "PAL dex install failed" }
-            } finally {
-                temporary.delete()
-            }
-        }
-        pruneOldPalDex(directory, dex)
-        dex.setReadOnly()
-        DexClassLoader(dex.absolutePath, optimized.absolutePath, null, context.classLoader).also { cachedLoader = it }
+        val loader = context.classLoader
+        // Reflection keeps builds without the locally provisioned vehicle SDK usable on other cars.
+        loader.loadClass("com.tencent.tai.pal.client.PALServiceManager")
+        cachedLoader = loader
+        clearLegacySdkCache(context)
+        loader
     }
 
-    /** Keep only the DEX selected by the current bundled PAL asset. */
-    internal fun pruneOldPalDex(directory: File, current: File): Int {
-        var deleted = 0
-        directory.listFiles()
-            ?.filter {
-                it.isFile && it != current && it.name.startsWith("pal-") &&
-                    it.extension.equals("dex", ignoreCase = true)
+    /** One background migration of our obsolete extracted SDK and optimized output. */
+    private fun clearLegacySdkCache(context: Context) {
+        for (directory in listOf(File(context.filesDir, "vehicle-pal-sdk"),
+                File(context.codeCacheDir, "vehicle-pal-opt"), File(context.noBackupFilesDir, "vehicle-pal-opt"))) {
+            clearLegacySdkCacheDirectory(directory)
+        }
+    }
+
+    internal fun clearLegacySdkCacheDirectory(directory: File) {
+        val artifact = Regex("""pal-[0-9a-f]{64}\.dex(?:\.flock)?""")
+        runCatching {
+            // Do not follow a substituted directory outside the app-owned cache location.
+            if (directory.canonicalFile != File(directory.parentFile.canonicalFile, directory.name)) return@runCatching
+            for (file in directory.listFiles().orEmpty()) {
+                if ((artifact.matches(file.name) || file.name == "pal.tmp") && file.isFile) file.delete()
             }
-            ?.forEach { if (it.delete()) deleted += 1 }
-        return deleted
+            if (directory.listFiles()?.isEmpty() == true) directory.delete()
+        }
     }
 
     private fun register(loader: ClassLoader, managerClass: Class<*>) {
@@ -172,7 +157,8 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
             }
             cabinType.getMethod("a", listenerType).invoke(cabin, keyCallback)
             registeredManager = cabin
-            report("Vehicle: PAL previous/next listener registered (shared input)")
+            publishInputState("registered")
+            report("Vehicle: PAL previous/next listener registered source=PAL_DIRECT")
         } catch (error: Exception) {
             report("Vehicle: PAL registration failed ${error.javaClass.simpleName}: ${error.message}")
         }
@@ -186,23 +172,37 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
             val key = type.getMethod("getKeyCode").invoke(event) as Int
             val action = type.getMethod("getAction").invoke(event) as Int
             report("Vehicle: PAL key=$key action=$action")
+            publishInputState("event", key, action)
             if (action != 1) return
             val command = when (key) { 8 -> MediaCommand.PREVIOUS; 9 -> MediaCommand.NEXT; else -> return }
             val signature = "$key:${type.getMethod("getSource").invoke(event)}:" +
                 "${type.getMethod("getDownTime").invoke(event)}:${type.getMethod("getEventTime").invoke(event)}"
-            if (acceptBridgeEvent(signature)) target(command)
+            if (acceptDirectEvent(signature)) {
+                directEvents++
+                publishInputState("dispatched", key, action)
+                report("Vehicle: wheel command=$command source=PAL_DIRECT")
+                target(command)
+            }
         }.onFailure { report("Vehicle: PAL event rejected ${it.javaClass.simpleName}") }
     }
 
-    /** Deduplicate one physical event delivered directly and through WeCarFlow's bridge. */
+    /** Deduplicate repeated deliveries from our own PAL subscription only. */
     @Synchronized
-    internal fun acceptBridgeEvent(signature: String): Boolean {
+    internal fun acceptDirectEvent(signature: String): Boolean {
         val now = SystemClock.elapsedRealtime()
         recentEvents.entries.removeAll { now - it.value > 2_000 }
         if (recentEvents.containsKey(signature)) return false
         if (recentEvents.size >= 64) recentEvents.remove(recentEvents.keys.first())
         recentEvents[signature] = now
         return true
+    }
+
+    private fun publishInputState(state: String, key: Int? = null, action: Int? = null) {
+        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.steeringWheelState = org.json.JSONObject()
+            .put("policy", "PAL_DIRECT").put("state", state).put("registered", registeredManager != null)
+            .put("accepting", consumer != null).put("directEvents", directEvents)
+            .put("lastKey", key ?: org.json.JSONObject.NULL).put("lastAction", action ?: org.json.JSONObject.NULL)
+            .put("updatedAtMs", System.currentTimeMillis()).toString()
     }
 
     private fun proxy(loader: ClassLoader, type: Class<*>, label: String,

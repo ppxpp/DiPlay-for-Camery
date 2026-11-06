@@ -89,7 +89,76 @@ class AudioFocusAutoYieldTest {
         assertSame(speechFocus.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
         assertSame(speechFocus, shadowOf(manager).lastAudioFocusRequest)
         coordinator.release(media)
+        assertSame(speechFocus.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+        coordinator.close()
         assertSame(mediaFocus.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+    }
+
+    @Config(sdk = [25])
+    @Test fun pausedVehicleMediaRetainsFocusAcrossGuidanceWithoutSelectingOrReacquiringSource() {
+        var selections = 0
+        val routing = object : AudioRouteController by DefaultAudioRouteController {
+            override val available = true
+            override fun streamType(channel: AudioChannel): Int? = if (channel == AudioChannel.MEDIA) 401 else 400
+            override fun focusStream(attributes: AudioAttributes): Int? = attributes.contentType.takeIf { it in 400..401 }
+            override fun independentSpeechFocus(attributes: AudioAttributes) = focusStream(attributes) == 400
+            override fun selectMediaSource(report: (String) -> Unit) { selections++ }
+        }
+        val coordinator = AudioFocusCoordinator(context, false, audioRouting = routing).also(coordinators::add)
+        val mediaAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+        val speechAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).build()
+        ReflectionHelpers.setField(mediaAttributes, "mContentType", 401)
+        ReflectionHelpers.setField(speechAttributes, "mContentType", 400)
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, mediaAttributes)
+        val main = shadowOf(manager).lastAudioFocusRequest
+        coordinator.release(media)
+        assertNull(shadowOf(manager).lastAbandonedAudioFocusListener)
+        assertSame(main, shadowOf(manager).lastAudioFocusRequest)
+        val speech = track()
+        coordinator.acquire(speech, AudioChannel.NAVIGATION, speechAttributes)
+        val guidance = shadowOf(manager).lastAudioFocusRequest
+        coordinator.release(speech)
+        assertSame(guidance.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+        assertEquals(1, selections)
+        assertTrue(coordinator.recoverVehicleMedia())
+        coordinator.cancelVehicleRecovery()
+        assertSame(guidance.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+        coordinator.close()
+        assertSame(main.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+    }
+
+    @Config(sdk = [25])
+    @Test fun speechPreservesSourceOnAcquireAndAfterPacketGapWhileMediaAndCallSelectIt() {
+        var selections = 0
+        val routing = object : AudioRouteController by DefaultAudioRouteController {
+            override val available = true
+            override fun focusStream(attributes: AudioAttributes): Int? =
+                attributes.contentType.takeIf { it in 400..401 }
+            override fun independentSpeechFocus(attributes: AudioAttributes) = focusStream(attributes) == 400
+            override fun selectMediaSource(report: (String) -> Unit) { selections++ }
+        }
+        val coordinator = AudioFocusCoordinator(context, false, audioRouting = routing).also(coordinators::add)
+        val speech = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).build()
+        val media = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+        ReflectionHelpers.setField(speech, "mContentType", 400)
+        ReflectionHelpers.setField(media, "mContentType", 401)
+        for (channel in listOf(AudioChannel.NAVIGATION, AudioChannel.ASSISTANT)) {
+            val output = track()
+            coordinator.acquire(output, channel, speech)
+            assertEquals(400, shadowOf(manager).lastAudioFocusRequest.streamType)
+            coordinator.ensureVehicleSource(channel)
+            assertEquals(0, selections)
+            coordinator.release(output)
+        }
+        coordinator.acquire(track(), AudioChannel.MEDIA, media)
+        assertEquals(1, selections)
+        coordinator.ensureVehicleSource(AudioChannel.MEDIA)
+        assertEquals(2, selections)
+        coordinator.acquire(track(), AudioChannel.PHONE, speech)
+        assertEquals(3, selections)
+        coordinator.ensureVehicleSource(AudioChannel.PHONE)
+        assertEquals(4, selections)
     }
 
     @Test fun newMediaTrackInheritsLossWhilePhoneTrackRemainsAudible() {

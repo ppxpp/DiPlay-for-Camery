@@ -20,16 +20,26 @@ class PioneerTiming(private val name: String) {
         maxNs = maxOf(maxNs, nanos)
         if (failed) errors++
     }
-    @Synchronized fun drain(): String {
+    fun drain(): String {
+        val snapshot: LongArray
+        val count: Long
+        val maxNs: Long
+        val errors: Long
+        synchronized(this) {
+            snapshot = buckets.copyOf()
+            count = this.count
+            maxNs = this.maxNs
+            errors = this.errors
+            buckets.fill(0); this.count = 0; this.maxNs = 0; this.errors = 0
+        }
         fun percentile(p: Int): Long {
             if (count == 0L) return 0
             val target = (count * p + 99) / 100
             var sum = 0L
-            for (i in buckets.indices) { sum += buckets[i]; if (sum >= target) return limitUs(i) }
+            for (i in snapshot.indices) { sum += snapshot[i]; if (sum >= target) return limitUs(i) }
             return maxNs / 1_000
         }
         val result = "$name n=$count p50Us=${percentile(50)} p95Us=${percentile(95)} p99Us=${percentile(99)} maxUs=${maxNs / 1_000} errors=$errors"
-        buckets.fill(0); count = 0; maxNs = 0; errors = 0
         return result
     }
     private fun limitUs(slot: Int): Long = (1L shl (slot / 4)) * (4 + slot % 4) / 4

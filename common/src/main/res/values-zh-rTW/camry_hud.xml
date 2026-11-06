@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_category">凱美瑞</string>
+    <string name="settings_camry_summary">針對這台凱美瑞與先鋒車機的專屬設定</string>
+    <string name="settings_camry_hud_title">導航 HUD 投射</string>
+    <string name="settings_camry_hud_description">將 CarPlay 導航資訊投射至 HUD 與儀表。關閉後立即停止投射。</string>
+    <string name="settings_camry_hud_strategy">提示策略</string>
+    <string name="settings_camry_hud_fixed">固定距離</string>
+    <string name="settings_camry_hud_by_turn">依轉向類型</string>
+    <string name="settings_camry_hud_adaptive">自適應提前量（實驗性）</string>
+    <string name="settings_camry_hud_fixed_hint">進入設定距離後開始提示，目前有效引導保持至切換。</string>
+    <string name="settings_camry_hud_by_turn_hint">分別設定一般轉彎、複雜轉向與直行的提前距離，不推斷道路等級。</string>
+    <string name="settings_camry_hud_adaptive_hint">依距離變化估算到引導點的時間。停車或資料不可靠時以距離判斷。</string>
+    <string name="settings_camry_hud_distance">提前距離</string>
+    <string name="settings_camry_hud_turn_distance">一般轉彎提前距離</string>
+    <string name="settings_camry_hud_complex_distance">分流、匝道、圓環及迴轉提前距離</string>
+    <string name="settings_camry_hud_straight_distance">直行提示提前距離</string>
+    <string name="settings_camry_hud_advance">提示提前量</string>
+    <string name="settings_camry_hud_later">較晚</string>
+    <string name="settings_camry_hud_standard">標準</string>
+    <string name="settings_camry_hud_earlier">較早</string>
+    <string name="settings_camry_hud_apply_hint">策略與參數變更從下一引導點生效，目前提示保持穩定，無需重新連線。</string>
+    <string name="settings_camry_hud_experience_note">CarPlay 不開放道路等級、紅綠燈等資料，本應用只能依引導點距離推算投射時機，HUD 體驗無法完全等同原車導航。</string>
+    <string name="settings_camry_hud_meters">%1$d公尺</string>
+    <string name="settings_camry_hud_adaptive_values">一般轉向：%1$d秒 / %2$d公尺；複雜路口：%3$d秒 / %4$d公尺；直行：%5$d秒 / %6$d公尺（提前時間 / 保底距離）。最大提前距離分別為%7$d / %8$d / %9$d公尺。</string>
+</resources>

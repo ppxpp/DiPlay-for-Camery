@@ -27,6 +27,30 @@ Lint baselines (`common/`, `shared/`, `pioneer-adapter/`) freeze legacy findings
 
 Set `ANDROID_HOME` or `local.properties` if Gradle cannot find the SDK.
 
+## Shared root service and IPC
+
+All Camry features that need root assistance MUST reuse `PioneerRootSession.request(...)` and
+`PioneerRootSessionHelper`. There is one Java root service per app owner, shared across CarPlay
+connections. New features MUST NOT launch another `app_process`, directly call the firmware root
+Binder, introduce a feature-specific IPC transport, or poll files for commands/results.
+
+- `PioneerRootSession` alone may bootstrap the service through `PioneerRootDispatcher`.
+- Use the versioned, bounded `PioneerRootIpc` LocalSocket protocol with peer UID/PID verification,
+  service token, request ID, deadline, cancellation, and explicit completion. Never automatically
+  replay an accepted mutating request after disconnect or timeout.
+- Register a fixed operation and a bounded execution lane. Long hotspot/diagnostic/native operations
+  MUST NOT block HUD heartbeat/release, permission tasks, or the IPC accept loop.
+- A task failure/timeout MUST NOT exit or kill the shared service. Only its owner lifecycle manages
+  service shutdown. Track and reap native command/injection child processes with bounded waits.
+- Keep IPC off the UI/audio/video threads. HUD renewal must originate from the responsive navigation
+  worker, retain the 5-second heartbeat and 20-second expiry, and must not be renewed by an IO timer.
+- Files are allowed for initial discovery, durable recovery journals, native command adapters, and
+  the event-driven root-to-TPS HUD adapter. They MUST NOT become another app-to-root command channel.
+- Preserve package/APK/boot/owner checks, explicit adaptation gates and owned-state cleanup.
+
+`scripts/check_root_service_architecture.py` runs in the normal build to prevent independent Java
+root entry points and firmware dispatch bypasses. Extend its focused checks when extending the IPC.
+
 ## Temporary debugging and analysis notes
 
 Temporary debugging, analysis, handoff, and test-progress Markdown that is not a maintained project document MUST be stored under `agent_docs/temporary/`, using subfolders when useful. The root `.gitignore` excludes this directory. Do not add per-file ignore rules or leave temporary notes scattered through tracked project paths. Keep durable product documentation, release notes, and regression guides in their normal tracked locations.

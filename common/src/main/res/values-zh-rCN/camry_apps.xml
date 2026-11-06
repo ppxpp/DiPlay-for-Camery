@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">车机应用管理</string>
+    <string name="settings_camry_apps_description">以下应用在后台运行时可能占用较多资源，导致 CarPlay 画面或音频卡顿。不使用时可将其禁用。禁用后重启仍生效，可随时恢复，不会删除应用数据。</string>
+    <string name="settings_camry_apps_amap">禁用高德地图</string>
+    <string name="settings_camry_apps_amap_description">停止车机高德地图运行，不影响 iPhone 上的高德地图。</string>
+    <string name="settings_camry_apps_tencent_map">禁用腾讯地图</string>
+    <string name="settings_camry_apps_tencent_map_description">停止车机腾讯地图运行，不影响 iPhone 上的腾讯地图。</string>
+    <string name="settings_camry_apps_tencent_speech">禁用腾讯语音</string>
+    <string name="settings_camry_apps_tencent_speech_description">停止车机腾讯语音运行，可能影响原车语音唤醒和语音控制。</string>
+    <string name="settings_camry_apps_enabled">已启用</string>
+    <string name="settings_camry_apps_disabled">已禁用</string>
+    <string name="settings_camry_apps_not_installed">未安装</string>
+    <string name="settings_camry_apps_loading">正在读取状态…</string>
+    <string name="settings_camry_apps_disabling">正在禁用…</string>
+    <string name="settings_camry_apps_enabling">正在恢复…</string>
+    <string name="settings_camry_apps_unknown">无法读取状态，请刷新重试。</string>
+    <string name="settings_camry_apps_failed">操作失败，请刷新状态后重试。</string>
+    <string name="settings_camry_apps_refresh">刷新状态</string>
+    <string name="settings_camry_apps_adaptation_required">请先开启凯美瑞适配。</string>
+</resources>

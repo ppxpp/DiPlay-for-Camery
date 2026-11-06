@@ -36,7 +36,6 @@ class PioneerVpnFirewallLease private constructor() : Closeable {
                 PioneerConnectionTasks.update("rules-check", "REUSED")
                 PioneerConnectionTasks.update("rules", "REUSED")
                 PioneerConnectionTasks.update("network-ready", "COMPLETE")
-                PioneerRootSession.finish(app)
                 log("VPN_FIREWALL_REUSED interface=${owner.name}; rules retained")
                 return lease
             }
@@ -57,45 +56,22 @@ class PioneerVpnFirewallLease private constructor() : Closeable {
                 .put("interface", owner.name).put("index", owner.index)
                 .put("address", Inet6Address.getByAddress(null, address.address, 0).hostAddress)
                 .put("requestedAtMs", started).put("deadline", started + 15000)
-            File(dir,"request.json").apply { writeText(request.toString()); Os.chmod(path,0x180) }
             try {
-                PioneerRootSession.submit(app, dir, current)
-                while (SystemClock.elapsedRealtime() < started + 15500) {
-                    check(current()) { "VPN_FIREWALL_CANCELLED" }
-                    val result = File(dir,"result.json").let { runCatching {
-                        if (it.length() in 1..8192) JSONObject(it.readText()) else null
-                    }.getOrNull() }
-                    if (result != null) {
-                        check(result.optString("token") == token) { "VPN_FIREWALL_RESULT_IDENTITY" }
-                        when (result.optString("state")) {
-                            "CHECKING_RULES" -> { Thread.sleep(50); continue }
-                            "CONFIGURING_RULES" -> {
-                                PioneerConnectionTasks.update("rules-check", "COMPLETE")
-                                PioneerConnectionTasks.update("rules", "RUNNING")
-                                Thread.sleep(50); continue
-                            }
-                            "VERIFYING_RULES" -> {
-                                PioneerConnectionTasks.update("network-ready", "RUNNING")
-                                Thread.sleep(50); continue
-                            }
-                        }
-                        check(result.optString("state") == "READY") { "VPN_FIREWALL_START_FAILED ${result.optString("error")}" }
-                        verified.clear(); verified += key
-                        PioneerConnectionTasks.update("rules-check", "COMPLETE")
-                        PioneerConnectionTasks.update("rules", if (result.optInt("rulesChanged") == 0) "REUSED" else "COMPLETE")
-                        PioneerConnectionTasks.update("network-ready", "COMPLETE")
-                        PioneerConnectionTrace.mark("vpn-firewall-ready", "interface=${owner.name} persistent=true")
-                        log("VPN_FIREWALL_READY interface=${owner.name}; persistent rules, initialization root may exit")
-                        return lease
-                    }
-                    Thread.sleep(50)
-                }
-                error("VPN_FIREWALL_START_TIMEOUT")
+                val result = PioneerRootSession.request(app, "TASK", JSONObject().put("kind", "vpn-firewall").put("request", request),
+                    15_000, current)
+                check(result.optString("token") == token) { "VPN_FIREWALL_RESULT_IDENTITY" }
+                check(result.optString("state") == "READY") { "VPN_FIREWALL_START_FAILED ${result.optString("error")}" }
+                verified.clear(); verified += key
+                PioneerConnectionTasks.update("rules-check", "COMPLETE")
+                PioneerConnectionTasks.update("rules", if (result.optInt("rulesChanged") == 0) "REUSED" else "COMPLETE")
+                PioneerConnectionTasks.update("network-ready", "COMPLETE")
+                PioneerConnectionTrace.mark("vpn-firewall-ready", "interface=${owner.name} persistent=true")
+                log("VPN_FIREWALL_READY interface=${owner.name}; rules retained by shared root service")
+                return lease
             } catch (error: Throwable) {
-                File(dir,"stop").writeText(token)
                 PioneerConnectionTasks.update("rules", "FAILED", error.message.orEmpty())
                 throw error
-            } finally { PioneerRootSession.finish(app) }
+            }
         }
     }
 }

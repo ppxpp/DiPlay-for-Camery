@@ -75,3 +75,6 @@ release-signing.properties
 # Generated Python bytecode
 __pycache__/
 *.py[cod]
+
+# Local packages, extracted firmware and device debugging bundles.
+/artifacts/

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_category">كامري</string>
+    <string name="settings_camry_summary">إعدادات خاصة بسيارة كامري هذه وبوحدة Pioneer الرأسية</string>
+    <string name="settings_camry_hud_title">عرض الملاحة على HUD</string>
+    <string name="settings_camry_hud_description">يعرض ملاحة CarPlay على HUD ولوحة العدادات. يتوقف العرض فور إيقاف الخيار.</string>
+    <string name="settings_camry_hud_strategy">طريقة التنبيه</string>
+    <string name="settings_camry_hud_fixed">مسافة ثابتة</string>
+    <string name="settings_camry_hud_by_turn">حسب نوع المناورة</string>
+    <string name="settings_camry_hud_adaptive">توقيت متكيف (تجريبي)</string>
+    <string name="settings_camry_hud_fixed_hint">يبدأ التنبيه ضمن المسافة المحددة وتبقى التعليمة الحالية حتى تتغير.</string>
+    <string name="settings_camry_hud_by_turn_hint">حدد مسافات للانعطافات والمناورات المعقدة والسير المستقيم. لا يتم استنتاج فئة الطريق.</string>
+    <string name="settings_camry_hud_adaptive_hint">يقدر الزمن إلى المناورة من تغير المسافة. يستخدم المسافة عند التوقف أو عدم موثوقية البيانات.</string>
+    <string name="settings_camry_hud_distance">مسافة التنبيه</string>
+    <string name="settings_camry_hud_turn_distance">مسافة الانعطاف</string>
+    <string name="settings_camry_hud_complex_distance">مسافة التفرع والمنحدر والدوار والالتفاف</string>
+    <string name="settings_camry_hud_straight_distance">مسافة تنبيه السير المستقيم</string>
+    <string name="settings_camry_hud_advance">توقيت التنبيه</string>
+    <string name="settings_camry_hud_later">متأخر</string>
+    <string name="settings_camry_hud_standard">قياسي</string>
+    <string name="settings_camry_hud_earlier">مبكر</string>
+    <string name="settings_camry_hud_apply_hint">تطبق التغييرات عند التعليمة التالية وتبقى الحالية مستقرة. لا حاجة لإعادة الاتصال.</string>
+    <string name="settings_camry_hud_experience_note">لا يوفّر CarPlay بيانات فئة الطريق وإشارات المرور، لذلك يُحدَّد توقيت العرض على أساس المسافة إلى نقطة التوجيه فقط، ولا يمكن أن تطابق تجربة HUD تجربة ملاحة السيارة الأصلية بالكامل.</string>
+    <string name="settings_camry_hud_meters">%1$d م</string>
+    <string name="settings_camry_hud_adaptive_values">الانعطاف: %1$d ث / %2$d م؛ المناورات المعقدة: %3$d ث / %4$d م؛ السير المستقيم: %5$d ث / %6$d م (زمن التنبيه المسبق / الحد الأدنى للمسافة). الحد الأقصى للمسافة: %7$d / %8$d / %9$d م.</string>
+</resources>

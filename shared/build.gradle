@@ -2,6 +2,19 @@ plugins {
     id 'com.android.library'
 }
 
+// Vendor bytes stay local. Normal Android DEX packaging replaces first-use DexClassLoader optimization.
+def palSourceDex = rootProject.file('.private/vehicle-runtime-assets/vehicle/pal-client.dex')
+def palRuntimeJar = rootProject.file('.private/vehicle-runtime-libs/pal-client.jar')
+def sourceOnlyBuild = providers.gradleProperty('diplaySourceOnly').map { it.toBoolean() }.getOrElse(false)
+def preparePalRuntime = !sourceOnlyBuild && palSourceDex.isFile() ? tasks.register('preparePioneerPalSdk', Exec) {
+    inputs.file(palSourceDex)
+    inputs.file(rootProject.file('scripts/prepare-pioneer-pal-sdk.py'))
+    outputs.file(palRuntimeJar)
+    workingDir rootProject.projectDir
+    commandLine 'python3', rootProject.file('scripts/prepare-pioneer-pal-sdk.py').absolutePath,
+        '--dex', palSourceDex.absolutePath, '--output', palRuntimeJar.absolutePath
+} : null
+
 android {
     namespace = 'com.shilapi.xcertplay.shared'
     compileSdk = 37
@@ -38,8 +51,6 @@ android {
         // Geely/Lynk head-unit input API (com.geely.inputservice); declarations in src/main/aidl.
         aidl true
     }
-    // Locally provisioned vendor SDK assets; never commit proprietary runtime binaries.
-    sourceSets.main.assets.srcDir(rootProject.file('.private/vehicle-runtime-assets'))
     compileOptions {
         coreLibraryDesugaringEnabled true
         sourceCompatibility = JavaVersion.VERSION_11
@@ -48,7 +59,12 @@ android {
 }
 dependencies {
     implementation project(':pioneer-adapter')
-    // PAL client SDK uses Gson through its parent classloader.
+    if (!sourceOnlyBuild && (palRuntimeJar.isFile() || preparePalRuntime != null)) {
+        def runtimeFiles = files(palRuntimeJar)
+        if (preparePalRuntime != null) runtimeFiles.builtBy(preparePalRuntime)
+        implementation runtimeFiles
+    }
+    // PAL client SDK uses Gson from the application's classloader.
     implementation 'com.google.code.gson:gson:2.10.1'
     coreLibraryDesugaring libs.desugar.jdk.libs
     api libs.android.retrofuture
@@ -57,26 +73,4 @@ dependencies {
     implementation libs.jmdns
     testImplementation libs.junit
     testImplementation 'org.robolectric:robolectric:4.17'
-}
-
-// The root helper must not AOT-compile the complete application on this ARM32 head unit.
-androidComponents.onVariants(androidComponents.selector().all()) { variant ->
-    def capitalized = variant.name.capitalize()
-    def helperOutput = layout.buildDirectory.dir("generated/pioneer-hotspot-helper/${variant.name}")
-    def helperClasses = layout.buildDirectory.dir("intermediates/built_in_kotlinc/${variant.name}/compile${capitalized}Kotlin/classes")
-    def helperTask = tasks.register("build${capitalized}PioneerHotspotHelper", Exec) {
-        dependsOn("compile${capitalized}Kotlin")
-        inputs.dir(helperClasses)
-        inputs.file(rootProject.file("scripts/build-pioneer-hotspot-helper.py"))
-        outputs.dir(helperOutput)
-        commandLine("python3", rootProject.file("scripts/build-pioneer-hotspot-helper.py").absolutePath,
-            helperClasses.get().asFile.absolutePath, helperOutput.get().asFile.absolutePath)
-    }
-    variant.sources.assets.addStaticSourceDirectory(helperOutput.get().asFile.absolutePath)
-    tasks.configureEach { task ->
-        if (task.name == "merge${capitalized}Assets" ||
-            (task.name.contains(capitalized) && task.name.toLowerCase().contains("lint"))) {
-            task.dependsOn(helperTask)
-        }
-    }
 }

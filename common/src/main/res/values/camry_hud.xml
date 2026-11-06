@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_category">Camry</string>
+    <string name="settings_camry_summary">Settings specific to this Camry and its Pioneer head unit</string>
+    <string name="settings_camry_hud_title">Navigation HUD projection</string>
+    <string name="settings_camry_hud_description">Project CarPlay navigation to the HUD and instrument cluster. Turning off takes effect immediately.</string>
+    <string name="settings_camry_hud_strategy">Prompt strategy</string>
+    <string name="settings_camry_hud_fixed">Fixed distance</string>
+    <string name="settings_camry_hud_by_turn">By maneuver type</string>
+    <string name="settings_camry_hud_adaptive">Adaptive lead time (experimental)</string>
+    <string name="settings_camry_hud_fixed_hint">Start guidance within the selected distance. Keep the current instruction until it changes.</string>
+    <string name="settings_camry_hud_by_turn_hint">Choose distances for turns, complex maneuvers and straight guidance. Road class is not inferred.</string>
+    <string name="settings_camry_hud_adaptive_hint">Estimate time to the maneuver from distance changes. Fall back to distance when stopped or when data is unreliable.</string>
+    <string name="settings_camry_hud_distance">Advance distance</string>
+    <string name="settings_camry_hud_turn_distance">Turn distance</string>
+    <string name="settings_camry_hud_complex_distance">Fork, ramp, roundabout and U-turn distance</string>
+    <string name="settings_camry_hud_straight_distance">Straight guidance distance</string>
+    <string name="settings_camry_hud_advance">Prompt timing</string>
+    <string name="settings_camry_hud_later">Later</string>
+    <string name="settings_camry_hud_standard">Standard</string>
+    <string name="settings_camry_hud_earlier">Earlier</string>
+    <string name="settings_camry_hud_apply_hint">Strategy and parameter changes apply at the next instruction. Current guidance stays stable. No reconnection needed.</string>
+    <string name="settings_camry_hud_experience_note">CarPlay does not expose road class or traffic-signal data, so projection timing is estimated from guidance distance only. The HUD experience cannot fully match the factory navigation.</string>
+    <string name="settings_camry_hud_meters">%1$d m</string>
+    <string name="settings_camry_hud_adaptive_values">Turns: %1$d s / %2$d m; complex: %3$d s / %4$d m; straight: %5$d s / %6$d m (lead time / minimum distance). Maximum distances: %7$d / %8$d / %9$d m.</string>
+</resources>

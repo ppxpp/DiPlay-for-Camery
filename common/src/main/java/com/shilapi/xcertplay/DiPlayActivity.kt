@@ -116,12 +116,14 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 internal enum class SettingsCategory {
-    OVERVIEW, CONNECTION, DISPLAY, AUDIO, NAVIGATION, VEHICLE, LANGUAGE, DIAGNOSTICS, ADVANCED, ABOUT,
+    OVERVIEW, CAMRY, CONNECTION, DISPLAY, AUDIO, NAVIGATION, VEHICLE, LANGUAGE, DIAGNOSTICS, ADVANCED, ABOUT,
 }
 
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
 internal enum class SettingsSection {
     CAMRY_ADAPTATION,
+    CAMRY_HUD,
+    CAMRY_APPLICATIONS,
     CARPLAY_CONTROLS,
     WHEEL_KEYS,
     CONNECTION_SETUP,
@@ -160,10 +162,11 @@ internal object SettingsInformationArchitecture {
         SettingsCategory.AUDIO to setOf(SettingsSection.AUDIO_ROUTING),
         SettingsCategory.NAVIGATION to setOf(SettingsSection.LOCATION, SettingsSection.BYD_NAVIGATION),
         SettingsCategory.VEHICLE to setOf(
-            SettingsSection.CAMRY_ADAPTATION,            SettingsSection.CARPLAY_CONTROLS,
+            SettingsSection.CARPLAY_CONTROLS,
             SettingsSection.WHEEL_KEYS,
             SettingsSection.CAR_BUTTON,
         ),
+        SettingsCategory.CAMRY to setOf(SettingsSection.CAMRY_ADAPTATION, SettingsSection.CAMRY_HUD, SettingsSection.CAMRY_APPLICATIONS),
         SettingsCategory.DIAGNOSTICS to setOf(SettingsSection.DIAGNOSTICS),
         SettingsCategory.ADVANCED to setOf(
             SettingsSection.CLUSTER_MAP,
@@ -459,7 +462,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             ?: intent.getStringExtra("page")
         page = requestedPage
             ?: if (setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
-                    DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
+                    DiPlayPreferences.phoneAddress(this) != null,
+                    com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled(this))) "setup" else "home"
         if (requestedPage == "update") {
             page = "settings"
             settingsCategory = SettingsCategory.ABOUT
@@ -1240,6 +1244,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         SettingsCategory.DISPLAY -> R.drawable.ic_dp_display
         SettingsCategory.AUDIO -> R.drawable.ic_dp_audio
         SettingsCategory.NAVIGATION -> R.drawable.ic_dp_navigation
+        SettingsCategory.CAMRY -> R.drawable.ic_dp_car
         SettingsCategory.VEHICLE -> R.drawable.ic_dp_car
         SettingsCategory.DIAGNOSTICS -> R.drawable.ic_dp_diagnostics
         SettingsCategory.ADVANCED -> R.drawable.ic_dp_advanced
@@ -1253,6 +1258,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         SettingsCategory.DISPLAY -> R.string.settings_display
         SettingsCategory.AUDIO -> R.string.audio
         SettingsCategory.NAVIGATION -> R.string.settings_navigation
+        SettingsCategory.CAMRY -> R.string.settings_camry_category
         SettingsCategory.VEHICLE -> R.string.settings_vehicle
         SettingsCategory.DIAGNOSTICS -> R.string.diagnostics
         SettingsCategory.ADVANCED -> R.string.settings_advanced
@@ -1267,6 +1273,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             SettingsCategory.DISPLAY -> displaySettings(content)
             SettingsCategory.AUDIO -> audioSettings(content)
             SettingsCategory.NAVIGATION -> navigationSettings(content)
+            SettingsCategory.CAMRY -> {
+                settingsPageTitle(content, getString(R.string.settings_camry_category), getString(R.string.settings_camry_summary))
+                renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.CAMRY))
+            }
             SettingsCategory.VEHICLE -> vehicleSettings(content)
             SettingsCategory.DIAGNOSTICS -> diagnosticsSettings(content)
             SettingsCategory.ADVANCED -> advancedSettings(content)
@@ -1294,6 +1304,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         })
 
         val destinations = listOf(
+            SettingsCategory.CAMRY to R.string.settings_camry_summary,
             SettingsCategory.CONNECTION to R.string.settings_connection_summary,
             SettingsCategory.DISPLAY to R.string.settings_display_summary,
             SettingsCategory.AUDIO to R.string.settings_audio_summary,
@@ -1915,27 +1926,26 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(label(getString(R.string.settings_camry_description), 14, MUTED))
             updateStatus()
             card.addView(status)
-        }
-        filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
-            getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
-            val gestureFingers = listOf(0, 2, 3, 4)
-            choice(card, getString(R.string.settings_gesture_fingers_label),
-                gestureFingers.map { if (it == 0) getString(R.string.settings_gesture_disabled) else getString(R.string.settings_gesture_fingers_option, it) },
-                gestureFingers.indexOf(AirPlayPersistence.loadSettingsGestureFingers(this)).coerceAtLeast(0),
-                reconnects = false) {
-                AirPlayPersistence.saveSettingsGestureFingers(this, gestureFingers[it])
+            // Head-unit-specific controls are spread flat in this card: on this page Camry already
+            // means this Pioneer head unit, so they need no separate Pioneer card.
+            card.addView(space(12))
+            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.selectorVisible &&
+                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
+                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
+                val labels = modes.map { mode -> when (mode) {
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
+                } }
+                choice(card, getString(R.string.settings_wired_backend), labels,
+                    modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
+                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
+                    markReconnectNeeded()
+                }
+                card.addView(label(getString(R.string.settings_wired_backend_description), 14, MUTED))
             }
-            card.addView(label(getString(R.string.settings_gesture_fingers_hint), 14, MUTED).apply {
-                setPadding(0, dp(10), 0, 0)
-            })
-            toggle(card, getString(R.string.right_hand_drive), getString(R.string.place_carplay_s_controls_closer_to_the_driver), AirPlayPersistence.loadRightHandDrive(this)) { AirPlayPersistence.saveRightHandDrive(this, it); markReconnectNeeded() }
-        }
-        filteredSection(content, SettingsSection.WHEEL_KEYS,
-            getString(R.string.settings_wheel_keys), R.drawable.ic_dp_controls, ::wheelKeysSettings)
-        filteredSection(content, SettingsSection.CONNECTION_SETUP,
-            getString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
-            card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
-            card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
+            // The vehicle-hotspot wireless scheme belongs to this head unit too, so its retention
+            // slider lives here rather than in Connection.
             val retention=com.shilapi.xcertplay.vehicle.adapters.pioneer.wireless.PioneerHotspotRetention
             searchIndexSink?.add(getString(R.string.settings_camry_hotspot_retention_title))
             var retentionSeconds=retention.seconds(this)
@@ -1949,39 +1959,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             })
             card.addView(label(getString(R.string.settings_camry_hotspot_retention_description),14,MUTED))
             card.addView(space(12))
-            // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
-            // so that menu could not be reached to switch back (#696).
-            val mfiTargets = listOf(MfiTarget.LOCAL, MfiTarget.USB_CH341)
-            val storedMfiTarget = AirPlayPersistence.loadMfiTarget(this)
-            if (storedMfiTarget in mfiTargets) {
-                choice(card, getString(R.string.mfi_certificate_signing_target), listOf(
-                    getString(R.string.local_offline),
-                    getString(R.string.usb_ch341),
-                ), mfiTargets.indexOf(storedMfiTarget)) { index ->
-                    val target = mfiTargets[index]
-                    AirPlayPersistence.saveMfiTarget(this, target)
-                    setupError = runCatching { DiPlayBootstrap.ensure(this, target) }.exceptionOrNull()?.let {
-                        android.util.Log.e("DiPlaySetup", "CarPlay authentication could not be loaded", it)
-                        getString(R.string.setup_error_auth)
-                    }
-                }
-                card.addView(label(getString(R.string.settings_mfi_target_description), 14, MUTED))
+            toggle(card, getString(R.string.settings_camry_hide_bottom_arrow),
+                getString(R.string.settings_camry_hide_bottom_arrow_description),
+                com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.hidesBottomArrow(this)) { hide ->
+                com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.setHidesBottomArrow(this, hide)
             }
-        }
-        filteredSection(content, SettingsSection.DIAGNOSTICS,
-            getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
-            card.addView(button(getString(R.string.feedback_send), true) { openFeedback() }, matchButton(0, 60))
-            card.addView(label(getString(R.string.feedback_network_requirement), 14, MUTED).apply {
-                setPadding(0, dp(6), 0, dp(10))
-            })
-            val summary = label("", 14, ACCENT).apply {
-                isClickable = true
-                setOnClickListener { openFeedbackRecords() }
-                setPadding(0, 0, 0, dp(8))
+
+            toggle(card, getString(R.string.settings_camry_vehicle_playback_control),
+                getString(R.string.settings_camry_vehicle_playback_control_description),
+                com.shilapi.xcertplay.pioneer.PioneerMediaControlSettings.acceptsPlayback(this)) { enabled ->
+                com.shilapi.xcertplay.pioneer.PioneerMediaControlSettings.setAcceptsPlayback(this, enabled)
             }
-            feedbackSummary = summary
-            card.addView(summary)
-            card.addView(button(getString(R.string.feedback_records_title), false) { openFeedbackRecords() }, matchButton(6, 56))
+
             if (com.shilapi.xcertplay.pioneer.PioneerAdbDebug.supported()) {
                 card.addView(label(getString(R.string.settings_camry_usb_adb_description), 14, MUTED))
                 lateinit var adbButton: SettingButton
@@ -2030,13 +2019,74 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 })
                 refreshAdb()
             }
+        }
+        filteredSection(content, SettingsSection.CAMRY_HUD,
+            getString(R.string.settings_camry_hud_title), R.drawable.ic_dp_navigation) { card ->
+            card.addView(com.shilapi.xcertplay.settings.CamryHudSettingsSection.create(this, palette,
+                indexText = { searchIndexSink?.add(it) }))
+        }
+        filteredSection(content, SettingsSection.CAMRY_APPLICATIONS,
+            getString(R.string.settings_camry_apps_title), R.drawable.ic_dp_car) { card ->
+            card.addView(com.shilapi.xcertplay.settings.CamryApplicationSettingsSection.create(this, palette,
+                indexText = { searchIndexSink?.add(it) }))
+        }
+        filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
+            getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
+            val gestureFingers = listOf(0, 2, 3, 4)
+            choice(card, getString(R.string.settings_gesture_fingers_label),
+                gestureFingers.map { if (it == 0) getString(R.string.settings_gesture_disabled) else getString(R.string.settings_gesture_fingers_option, it) },
+                gestureFingers.indexOf(AirPlayPersistence.loadSettingsGestureFingers(this)).coerceAtLeast(0),
+                reconnects = false) {
+                AirPlayPersistence.saveSettingsGestureFingers(this, gestureFingers[it])
+            }
+            card.addView(label(getString(R.string.settings_gesture_fingers_hint), 14, MUTED).apply {
+                setPadding(0, dp(10), 0, 0)
+            })
+            toggle(card, getString(R.string.right_hand_drive), getString(R.string.place_carplay_s_controls_closer_to_the_driver), AirPlayPersistence.loadRightHandDrive(this)) { AirPlayPersistence.saveRightHandDrive(this, it); markReconnectNeeded() }
+        }
+        filteredSection(content, SettingsSection.WHEEL_KEYS,
+            getString(R.string.settings_wheel_keys), R.drawable.ic_dp_controls, ::wheelKeysSettings)
+        filteredSection(content, SettingsSection.CONNECTION_SETUP,
+            getString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
+            card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
+            card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
+            // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
+            // so that menu could not be reached to switch back (#696).
+            val mfiTargets = listOf(MfiTarget.LOCAL, MfiTarget.USB_CH341)
+            val storedMfiTarget = AirPlayPersistence.loadMfiTarget(this)
+            if (storedMfiTarget in mfiTargets) {
+                choice(card, getString(R.string.mfi_certificate_signing_target), listOf(
+                    getString(R.string.local_offline),
+                    getString(R.string.usb_ch341),
+                ), mfiTargets.indexOf(storedMfiTarget)) { index ->
+                    val target = mfiTargets[index]
+                    AirPlayPersistence.saveMfiTarget(this, target)
+                    setupError = runCatching { DiPlayBootstrap.ensure(this, target) }.exceptionOrNull()?.let {
+                        android.util.Log.e("DiPlaySetup", "CarPlay authentication could not be loaded", it)
+                        getString(R.string.setup_error_auth)
+                    }
+                }
+                card.addView(label(getString(R.string.settings_mfi_target_description), 14, MUTED))
+            }
+        }
+        filteredSection(content, SettingsSection.DIAGNOSTICS,
+            getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(button(getString(R.string.feedback_send), true) { openFeedback() }, matchButton(0, 60))
+            card.addView(label(getString(R.string.feedback_network_requirement), 14, MUTED).apply {
+                setPadding(0, dp(6), 0, dp(10))
+            })
+            val summary = label("", 14, ACCENT).apply {
+                isClickable = true
+                setOnClickListener { openFeedbackRecords() }
+                setPadding(0, 0, 0, dp(8))
+            }
+            feedbackSummary = summary
+            card.addView(summary)
+            card.addView(button(getString(R.string.feedback_records_title), false) { openFeedbackRecords() }, matchButton(6, 56))
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }
             card.addView(exportButton, matchButton(10, 60))
-            card.addView(button(getString(R.string.settings_pioneer_lan_debug), false) {
-                startActivity(Intent(this, com.shilapi.xcertplay.pioneer.PioneerDebugActivity::class.java))
-            }, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
             card.addView(button(getString(R.string.settings_report_on_phone), false) { openBackup(SettingsCategory.DIAGNOSTICS) }, matchButton(10, 60))
             card.addView(label(getString(R.string.diagnostic_same_wifi_required), 17, WARNING, true).apply {
@@ -2111,21 +2161,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.USB_CONNECTION,
             getString(R.string.settings_usb_connection), R.drawable.ic_dp_connection) { card ->
-            if (com.shilapi.xcertplay.pioneer.PioneerWiredBackend.selectorVisible &&
-                com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) {
-                val modes = com.shilapi.xcertplay.pioneer.PioneerWiredBackend.availableModes()
-                val labels = modes.map { mode -> when (mode) {
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP -> getString(R.string.settings_wired_backend_lwip)
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.LWIP_OPTIMIZED -> getString(R.string.settings_wired_backend_optimized)
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN -> getString(R.string.settings_wired_backend_vpn)
-                } }
-                choice(card, getString(R.string.settings_wired_backend), labels,
-                    modes.indexOf(com.shilapi.xcertplay.pioneer.PioneerWiredBackend.mode(this)), reconnects = false) { index ->
-                    com.shilapi.xcertplay.pioneer.PioneerWiredBackend.save(this, modes[index])
-                    markReconnectNeeded()
-                }
-                card.addView(label(getString(R.string.settings_wired_backend_description), 14, MUTED))
-            }
             val currents = UsbChargingCurrent.entries
             choice(card, getString(R.string.settings_usb_charging), listOf(
                 getString(R.string.settings_usb_charging_normal),
@@ -2143,11 +2178,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (settingsSectionFilter?.contains(SettingsSection.BYD_ADB) != false) bydAdbSettings(content)
         filteredSection(content, SettingsSection.DISPLAY_AND_PERFORMANCE,
             getString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
-            toggle(card, getString(R.string.settings_camry_hide_bottom_arrow),
-                getString(R.string.settings_camry_hide_bottom_arrow_description),
-                com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.hidesBottomArrow(this)) { hide ->
-                com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.setHidesBottomArrow(this, hide)
-            }
             val appearances = AppAppearance.entries
             choice(
                 card,

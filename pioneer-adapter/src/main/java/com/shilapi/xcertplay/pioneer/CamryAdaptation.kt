@@ -27,6 +27,8 @@ object CamryAdaptation {
         if (!PioneerWiredSession.active) initialize(context)
     }
     fun enabled(): Boolean = resolve(applied, PioneerUsbPolicy.matchesModel())
+    /** Resolves the stored mode against the current device; safe before initialize() has run. */
+    fun enabled(context: Context): Boolean = resolve(mode(context), PioneerUsbPolicy.matchesModel())
     fun sessionEnded() { appContext?.let(::initialize) }
     fun requestMode(): String = applied.name
     fun useRequestMode(request: JSONObject) {

@@ -30,6 +30,7 @@ class PioneerDebugActivity : Activity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!PioneerDebugRuntime.automaticStartEnabled(this)) { finish(); return }
         val codes = savedInstanceState?.getIntArray("installerCodes") ?: intArrayOf()
         val paths = savedInstanceState?.getStringArrayList("installerPaths").orEmpty()
         codes.zip(paths).forEach { (code, path) -> pendingInstalls[code] = path }
@@ -87,7 +88,7 @@ class PioneerDebugActivity : Activity() {
         install(intent)
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); install(intent) }
-    override fun onResume() { super.onResume(); handler.post(refresh) }
+    override fun onResume() { super.onResume(); if (PioneerDebugRuntime.automaticStartEnabled(this)) handler.post(refresh) }
     override fun onPause() { handler.removeCallbacks(refresh); super.onPause() }
     private fun install(intent: Intent?) {
         val path = intent?.getStringExtra("install_path") ?: return

@@ -6,14 +6,18 @@ import com.shilapi.xcertplay.vehicle.api.DefaultAudioRouteController
 
 /** Detect the firmware once; media code consumes only the selected audio policy. */
 object VehicleAudioRouting {
-    val selected: AudioRouteController get() {
-        val implementation = if (PioneerAudioRouteAdapter.available) PioneerAudioRouteAdapter else DefaultAudioRouteController
-        return object : AudioRouteController by implementation {
+    private fun protectedRoute(implementation: AudioRouteController): AudioRouteController =
+        object : AudioRouteController by implementation {
             override fun selectMediaSource(report: (String) -> Unit) {
                 VehiclePlaybackProtection.beforeSourceActivation(report)
                 implementation.selectMediaSource(report)
             }
         }
-    }
+
+    private val pioneerRoute = protectedRoute(PioneerAudioRouteAdapter)
+    private val defaultRoute = protectedRoute(DefaultAudioRouteController)
+    // Reuse wrappers on the PCM write path, while still honoring adaptation changes.
+    val selected: AudioRouteController
+        get() = if (PioneerAudioRouteAdapter.available) pioneerRoute else defaultRoute
     val available: Boolean get() = selected.available
 }

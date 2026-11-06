@@ -199,8 +199,13 @@ object Iap2FrameFormatter {
 
     private fun hexPreview(payload: ByteArray): String {
         if (payload.isEmpty()) return "<empty>"
-        val shown = payload.take(MAX_HEX_BYTES).joinToString(" ") {
-            "%02x".format(it.toInt() and 0xff)
+        val shown = buildString(minOf(payload.size, MAX_HEX_BYTES) * 3) {
+            val digits = "0123456789abcdef"
+            for (index in 0 until minOf(payload.size, MAX_HEX_BYTES)) {
+                if (index > 0) append(' ')
+                val value = payload[index].toInt() and 0xff
+                append(digits[value ushr 4]); append(digits[value and 15])
+            }
         }
         return if (payload.size <= MAX_HEX_BYTES) shown else "$shown ... (+${payload.size - MAX_HEX_BYTES}B)"
     }

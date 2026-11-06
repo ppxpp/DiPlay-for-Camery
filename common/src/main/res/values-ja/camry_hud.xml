@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_category">カムリ</string>
+    <string name="settings_camry_summary">このカムリとパイオニア車載機固有の設定</string>
+    <string name="settings_camry_hud_title">ナビのHUD投影</string>
+    <string name="settings_camry_hud_description">CarPlayの案内をHUDとメーターに投影します。オフにすると直ちに停止します。</string>
+    <string name="settings_camry_hud_strategy">案内タイミング</string>
+    <string name="settings_camry_hud_fixed">固定距離</string>
+    <string name="settings_camry_hud_by_turn">進路変更の種類別</string>
+    <string name="settings_camry_hud_adaptive">到達時間に応じた案内（実験的機能）</string>
+    <string name="settings_camry_hud_fixed_hint">設定距離以内で案内を開始し、次の案内に変わるまで維持します。</string>
+    <string name="settings_camry_hud_by_turn_hint">通常の曲がり角、複雑な進路変更、直進の距離を個別に設定します。道路種別は推定しません。</string>
+    <string name="settings_camry_hud_adaptive_hint">距離の変化から到達時間を推定します。停車中やデータが不確かな場合は距離で判断します。</string>
+    <string name="settings_camry_hud_distance">案内開始距離</string>
+    <string name="settings_camry_hud_turn_distance">通常の曲がり角の距離</string>
+    <string name="settings_camry_hud_complex_distance">分岐・ランプ・環状交差点・Uターンの距離</string>
+    <string name="settings_camry_hud_straight_distance">直進案内の距離</string>
+    <string name="settings_camry_hud_advance">案内の早さ</string>
+    <string name="settings_camry_hud_later">遅め</string>
+    <string name="settings_camry_hud_standard">標準</string>
+    <string name="settings_camry_hud_earlier">早め</string>
+    <string name="settings_camry_hud_apply_hint">変更は次の案内から適用されます。現在の案内は維持され、再接続は不要です。</string>
+    <string name="settings_camry_hud_experience_note">CarPlay は道路種別や信号などのデータを公開していないため、投射タイミングは案内地点までの距離から推定するしかなく、HUD の体験は純正ナビと完全には同等になりません。</string>
+    <string name="settings_camry_hud_meters">%1$d m</string>
+    <string name="settings_camry_hud_adaptive_values">通常の曲がり角：%1$d秒 / %2$dm、複雑な分岐：%3$d秒 / %4$dm、直進：%5$d秒 / %6$dm（先行時間 / 最低案内距離）。最大距離はそれぞれ%7$dm / %8$dm / %9$dmです。</string>
+</resources>

@@ -11,7 +11,7 @@ class PioneerVehicleHotspot(context: Context, private var isCancelled: () -> Boo
     companion object {
         fun configuredSsid(context: Context): String {
             val wifi=context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val config=PioneerHotspotConfiguration.ensure(wifi)
+            val config=PioneerHotspotConfiguration.ensure(context, wifi)
             return config.SSID?.takeIf { it.isNotBlank() } ?: error("Vehicle hotspot SSID unavailable")
         }
     }

@@ -67,6 +67,8 @@ object SetupGuide {
         prefs(context).edit().putBoolean("setup_guide_seen", true).apply()
     }
 
-    /** Only a first launch opens the guide by itself; anyone with a saved iPhone has already set up. */
-    fun shouldOpenOnLaunch(seen: Boolean, phoneChosen: Boolean): Boolean = !seen && !phoneChosen
+    /** Only a first launch opens the guide by itself; anyone with a saved iPhone has already set up.
+     * The Camry adaptation already configures this fork's head unit, so an active adaptation skips the guide. */
+    fun shouldOpenOnLaunch(seen: Boolean, phoneChosen: Boolean, camryAdapted: Boolean = false): Boolean =
+        !seen && !phoneChosen && !camryAdapted
 }

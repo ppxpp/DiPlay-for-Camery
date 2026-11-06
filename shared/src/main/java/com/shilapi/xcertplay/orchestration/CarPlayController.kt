@@ -845,11 +845,21 @@ class CarPlayController(
 
     fun sendMediaButton(index: Int): Boolean = sendMediaButton(index, "unspecified")
 
+    private fun blocksVehiclePlayback(index: Int, source: String): Boolean =
+        com.shilapi.xcertplay.vehicle.runtime.VehicleMediaCommandPolicy.isVehiclePlayback(index, source) &&
+            com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.enabled(appContext) &&
+            !com.shilapi.xcertplay.pioneer.PioneerMediaControlSettings.acceptsPlayback(appContext)
+
     fun sendMediaButton(index: Int, source: String): Boolean {
         val safeSource = source.take(80).replace(Regex("[^A-Za-z0-9_.:-]"), "_")
         if (closed) {
             audioControlLog("command=$index source=$safeSource outcome=rejected_closed")
             return false
+        }
+        if (blocksVehiclePlayback(index, safeSource)) {
+            audioControlLog("command=$index source=$safeSource outcome=ignored_vehicle_playback_disabled")
+            // Consume ignored bridge commands successfully so the companion cannot fall back to its player.
+            return true
         }
         val revision = mediaIntentRevision.incrementAndGet()
         val session = activeSession
@@ -858,6 +868,10 @@ class CarPlayController(
         return try {
             if ((LocalConnectionExperiments.TOUCH_COALESCING || com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.touchCoalescingComparisonEnabled)) pioneerTouchQueue.barrier()
             touchExecutor.execute {
+                if (blocksVehiclePlayback(index, safeSource)) {
+                    audioControlLog("command=$index source=$safeSource revision=$revision outcome=ignored_vehicle_playback_disabled")
+                    return@execute
+                }
                 lastMediaCommand = MediaCommandObservation(revision, index, safeSource, android.os.SystemClock.elapsedRealtime(), session)
                 audioControlLog("command=$index source=$safeSource revision=$revision targetSession=${System.identityHashCode(session)} outcome=dispatch")
                 try {
@@ -880,8 +894,6 @@ class CarPlayController(
             if (closed) return
             closed = true
             connectionProgress?.stop(ConnectionOutcome.CANCELLED)
-            if (config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
-                com.shilapi.xcertplay.pioneer.PioneerRootSession.finish(appContext)
             // Order cancellation with address-preference commits and generation replacement.
             wirelessGeneration.incrementAndGet()
             dashboardMapOutputVisible = false
@@ -1827,6 +1839,7 @@ class CarPlayController(
                 traceContext = "wireless-rfcomm",
                 onTrace = ::debugLog,
                 onArtwork = ::onArtworkTransfer,
+                traceFrames = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled },
             )
             synchronized(wirelessResourceLock) {
                 if (isStaleWirelessRun(generation)) {
@@ -2000,7 +2013,8 @@ class CarPlayController(
             }
             if(!published) throw java.io.InterruptedIOException("Parallel Bluetooth connection cancelled")
             val opened=Iap2Session.openWireless(currentConnection.stream,
-                traceContext="pioneer-parallel-rfcomm",onTrace={ debugLog(it) },onArtwork=::onArtworkTransfer)
+                traceContext="pioneer-parallel-rfcomm",onTrace={ debugLog(it) },onArtwork=::onArtworkTransfer,
+                traceFrames={ com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled })
             channel=opened
             val accepted=synchronized(wirelessResourceLock) {
                 if(isStaleWirelessRun(generation) || cancelled.get()) false else { csm=opened;true }
@@ -2044,6 +2058,7 @@ class CarPlayController(
                 traceContext = "wireless-tunnel",
                 onTrace = ::debugLog,
                 onArtwork = ::onArtworkTransfer,
+                traceFrames = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled },
             )
         } catch (error: Throwable) {
             debugLog("Could not open the tunneled iAP2 link", error)
@@ -2913,6 +2928,7 @@ class CarPlayController(
                 traceContext = "wired",
                 onTrace = ::debugLog,
                 onArtwork = ::onArtworkTransfer,
+                traceFrames = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled },
             )
             ownedCsm = csm
             this.csm = csm

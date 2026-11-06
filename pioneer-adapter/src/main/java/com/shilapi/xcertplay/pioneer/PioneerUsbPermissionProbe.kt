@@ -75,43 +75,23 @@ object PioneerUsbPermissionProbe {
         Os.chmod(root.path, 0x1c0)
         val directory = File(root, token).apply { check(mkdir()) }
         Os.chmod(directory.path, 0x1c0)
-        val unified = action == "AUTO_GRANT" && PioneerWiredBackend.usesVehicleAdaptation(app) &&
-            PioneerWiredBackend.mode(app) == PioneerWiredBackend.Mode.VPN
-        if (unified) {
-            PioneerConnectionTasks.update("permission-request", "RUNNING", "waiting-root")
-            PioneerRootSession.ready(app, stillCurrent)
-            PioneerConnectionTasks.update("permission-request", "RUNNING")
-        }
+        PioneerConnectionTasks.update("permission-request", "RUNNING", "waiting-root")
+        PioneerRootSession.ready(app, stillCurrent)
+        PioneerConnectionTasks.update("permission-request", "RUNNING")
         val deadline = SystemClock.elapsedRealtime() + 15000
         val boot = File("/proc/sys/kernel/random/boot_id").readText().trim()
         val appStart = File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19]
         val request = JSONObject().put("token", token).put("action", action).put("camryAdaptation", CamryAdaptation.requestMode()).put("package", app.packageName)
-            .put("uid", app.applicationInfo.uid).put("appPid", Process.myPid()).put("appStart", appStart)
+            .put("uid", app.applicationInfo.uid).put("apk", app.applicationInfo.sourceDir).put("appPid", Process.myPid()).put("appStart", appStart)
             .put("boot", boot).put("requestedAtMs", SystemClock.elapsedRealtime()).put("deadline", deadline).put("node", device.deviceName)
             .put("deviceId", device.deviceId).put("vid", device.vendorId).put("pid", device.productId)
             .put("identityHash", identity)
-        val input = File(directory, "request.json"); input.writeText(request.toString()); Os.chmod(input.path, 0x180)
         val report = JSONObject().put("token", token).put("action", action).put("permissionBefore", before)
             .put("appUid", app.applicationInfo.uid).put("identityHash", identity).put("startedAt", System.currentTimeMillis())
-        val dispatchError = AtomicReference<Throwable?>()
-        val command = "CLASSPATH=${quote(app.applicationInfo.sourceDir)} /system/bin/app_process /system/bin " +
-            "com.shilapi.xcertplay.pioneer.PioneerUsbPermissionHelper ${quote(directory.path)} </dev/null >/dev/null 2>&1 &"
         val started = SystemClock.elapsedRealtime()
-        Thread({ runCatching {
-            if (unified) PioneerRootSession.submit(app, directory, stillCurrent) else dispatch(command)
-        }.onFailure(dispatchError::set) }, "usb-permission-probe-launch")
-            .apply { isDaemon = true; start() }
         try {
-            var helper: JSONObject? = null
-            while (SystemClock.elapsedRealtime() < deadline + 500) {
-                check(stillCurrent()) { "USB connection cancelled" }
-                val output = File(directory, "result.json")
-                helper = runCatching { if (output.length() in 1..32768) JSONObject(output.readText()) else null }.getOrNull()
-                if (helper != null) break
-                dispatchError.get()?.let { throw IllegalStateException("Pioneer service rejected probe dispatch", it) }
-                Thread.sleep(50)
-            }
-            if (helper == null) error("No helper result before deadline; root capability is unconfirmed")
+            val helper = PioneerRootSession.request(app, "TASK", JSONObject().put("kind", "usb-permission-probe").put("request", request),
+                15_000, stillCurrent)
             check(helper.getString("token") == token) { "Probe token mismatch" }
             report.put("helper", helper)
             if (action == "AUTO_GRANT") {
@@ -136,10 +116,8 @@ object PioneerUsbPermissionProbe {
             report.put("verdict", verdict(action, before, unchanged, after, opened, helper))
             }
         } catch (failure: Throwable) {
-            File(directory, "cancel").writeText("cancel")
             report.put("verdict", "ERROR_OR_UNCONFIRMED").put("error", "${failure.javaClass.simpleName}: ${failure.message}")
         } finally {
-            File(directory, "cancel").writeText("cancel")
             report.put("elapsedMs", SystemClock.elapsedRealtime() - started)
         }
         File(directory, "app-report.json").writeText(report.toString())
@@ -184,5 +162,4 @@ object PioneerUsbPermissionProbe {
     }
 
     private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
-    private fun dispatch(command: String) = PioneerRootDispatcher.dispatch(command)
 }

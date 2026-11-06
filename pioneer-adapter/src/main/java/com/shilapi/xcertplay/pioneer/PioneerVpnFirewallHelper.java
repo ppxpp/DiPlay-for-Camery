@@ -15,7 +15,7 @@ import java.util.*;
 
 /** Initialization-only persistent CARNET rules for the verified VPN TUN. */
 public final class PioneerVpnFirewallHelper {
-    static void runTask(File requestedDirectory) {
+    static JSONObject runTask(File requestedDirectory, JSONObject request) {
         File directory = null;
         JSONObject status = new JSONObject();
         try {
@@ -24,11 +24,6 @@ public final class PioneerVpnFirewallHelper {
                 throw new IOException("VPN_FIREWALL_INVALID_DIRECTORY");
             StructStat owner = Os.lstat(dir.getPath());
             PioneerVpnPermissionHelper.requireFile(owner, true, owner.st_uid);
-            JSONObject request;
-            try (FileInputStream in = PioneerRootFiles.input(new File(dir, "request.json").getPath(), OsConstants.O_RDONLY | OsConstants.O_NOFOLLOW, 0)) {
-                PioneerVpnPermissionHelper.requireFile(Os.fstat(in.getFD()), false, owner.st_uid);
-                request = new JSONObject(PioneerVpnPermissionHelper.read(in, 8192));
-            }
             String pkg = request.getString("package"), token = request.getString("token");
             int uid = request.getInt("uid");
             if (!pkg.matches("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+") || uid != owner.st_uid || !token.equals(dir.getName()))
@@ -55,9 +50,9 @@ public final class PioneerVpnFirewallHelper {
             InetAddress address = InetAddress.getByName(literal);
             if (!(address instanceof Inet6Address) || !address.isLinkLocalAddress()) throw new IOException("VPN_FIREWALL_INVALID_ADDRESS");
             PioneerInterfaceFirewall.Guard guard = () -> {
+                PioneerRootSessionHelper.checkTask();
                 long now = SystemClock.elapsedRealtime();
                 if (now >= request.getLong("deadline")) throw new IOException("VPN_FIREWALL_START_EXPIRED");
-                if (new File(dir, "stop").exists()) throw new IOException("VPN_FIREWALL_STOPPED");
                 if (!request.getString("boot").equals(PioneerVpnPermissionHelper.readFile(new File("/proc/sys/kernel/random/boot_id"),128).trim()))
                     throw new IOException("VPN_FIREWALL_BOOT_CHANGED");
                 int pid = request.getInt("appPid");
@@ -83,7 +78,7 @@ public final class PioneerVpnFirewallHelper {
                     // Legacy journals are app-owned and identify exact old rules. Never clear chains.
                     for (File previous : dir.getParentFile().listFiles()) {
                         if (!previous.isDirectory() || previous.equals(dir)) continue;
-                        File oldRequest = new File(previous,"request.json");
+                        File oldRequest = PioneerVpnPermissionHelper.recoveryRequest(previous);
                         if (!oldRequest.isFile()) continue;
                         JSONObject old = ownedJson(oldRequest,uid);
                         if (!pkg.equals(old.optString("package"))) continue;
@@ -114,15 +109,17 @@ public final class PioneerVpnFirewallHelper {
                     publish(dir,status,"VERIFYING_RULES",null);
                     status.put("rulesChanged",changed);
                     writeJournal(dir,request,"PERSISTENT","none",false);
+                    guard.check();
                     publish(dir,status,"READY",null);
-                    return;
+                    return status;
                 }
             }
         } catch (Throwable error) {
             android.util.Log.e("DiPlayVpnRoot", "Firewall initialization failed directory=" + directory, error);
-            if (directory != null) try { publish(directory, status, "ERROR", error.toString()); }
+            try { publish(directory, status, "ERROR", error.toString()); }
             catch (Throwable ignored) { }
         }
+        return status;
     }
 
     private static JSONObject ownedJson(File file,int uid) throws Exception {
@@ -143,7 +140,7 @@ public final class PioneerVpnFirewallHelper {
         if (oldJournal.optString("state").equals("RELEASED") && oldJournal.optString("pending").equals("none") && !oldJournal.optBoolean("unresolved",true)) return;
         if (!oldJournal.optString("state").equals("ACTIVE") || !oldJournal.optString("pending").equals("none") || oldJournal.optBoolean("unresolved",true))
             throw new IOException("VPN_FIREWALL_PREVIOUS_COMMAND_UNRESOLVED token=" + previous.getName());
-        JSONObject old = ownedJson(new File(previous,"request.json"),uid);
+        JSONObject old = ownedJson(PioneerVpnPermissionHelper.recoveryRequest(previous),uid);
         if (!old.getString("token").equals(previous.getName()) || old.getInt("uid") != uid ||
             !old.getString("package").equals(current.getString("package")) || !old.getString("boot").equals(current.getString("boot")))
             throw new IOException("VPN_FIREWALL_PREVIOUS_OWNER_INVALID");
@@ -185,7 +182,7 @@ public final class PioneerVpnFirewallHelper {
     private static void publish(File dir,JSONObject status,String state,String error) throws Exception {
         status.put("state",state).put("updated",SystemClock.elapsedRealtime());
         if(error != null) status.put("error",error);
-        PioneerVpnPermissionHelper.publish(dir,status,!state.equals("READY"));
+        // Progress stays in memory; only recovery journals are durable.
     }
     private static void writeJournal(File dir,JSONObject request,String state,String pending,boolean unresolved) throws Exception {
         JSONObject data = new JSONObject().put("boot",request.getString("boot")).put("state",state).put("pending",pending).put("unresolved",unresolved);

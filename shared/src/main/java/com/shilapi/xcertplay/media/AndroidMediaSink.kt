@@ -110,9 +110,14 @@ internal class AudioFocusCoordinator(
         runCatching { report("Audio: focus acquire channel=${if (channel == AudioChannel.PHONE) "CALL" else channel.name} streamType=$focusStream enabled=$enabled closed=$closed manager=${manager != null}") }
         if (closed || (!enabled && focusStream == null) || manager == null ||
             (channel == AudioChannel.NAVIGATION && focusStream == null)) return
-        // Pioneer speech uses an independent MIX focus request, but still needs TAI_AUDIO
-        // selected when Siri/navigation is the first sound after connection.
-        if (focusStream != null) ensureVehicleSource()
+        // Pioneer source selection generates an automatic PLAY. Speech uses the MIX bus
+        // and preserves the selected source, including OFF and a paused media source.
+        if (focusStream != null) {
+            if (channel == AudioChannel.NAVIGATION || channel == AudioChannel.ASSISTANT) {
+                runCatching { report("Audio: preserving Pioneer source channel=$channel streamType=$focusStream") }
+            }
+            ensureVehicleSource(channel)
+        }
         if (channel != AudioChannel.PHONE && audioRouting.independentSpeechFocus(attributes)) {
             independentSpeechTracks.add(track)
             if (independentSpeechRequest == null) {
@@ -137,7 +142,8 @@ internal class AudioFocusCoordinator(
     }
 
     @Synchronized
-    fun ensureVehicleSource() {
+    fun ensureVehicleSource(channel: AudioChannel) {
+        if (channel == AudioChannel.NAVIGATION || channel == AudioChannel.ASSISTANT) return
         if (!closed && audioRouting.available) audioRouting.selectMediaSource(report)
     }
 
@@ -147,8 +153,10 @@ internal class AudioFocusCoordinator(
         if (closed || manager == null || !audioRouting.available || independentSpeechTracks.isNotEmpty() ||
             active.values.any { it.channel == AudioChannel.PHONE || it.channel == AudioChannel.ASSISTANT }) return false
         val attributes = active.values.firstOrNull { it.channel == AudioChannel.MEDIA }?.attributes
+            ?: request?.takeIf { requestedChannel == AudioChannel.MEDIA }?.attributes
             ?: AudioAttributes.Builder().setLegacyStreamType(audioRouting.streamType(AudioChannel.MEDIA) ?: return false).build()
         val stream = audioRouting.focusStream(attributes) ?: return false
+        val temporaryRecovery = request == null || recoveryOnly
         if (request == null) {
             focusGeneration++
             currentListener = listenerFor(focusGeneration)
@@ -158,7 +166,7 @@ internal class AudioFocusCoordinator(
         }
         val result = request!!.request(manager)
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
-        if (active.isEmpty()) {
+        if (active.isEmpty() && temporaryRecovery) {
             recoveryOnly = true
             val epoch = ++recoveryEpoch
             Handler(Looper.getMainLooper()).postDelayed({
@@ -220,6 +228,17 @@ internal class AudioFocusCoordinator(
             if (it.isVehicleCall()) 4 else it.channel.focusPriority()
         }
         if (primary == null) {
+            // A paused iPhone tears down its MEDIA stream after a short delay. On Pioneer,
+            // abandoning token 401 closes source 300 even while MIX navigation is speaking.
+            // Match the OEM player's pause: retain only the existing main-source request,
+            // without a track, focus re-request, source selection, or transport PLAY command.
+            // The connection owner closes this coordinator to release the retained request.
+            val held = request
+            if (!closed && requestedChannel == AudioChannel.MEDIA && held != null &&
+                audioRouting.focusStream(held.attributes) == 401) {
+                mediaVolume = FULL_VOLUME
+                return
+            }
             focusGeneration += 1
             val abandoned = request
             request = null
@@ -1232,6 +1251,10 @@ private class VideoDecoder(
     }
 
     private fun run() {
+        // Match the output worker on Camry; a saturated OEM workload otherwise starves codec input.
+        if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) runCatching {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY)
+        }
         try {
             while (running) {
                 val job = queue.poll(5)
@@ -2088,6 +2111,8 @@ private class AudioRenderer(
     private var diagnosticStage = "starting"
     private var lastDecoderOutputMetadata: String? = null
     private var decoderOutputReports = 0
+    private val decoderOutputInfo = MediaCodec.BufferInfo()
+    private val pendingInput = PendingAudioDecoderInput(AUDIO_INPUT_WAIT_NS)
     private val thread = Thread(::run, "carplay-audio").apply { isDaemon = true }
 
     private var experimentLease: Closeable? = null
@@ -2168,23 +2193,58 @@ private class AudioRenderer(
             diagnosticStage = "focus"
             requestAudioFocus()
             var lastAudioInputNs = System.nanoTime()
+            val nonblockingCodecInput = com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()
+            codecInputTimeoutUs = if (nonblockingCodecInput) 0L else INPUT_TIMEOUT_US
+            val expiredInputProbe: (ByteArray, Long) -> Boolean = { payload, ptsUs ->
+                tryFeedCodec(payload, ptsUs, timeoutUs = 0L)
+            }
+            var pauseInputRetry = false
             while (running) {
                 // Report Settings changes from this worker, never from the UI thread, also between prompts.
                 applyNavigationAttenuation()
                 diagnosticStage = "packet"
-                queue.poll(AUDIO_POLL_MILLIS, TimeUnit.MILLISECONDS)?.let {
+                // Keep one prepared access unit outside the bounded ingress queue. Retry it
+                // before consuming another packet, preserving payload and PTS under pressure.
+                if (pendingInput.hasPending && (!nonblockingCodecInput || pauseInputRetry)) Thread.sleep(AUDIO_POLL_MILLIS)
+                val diagnosticsEnabled = com.shilapi.xcertplay.pioneer.PioneerDiagnostics.enabled
+                var audioWorkStartedNs = if (diagnosticsEnabled && pendingInput.hasPending) System.nanoTime() else 0L
+                if (!pendingInput.hasPending) queue.poll(AUDIO_POLL_MILLIS, TimeUnit.MILLISECONDS)?.let {
                     val now = System.nanoTime()
-                    if (now - lastAudioInputNs >= 500_000_000L) audioFocusCoordinator.ensureVehicleSource()
+                    if (now - lastAudioInputNs >= 500_000_000L) {
+                        mappedChannel?.let(audioFocusCoordinator::ensureVehicleSource)
+                    }
                     lastAudioInputNs = now
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
-                    val decoding = System.nanoTime()
+                    if (diagnosticsEnabled) {
+                        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-queue-${format.audioType}", System.nanoTime()-it.queuedNs)
+                        audioWorkStartedNs = System.nanoTime()
+                    }
                     handle(it)
-                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-handle-includes-write-${format.audioType}", System.nanoTime()-decoding)
                 }
                 // Output becomes ready asynchronously, including after the last packet of a burst.
                 // Waiting for the next UDP packet can strand decoded sound for hundreds of ms.
                 diagnosticStage = "decoder-output"
+                val acquiring = if (diagnosticsEnabled) System.nanoTime() else 0L
+                val hadPendingInput = pendingInput.hasPending
+                val inputResult = pendingInput.attempt(System.nanoTime(), running, ::tryFeedCodec, expiredInputProbe)
+                val outputBeforeDrain = outputBuffers
+                val drainStartedNs = if (diagnosticsEnabled) System.nanoTime() else 0L
                 codec?.let(::drainCodec)
+                // Draining an output releases codec capacity: retry immediately, without an extra 10ms sleep.
+                pauseInputRetry = outputBuffers == outputBeforeDrain
+                if (diagnosticsEnabled) {
+                    com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession,
+                        "audio-output-drain-includes-write-${format.audioType}", System.nanoTime() - drainStartedNs)
+                    if (hadPendingInput) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(
+                        diagnosticSession, "audio-input-includes-output-write-${format.audioType}",
+                        System.nanoTime() - acquiring, inputResult != PendingAudioDecoderInput.Result.ACCEPTED)
+                    if (audioWorkStartedNs != 0L) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(
+                        diagnosticSession, "audio-handle-includes-write-${format.audioType}", System.nanoTime() - audioWorkStartedNs)
+                }
+                if (inputResult == PendingAudioDecoderInput.Result.EXPIRED) {
+                    inputDropped++
+                    if (inputDropped == 1) Log.w(TAG,
+                        "audio decoder input deadline expired codec=${format.codec} queued=$inputQueued dropped=$inputDropped")
+                }
                 diagnosticStage = "buffer-maintenance"
                 maintainPlaybackBuffer()
                 diagnosticStage = "stats"
@@ -2347,23 +2407,6 @@ private class AudioRenderer(
             "route=$routeLabel " +
             "bufferMs=${capacityBytes * 1000L / bytesPerSecond} startMs=${startThresholdBytes * 1000L / bytesPerSecond} " +
             trackMetadata)
-        Log.i(
-            TAG,
-            "audio track prepared type=${format.payloadType} audioType=${format.audioType} " +
-                "codec=${format.codec} " +
-                "rate=${format.sampleRate} channels=${format.channels} " +
-                "route=$routeLabel " +
-                "buffer=${capacityBytes * 1000L / bytesPerSecond}ms start=${startThresholdBytes * 1000L / bytesPerSecond}",
-        )
-        Log.i(
-            TAG,
-            "audio route type=${format.payloadType} audioType=${format.audioType} " +
-                "mode=${if (advancedAudioChannelMapping) AudioChannelMappingMode.AUTOMOTIVE_BUS else AudioChannelMappingMode.MOBILE_COMPATIBLE} " +
-                "channel=${selection.channel} usage=${usageFor(selection.channel)} " +
-                "contentType=${contentTypeFor(selection.contentType)} " +
-                "streamOverride=$streamOverride " +
-                "focus=${if (audioFocusEnabled) "on" else "off"}",
-        )
     }
 
     /** 0 uses usage-based routing; 1–20 attempt legacy stream types supported by the head unit. */
@@ -2575,34 +2618,31 @@ private class AudioRenderer(
         (sample.toLong() and 0xffff_ffffL) * 1_000_000L / format.sampleRate
 
     private fun feedCodec(payload: ByteArray, presentationTimeUs: Long) {
-        val codec = codec ?: run { decoderUnavailablePackets++; return }
+        pendingInput.offer(payload, presentationTimeUs, System.nanoTime())
+    }
+
+    private var codecInputTimeoutUs = INPUT_TIMEOUT_US
+
+    private fun tryFeedCodec(payload: ByteArray, presentationTimeUs: Long): Boolean =
+        tryFeedCodec(payload, presentationTimeUs, codecInputTimeoutUs)
+
+    private fun tryFeedCodec(payload: ByteArray, presentationTimeUs: Long, timeoutUs: Long): Boolean {
+        val codec = codec ?: run { decoderUnavailablePackets++; return true }
+        if (!running) return false
         diagnosticStage = "decoder-input"
-        // While a blocking track write holds this thread, decoded output fills up and the decoder
-        // stops taking input. Dropping the packet after one 10 ms wait cut ~21 ms of music every
-        // 10-20 s on DiLink 3.0 (#381); drain the output and wait again instead. One drain and
-        // retry is enough for that, and the pump always makes it. Waiting the video's 500 ms
-        // for every packet let a slowed decoder fall ever further behind instead: with the
-        // CarPlay screen in the background, the queue grew to 190 packets and the track
-        // underran every few seconds (#649).
-        val acquiring = System.nanoTime()
-        val index = DecoderInputPump.acquire(
-            running = { running }, drain = { drainCodec(codec) },
-            dequeue = { codec.dequeueInputBuffer(INPUT_TIMEOUT_US) },
-            timeoutNs = AUDIO_INPUT_WAIT_NS,
-        )
-        com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-input-includes-output-write-${format.audioType}", System.nanoTime()-acquiring, index < 0)
-        if (index < 0) {
+        // One bounded dequeue per worker turn. Output draining and maintenance run between
+        // retries; the pending slot retains the original 100ms total pressure budget.
+        val diagnosticsEnabled = com.shilapi.xcertplay.pioneer.PioneerDiagnostics.enabled
+        val inputStartedNs = if (diagnosticsEnabled) System.nanoTime() else 0L
+        val index = codec.dequeueInputBuffer(timeoutUs)
+        if (diagnosticsEnabled) com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession,
+            "audio-codec-input-${format.audioType}", System.nanoTime() - inputStartedNs, index < 0)
+        if (index < 0) return false
+        val input = codec.getInputBuffer(index) ?: run {
+            codec.queueInputBuffer(index, 0, 0, 0, 0)
             inputDropped++
-            if (inputDropped == 1) {
-                Log.w(
-                    TAG,
-                    "audio decoder input unavailable codec=${format.codec} " +
-                        "queued=$inputQueued dropped=$inputDropped",
-                )
-            }
-            return
+            return true
         }
-        val input = codec.getInputBuffer(index) ?: return
         input.clear()
         if (payload.size <= input.remaining()) {
             input.put(payload)
@@ -2619,12 +2659,12 @@ private class AudioRenderer(
             codec.queueInputBuffer(index, 0, 0, 0, 0)
             inputDropped++
         }
-        drainCodec(codec)
+        return true
     }
 
     private fun drainCodec(codec: MediaCodec) {
         diagnosticStage = "decoder-output"
-        val info = MediaCodec.BufferInfo()
+        val info = decoderOutputInfo
         while (running) {
             diagnosticStage = "decoder-output"
             val index = codec.dequeueOutputBuffer(info, 0)
@@ -2707,6 +2747,9 @@ private class AudioRenderer(
                 applyFadeIn(data, offset, length)
                 fadeApplied = true
             }
+            // The selected route is stable for this block; avoid repeated provider lookups
+            // for each partial write and zero-write retry.
+            val nonBlockingWrites = VehicleAudioRouting.selected.nonBlockingWrites
             while (written < length && running) {
                 val writeLength = if (playbackStarted) {
                     length - written
@@ -2717,7 +2760,7 @@ private class AudioRenderer(
                 diagnosticStage = "track-write"
                 // A vehicle policy can require bounded writes while its output bus is inactive.
                 val count = track.write(data, offset + written, writeLength,
-                    if (VehicleAudioRouting.selected.nonBlockingWrites) AudioTrack.WRITE_NON_BLOCKING else AudioTrack.WRITE_BLOCKING)
+                    if (nonBlockingWrites) AudioTrack.WRITE_NON_BLOCKING else AudioTrack.WRITE_BLOCKING)
                 com.shilapi.xcertplay.pioneer.PioneerDiagnostics.record(diagnosticSession, "audio-track-write-${format.audioType}", System.nanoTime()-writeStarted, count < writeLength)
                 maxWriteMs = maxOf(maxWriteMs, (System.nanoTime() - writeStarted) / 1_000_000L)
                 if (count < 0) {
@@ -2728,14 +2771,14 @@ private class AudioRenderer(
                 }
                 if (count == 0) {
                     zeroWritesThisWindow++
-                    if (VehicleAudioRouting.selected.nonBlockingWrites) {
+                    if (nonBlockingWrites) {
                         if (stalledSinceNs == 0L) stalledSinceNs = System.nanoTime()
                         if (System.nanoTime() - stalledSinceNs < 250_000_000L) {
                             Thread.sleep(5)
                             continue
                         }
                     }
-                    exitReason = if (VehicleAudioRouting.selected.nonBlockingWrites) "stall-timeout" else "zero-write"
+                    exitReason = if (nonBlockingWrites) "stall-timeout" else "zero-write"
                     break
                 }
                 stalledSinceNs = 0L
@@ -2842,7 +2885,7 @@ private class AudioRenderer(
     private fun maintainPlaybackBuffer() {
         val track = track ?: return
         if (bufferProgress.shouldRebuffer(mappedChannel == AudioChannel.MEDIA, playbackStarted,
-                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) track.underrunCount else 0) > underrunsAtPlaybackStart, queue.isEmpty(), track.playbackHeadPosition,
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) track.underrunCount else 0) > underrunsAtPlaybackStart, queue.isEmpty() && !pendingInput.hasPending, track.playbackHeadPosition,
                 startThresholdBytes / 2L)) {
             // The hardware buffer has starved below the recovery floor. Pause without flushing
             // or discarding PCM, then use the configured start threshold again when music resumes.
@@ -2861,7 +2904,7 @@ private class AudioRenderer(
             }
         }
         // A short final burst may never reach the start threshold. Play it after a bounded wait.
-        if (!playbackStarted && prebufferBytes > 0 && queue.isEmpty() &&
+        if (!playbackStarted && prebufferBytes > 0 && queue.isEmpty() && !pendingInput.hasPending &&
             System.nanoTime() - lastPcmWriteNs >= BUFFER_TAIL_WAIT_NS) {
             startPlayback(track)
         }

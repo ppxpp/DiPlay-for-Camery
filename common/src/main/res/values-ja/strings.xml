@@ -1059,7 +1059,6 @@
     <string name="connect_progress_user_wait">デバイスまたは権限を待っています。残り時間はまだ推定できません。</string>
     <string name="connect_progress_video">最初のフレーム表示</string>
     <string name="connect_progress_waiting">接続開始を待っています</string>
-    <string name="settings_pioneer_lan_debug">ローカルネットワークのデバッグ</string>
     <string name="settings_launcher_bubble">ホーム画面のバブル（実験的機能）</string>
     <string name="settings_launcher_bubble_description">車載機のホーム画面に DiPlay のアイコンをバブルとして表示します。タップすると CarPlay に戻り、ドラッグでどこへでも移動できます。DiPlay の画面を開くと隠れ、離れると再び表示されます。長押しで位置をロックし、もう一度長押しで解除します。「他のアプリの上に重ねて表示」が必要です。</string>
     <string name="settings_launcher_bubble_size">バブルのサイズ</string>

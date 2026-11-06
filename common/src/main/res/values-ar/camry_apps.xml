@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">إدارة تطبيقات السيارة</string>
+    <string name="settings_camry_apps_description">قد تستهلك هذه التطبيقات موارد كثيرة في الخلفية وتتسبب في تقطع صورة CarPlay أو صوته. يمكن تعطيلها عند عدم استخدامها. يستمر التعطيل بعد إعادة التشغيل ويمكن التراجع عنه دون حذف بيانات التطبيقات.</string>
+    <string name="settings_camry_apps_amap">تعطيل Amap</string>
+    <string name="settings_camry_apps_amap_description">إيقاف Amap على وحدة السيارة دون التأثير على Amap في iPhone.</string>
+    <string name="settings_camry_apps_tencent_map">تعطيل خرائط Tencent</string>
+    <string name="settings_camry_apps_tencent_map_description">إيقاف خرائط Tencent على وحدة السيارة دون التأثير على التطبيق في iPhone.</string>
+    <string name="settings_camry_apps_tencent_speech">تعطيل Tencent Voice</string>
+    <string name="settings_camry_apps_tencent_speech_description">إيقاف Tencent Voice على وحدة السيارة. قد يؤثر ذلك على التنشيط والأوامر الصوتية الأصلية للسيارة.</string>
+    <string name="settings_camry_apps_enabled">مفعّل</string>
+    <string name="settings_camry_apps_disabled">معطّل</string>
+    <string name="settings_camry_apps_not_installed">غير مثبت</string>
+    <string name="settings_camry_apps_loading">جارٍ قراءة الحالة…</string>
+    <string name="settings_camry_apps_disabling">جارٍ التعطيل…</string>
+    <string name="settings_camry_apps_enabling">جارٍ التفعيل…</string>
+    <string name="settings_camry_apps_unknown">الحالة غير متاحة. حدّث للمحاولة مجددًا.</string>
+    <string name="settings_camry_apps_failed">فشلت العملية. حدّث الحالة ثم أعد المحاولة.</string>
+    <string name="settings_camry_apps_refresh">تحديث الحالة</string>
+    <string name="settings_camry_apps_adaptation_required">فعّل توافق Camry أولًا.</string>
+</resources>

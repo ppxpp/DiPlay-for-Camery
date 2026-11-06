@@ -13,7 +13,7 @@ import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
 /**
- * Root-only helper, launched as app_process by pioneer.pfilesdoperator.
+ * Root-only helper hosted by the shared root service.
  * It drives the vendor SoftAP, injects the vendor `frequency` band selector,
  * installs the CARNET rules for bcm1, and writes a private result file for the connection owner.
  */
@@ -29,77 +29,50 @@ object HotspotProbeHelper {
     private fun checkCancelled() { check(workerOwnerAlive?.invoke()!=false && cancellation?.exists()!=true) { "Vehicle hotspot cancelled" } }
 
     @JvmStatic
-    fun main(args: Array<String>) {
-        try {
-            if(args.getOrNull(0)=="WORKER")worker(args) else execute(args)
-        } finally { System.exit(0) }
+    @Synchronized
+    fun warmShared() {
+        check(Process.myUid() == 0 && !Process.is64Bit())
+        wifi(); connectivity(); PioneerLocalOnlyPolicy.rules()
     }
 
-    private fun worker(args: Array<String>) {
-        check(Process.myUid()==0 && !Process.is64Bit() && args.getOrNull(6)=="camry-enabled")
-        val output=File(args[2])
-        val owner=Os.stat(output.path).st_uid
-        check(android.system.OsConstants.S_ISREG(Os.lstat(output.path).st_mode) && Os.lstat(output.path).st_nlink==1L)
-        val files=output.canonicalFile.parentFile!!
-        val inbox=File(output.path+".inbox")
-        check(inbox.canonicalFile.parentFile==files && Os.stat(inbox.path).st_uid==owner)
-        val ownerIdentity=output.readText().trim()
-        val parts=ownerIdentity.split(':')
-        check(parts.size==2 && parts[0].toInt()>1)
-        val appPid=parts[0].toInt()
-        fun ownerAlive()=runCatching {
-            Os.stat("/proc/$appPid").st_uid==owner && processStart(appPid)==parts[1]
-        }.getOrDefault(false)
-        fun ownedWrite(file: File, text: String) {
-            val temp=File(file.path+".tmp")
-            temp.writeText(text);Os.chmod(temp.path,384);Os.chown(temp.path,owner,-1)
-            check(temp.renameTo(file))
-        }
-        ownedWrite(File(output.path+".running"),"${Process.myPid()}:${processStart(Process.myPid())}")
-        workerOwnerAlive=::ownerAlive
-        val running=java.util.concurrent.atomic.AtomicBoolean(true)
-        val watcher=Thread({
-            while(running.get()) {
-                if(!ownerAlive()) { cancellation?.let { runCatching { it.writeText("owner exited") } };break }
-                Thread.sleep(200)
-            }
-        },"hotspot-owner-watch").apply { isDaemon=true;start() }
-        try {
-            // Read-only initialization; no lease or Wi-Fi mutation until a queued action.
-            wifi();connectivity();PioneerLocalOnlyPolicy.rules()
-            ownedWrite(File(output.path+".ready"),Process.myPid().toString())
-            var lastOperation=android.os.SystemClock.elapsedRealtime()
-            var operated=false
-            while(ownerAlive()) {
-                val request=inbox.listFiles().orEmpty().filter { it.name.endsWith(".request") }.sortedBy { it.name }.firstOrNull()
-                if(request==null) {
-                    val idle=android.os.SystemClock.elapsedRealtime()-lastOperation
-                    if(!File(files,"pioneer-wireless-hotspot.json").exists() && idle>(if(operated)5_000 else 45_000))break
-                    Thread.sleep(50);continue
+    /** Shared root HOTSPOT lane owns all mutable singleton state for the entire operation. */
+    @JvmStatic
+    @Synchronized
+    fun runShared(args: Array<String>, current: java.util.concurrent.Callable<Boolean>) {
+        check(args.size == 8 && args[5] == "immediate")
+        val deadline = android.os.SystemClock.elapsedRealtime() + 175_000
+        val ownerAlive = { current.call() && android.os.SystemClock.elapsedRealtime() < deadline }
+        val cancelFile = File(args[2] + ".cancel")
+        workerOwnerAlive = ownerAlive
+        cancellation = cancelFile
+        val watching = java.util.concurrent.atomic.AtomicBoolean(true)
+        val watcher = Thread({
+            try {
+                while (watching.get()) {
+                    if (!runCatching { ownerAlive() }.getOrDefault(false)) {
+                        cancelFile.writeText("cancelled")
+                        break
+                    }
+                    Thread.sleep(50)
                 }
-                try {
-                    val info=Os.lstat(request.path)
-                    check(info.st_uid==owner && info.st_nlink==1L && android.system.OsConstants.S_ISREG(info.st_mode))
-                    val json=org.json.JSONArray(request.readText())
-                    check(json.length()==8)
-                    val command=Array(8) { json.getString(it) }
-                    val action=HotspotProbeAction.valueOf(command[0])
-                    val result=File(command[2])
-                    val token=command[3]
-                    check(token.matches(Regex("[0-9a-f]{32}")) && command[1]==args[1] && command[5]=="immediate" && command[6]==args[6] && command[7]==args[7])
-                    check(result.canonicalFile.parentFile==files && result.name.startsWith("pioneer-hotspot-$token-") && result.name.endsWith(".txt"))
-                    val resultInfo=Os.lstat(result.path)
-                    check(resultInfo.st_uid==owner && resultInfo.st_nlink==1L && android.system.OsConstants.S_ISREG(resultInfo.st_mode))
-                    if(command[4]!="-")check(action in setOf(HotspotProbeAction.PREPARE,HotspotProbeAction.PREPARE_LOCAL_ONLY) &&
-                        File(command[4]).canonicalFile==File(files.parentFile,"code_cache/pioneer-ap-frequency-gate").canonicalFile)
-                    execute(command)
-                    operated=true
-                    lastOperation=android.os.SystemClock.elapsedRealtime()
-                } finally { request.delete() }
+            } catch (_: InterruptedException) { }
+        }, "hotspot-rpc-cancel").apply { isDaemon = true; start() }
+        try { execute(args) } finally {
+            watching.set(false)
+            watcher.interrupt()
+            // A cancellation-file write may be stuck in IO and ignore interruption. Do not
+            // hold the hotspot lane waiting for it; the watcher owns no native children.
+            val joinUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(250)
+            var joinInterrupted = Thread.interrupted()
+            while (watcher.isAlive) {
+                val remaining = joinUntil - System.nanoTime()
+                if (remaining <= 0) break
+                try { watcher.join(maxOf(1, TimeUnit.NANOSECONDS.toMillis(remaining))) }
+                catch (_: InterruptedException) { joinInterrupted = true }
             }
-        } finally {
-            running.set(false);watcher.interrupt()
-            ownedWrite(File(output.path+".exited"),"exited")
+            if (joinInterrupted) Thread.currentThread().interrupt()
+            workerOwnerAlive = null
+            cancellation = null
         }
     }
 
@@ -179,10 +152,15 @@ object HotspotProbeHelper {
             // process lock. Even an unobservable or stuck old helper cannot overlap a
             // new mutation. Lock ownership is released by process death as well.
             operationChannel=FileOutputStream(File(output.parentFile,"pioneer-hotspot-helper.lock"),true).channel
-            timed("operation_lock_wait",log) { checkNotNull(operationChannel).lock() }
+            timed("operation_lock_wait",log) {
+                while (checkNotNull(operationChannel).tryLock() == null) { checkCancelled(); Thread.sleep(50) }
+            }
             // A previous Java helper may have died while its native supervisor still owns
             // descendants. Do not mutate anything until their shared command lock is free.
-            FileOutputStream(commandGuard,true).channel.use { channel -> channel.lock().release() }
+            FileOutputStream(commandGuard,true).channel.use { channel ->
+                var lock: java.nio.channels.FileLock? = null
+                while (lock == null) { checkCancelled(); lock = channel.tryLock(); if (lock == null) Thread.sleep(50) }
+                lock.release() }
             checkCancelled()
             if(action==HotspotProbeAction.PREPARE || action==HotspotProbeAction.PREPARE_LOCAL_ONLY) {
                 verifyCreation(output,token,requestStart=false)

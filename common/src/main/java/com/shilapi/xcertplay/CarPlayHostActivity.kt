@@ -45,7 +45,6 @@ import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Log
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.PixelCopy
@@ -2187,20 +2186,12 @@ class CarPlayHostActivity : ComponentActivity() {
             gravity = Gravity.CENTER
         }
         // The vehicle display is a large screen (smallest width well above 600dp); a phone
-        // stays under it. The notice is sized and spaced differently for each.
+        // stays under it. Keep the notice's screen-specific margins; its type follows the title.
         val vehicleDisplay = resources.configuration.smallestScreenWidthDp >= 600
         val licenseNotice = TextView(this).apply {
             text = getString(R.string.home_license_notice)
             gravity = Gravity.START
-            maxLines = 1
             includeFontPadding = false
-            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-                this,
-                if (vehicleDisplay) 14 else 10,
-                if (vehicleDisplay) 26 else 18,
-                1,
-                TypedValue.COMPLEX_UNIT_SP,
-            )
             isFocusable = false
         }
         val icon = ImageView(this).apply {
@@ -2327,16 +2318,21 @@ class CarPlayHostActivity : ComponentActivity() {
             feedback.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
+        // The full notice and controls share one scroll range. A narrow screen or a large
+        // system font must not clip the notice or leave it covering the connection controls.
+        val preparationContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(licenseNotice, LinearLayout.LayoutParams(-1, -2).apply {
+                if (vehicleDisplay) setMargins(dp(16), dp(28), dp(32), 0) else setMargins(dp(16), dp(12), dp(16), 0)
+            })
+            addView(panel, LinearLayout.LayoutParams(-1, -2, 1f))
+        }
         val preparationScroll = ScrollView(this).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = true
-            addView(panel, FrameLayout.LayoutParams(-1, -2))
+            addView(preparationContent, FrameLayout.LayoutParams(-1, -2))
         }
         viewport.addView(preparationScroll, FrameLayout.LayoutParams(-1, -1))
-        // Pinned over the page instead of inside the centred panel, so it never pushes the logo down.
-        viewport.addView(licenseNotice, FrameLayout.LayoutParams(-1, -2, Gravity.TOP or Gravity.START).apply {
-            if (vehicleDisplay) setMargins(dp(16), dp(28), dp(32), 0) else setMargins(dp(16), dp(12), dp(16), 0)
-        })
         root.addView(viewport, FrameLayout.LayoutParams(-1, -1))
         // Above the video and gesture layer, below the menus.
         sidePanelBlur = ImageView(this).apply {
@@ -2371,7 +2367,9 @@ class CarPlayHostActivity : ComponentActivity() {
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
             val iconSize = spacing(32f, 48f)
             icon.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
-            title.textSize = size(22f, 28f)
+            val titleSizeSp = size(22f, 28f)
+            title.textSize = titleSizeSp
+            licenseNotice.textSize = titleSizeSp
             title.setPadding(0, spacing(4f, 10f), 0, spacing(4f, 8f))
             stage.textSize = size(16f, 19f)
             instructions.textSize = size(15f, 17f)
@@ -3135,6 +3133,7 @@ class CarPlayHostActivity : ComponentActivity() {
             "display" to R.string.settings_display,
             "navigation" to R.string.settings_navigation,
             "vehicle" to R.string.settings_vehicle,
+            "camry" to R.string.settings_camry_category,
             "diagnostics" to R.string.diagnostics,
             "advanced" to R.string.settings_advanced,
             "more" to R.string.settings_more,
@@ -3251,6 +3250,9 @@ class CarPlayHostActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(12) },
         )
+
+        content = pageFor("camry")
+        content.addView(com.shilapi.xcertplay.settings.CamryHudSettingsSection.create(this, overlayPalette, overlay = true))
 
         if (advancedAudioChannelMappingSupported) {
             content = pageFor("advanced")
@@ -6792,7 +6794,7 @@ class CarPlayHostActivity : ComponentActivity() {
         val oldController = controller ?: pendingVehicleTeardown
         val oldSink = sink
         CarPlayMediaKeys.detach(oldController)
-        CarPlayBackgroundSession.clear(oldController)
+        CarPlayBackgroundSession.clear(oldController, expectedOwner = this)
         controller = null
         oldSink?.let(retiringSinks::add)
         sink = null
@@ -7634,8 +7636,12 @@ internal object CarPlayBackgroundSession {
     }
 
     @Synchronized
-    fun clear(expected: CarPlayController? = null, keepOwner: Boolean = false) {
-        if (expected != null && controller !== expected) return
+    fun clear(expected: CarPlayController? = null, keepOwner: Boolean = false, expectedOwner: Any? = null) {
+        if (expected != null && controller !== expected) {
+            // Restart deliberately clears the controller while retaining its owner. That same
+            // owner must still be able to finish shutdown, without clearing a replacement session.
+            if (controller != null || expectedOwner == null || owner !== expectedOwner) return
+        }
         controller = null
         sink = null
         if (!keepOwner) { stopAction = null; owner = null }
