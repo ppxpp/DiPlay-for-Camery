@@ -12,6 +12,9 @@ internal class StreamReceiveStats(
     private var packets = 0
     private var bytes = 0L
     private var maxReadNs = 0L
+    private var maxReadAtNs = 0L
+    private var maxReadPreviousRtp: Int? = null
+    private var maxReadRtp: Int? = null
     private var readsOver250Ms = 0
     private var seqGapAfterReadOver250Ms = 0
     private var seqMissingAfterReadOver250Ms = 0
@@ -36,7 +39,12 @@ internal class StreamReceiveStats(
     fun received(size: Int, sequence: Int? = null, timestamp: Int? = null) {
         processingStart = nowNs()
         val readNs = processingStart - readStart
-        maxReadNs = maxOf(maxReadNs, readNs)
+        if (readNs > maxReadNs) {
+            maxReadNs = readNs
+            maxReadAtNs = processingStart
+            maxReadPreviousRtp = lastTimestamp
+            maxReadRtp = timestamp
+        }
         if (readNs >= LONG_READ_NS) readsOver250Ms++
         if (lastReceivedNs != 0L) {
             maxInterArrivalNs = maxOf(maxInterArrivalNs, processingStart - lastReceivedNs)
@@ -89,6 +97,9 @@ internal class StreamReceiveStats(
             "seqGapEvents=$sequenceGapEvents seqGapMax=$maxSequenceGap " +
             "seqGapLast=[$lastSequenceGap] seqGapAtMs=$lastSequenceGapAtMs ended=$ended " +
             "windowMs=${(now - windowStart).coerceAtLeast(0) / 1_000_000} " +
+            "readMaxAgoMs=${if (maxReadAtNs == 0L) -1 else (now - maxReadAtNs).coerceAtLeast(0) / 1_000_000} " +
+            "readMaxPreviousRtpTs=${maxReadPreviousRtp?.toUnsignedLong() ?: "unknown"} " +
+            "readMaxRtpTs=${maxReadRtp?.toUnsignedLong() ?: "unknown"} " +
             "readsOver250Ms=$readsOver250Ms seqGapAfterReadOver250Ms=$seqGapAfterReadOver250Ms " +
             "seqMissingAfterReadOver250Ms=$seqMissingAfterReadOver250Ms" + decryptSummary()) }
         windowStart = now
@@ -99,6 +110,9 @@ internal class StreamReceiveStats(
         packets = 0
         bytes = 0
         maxReadNs = 0
+        maxReadAtNs = 0
+        maxReadPreviousRtp = null
+        maxReadRtp = null
         readsOver250Ms = 0
         seqGapAfterReadOver250Ms = 0
         seqMissingAfterReadOver250Ms = 0

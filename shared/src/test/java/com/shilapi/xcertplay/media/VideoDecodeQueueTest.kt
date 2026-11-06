@@ -162,4 +162,70 @@ class VideoDecodeQueueTest {
         }
     }
 
+    @Test fun accountingTracksPollDiscardsControlBoundariesAndDrain() {
+        val queue = VideoDecodeQueue(maxFrames = 3, maxBytes = 10)
+        val first = VideoJob.Frame(ByteArray(3), receivedNs = 10)
+        val second = VideoJob.Frame(ByteArray(4), receivedNs = 20)
+        queue.offer(VideoJob.RefreshPicture)
+        queue.offer(first)
+        queue.offer(VideoJob.Resync)
+        queue.offer(VideoJob.SurfaceChanged(null))
+        queue.offer(second)
+        assertEquals(VideoDecodeQueue.Snapshot(2, 7, 10), queue.snapshot())
+        queue.poll(0)
+        queue.discardCurrentChain()
+        assertEquals(VideoDecodeQueue.Snapshot(1, 4, 20), queue.snapshot())
+        queue.poll(0) // Surface control does not affect frame counters.
+        assertSame(second, queue.poll(0))
+        assertEquals(VideoDecodeQueue.Snapshot(0, 0, 0), queue.snapshot())
+        queue.offer(first)
+        queue.offer(second)
+        queue.discardFrames()
+        assertEquals(VideoDecodeQueue.Snapshot(0, 0, 0), queue.snapshot())
+        queue.offer(first)
+        queue.drain()
+        assertEquals(VideoDecodeQueue.Snapshot(0, 0, 0), queue.snapshot())
+        queue.offer(VideoJob.Frame(ByteArray(10), receivedNs = 30))
+        assertEquals(VideoDecodeQueue.Snapshot(1, 10, 30), queue.snapshot())
+    }
+
+    @Test fun concurrentOffersAndSoleConsumerDoNotLoseAccountingOrWakeups() {
+        val queue = VideoDecodeQueue(maxFrames = 20_000, maxBytes = 100_000)
+        val start = java.util.concurrent.CountDownLatch(1)
+        val failure = java.util.concurrent.atomic.AtomicReference<Throwable?>()
+        val consumer = Thread {
+            try {
+                start.await()
+                repeat(10_000) { assertTrue(queue.poll(2_000) is VideoJob.Frame) }
+            } catch (error: Throwable) { failure.set(error) }
+        }
+        consumer.start()
+        start.countDown()
+        val producers = List(2) {
+            Thread { repeat(5_000) { queue.offer(VideoJob.Frame(ByteArray(3))) } }.also { it.start() }
+        }
+        producers.forEach { it.join(5_000); assertFalse(it.isAlive) }
+        consumer.join(5_000)
+        assertFalse(consumer.isAlive)
+        failure.get()?.let { throw AssertionError(it) }
+        assertEquals(VideoDecodeQueue.Snapshot(0, 0, 0), queue.snapshot())
+    }
+
+    @Test fun interruptedPollDoesNotRemoveOrMiscountAnAvailableFrame() {
+        val queue = VideoDecodeQueue()
+        val frame = VideoJob.Frame(ByteArray(3), receivedNs = 10)
+        queue.offer(frame)
+        Thread.currentThread().interrupt()
+        try {
+            queue.poll(0)
+            fail("Interrupted poll must cancel")
+        } catch (_: InterruptedException) {
+            assertEquals(VideoDecodeQueue.Snapshot(1, 3, 10), queue.snapshot())
+        } finally {
+            Thread.interrupted()
+        }
+        assertSame(frame, queue.poll(0))
+        assertEquals(VideoDecodeQueue.Snapshot(0, 0, 0), queue.snapshot())
+    }
+
 }

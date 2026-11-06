@@ -20,11 +20,30 @@ class StreamReceiveStatsTest {
         packet(8, 400) // A long read alone does not imply packet loss.
         stats.flush(ended = true)
         assertEquals(1, output.size)
-        assertTrue(output.single().contains("windowMs=720 readsOver250Ms=2 seqGapAfterReadOver250Ms=1 seqMissingAfterReadOver250Ms=2"))
+        assertTrue(output.single().contains("windowMs=720 "))
+        assertTrue(output.single().contains("readsOver250Ms=2 seqGapAfterReadOver250Ms=1 seqMissingAfterReadOver250Ms=2"))
         packet(9, 10)
         stats.flush(ended = true)
-        assertTrue(output.last().contains("windowMs=10 readsOver250Ms=0 seqGapAfterReadOver250Ms=0 seqMissingAfterReadOver250Ms=0"))
+        assertTrue(output.last().contains("windowMs=10 "))
+        assertTrue(output.last().contains("readsOver250Ms=0 seqGapAfterReadOver250Ms=0 seqMissingAfterReadOver250Ms=0"))
         assertTrue(output.last().contains("seqForwardGaps=0"))
+    }
+
+    @Test fun longestReadKeepsItsOwnTimestampPairAcrossLaterPacketsAndResets() {
+        var clock = 1L
+        val output = mutableListOf<String>()
+        val stats = StreamReceiveStats("audio", output::add) { clock }
+        fun packet(timestamp: Int, durationMs: Long) {
+            stats.reading(); clock += durationMs * 1_000_000
+            stats.received(100, timestamp = timestamp); stats.processed()
+        }
+        packet(-1, 10); packet(42, 500); packet(99, 10)
+        stats.flush(true)
+        assertTrue(output.single().contains("readMaxPreviousRtpTs=4294967295 readMaxRtpTs=42"))
+        assertTrue(output.single().contains("readMaxAgoMs=10"))
+        packet(100, 5); stats.flush(true)
+        assertTrue(output.last().contains("readMaxPreviousRtpTs=99 readMaxRtpTs=100"))
+        assertTrue(output.last().contains("readMaxMs=5"))
     }
 
     @Test fun separatesSocketWaitFromLocalProcessingAndTracksSequenceWrap() {

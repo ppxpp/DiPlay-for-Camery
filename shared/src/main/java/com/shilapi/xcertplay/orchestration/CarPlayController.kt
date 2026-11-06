@@ -1825,6 +1825,7 @@ class CarPlayController(
                 traceContext = "wireless-rfcomm",
                 onTrace = ::debugLog,
                 onArtwork = ::onArtworkTransfer,
+                traceFrames = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled },
             )
             synchronized(wirelessResourceLock) {
                 if (isStaleWirelessRun(generation)) {
@@ -1998,7 +1999,8 @@ class CarPlayController(
             }
             if(!published) throw java.io.InterruptedIOException("Parallel Bluetooth connection cancelled")
             val opened=Iap2Session.openWireless(currentConnection.stream,
-                traceContext="pioneer-parallel-rfcomm",onTrace={ debugLog(it) },onArtwork=::onArtworkTransfer)
+                traceContext="pioneer-parallel-rfcomm",onTrace={ debugLog(it) },onArtwork=::onArtworkTransfer,
+                traceFrames={ com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled })
             channel=opened
             val accepted=synchronized(wirelessResourceLock) {
                 if(isStaleWirelessRun(generation) || cancelled.get()) false else { csm=opened;true }
@@ -2042,6 +2044,7 @@ class CarPlayController(
                 traceContext = "wireless-tunnel",
                 onTrace = ::debugLog,
                 onArtwork = ::onArtworkTransfer,
+                traceFrames = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled },
             )
         } catch (error: Throwable) {
             debugLog("Could not open the tunneled iAP2 link", error)
@@ -2911,6 +2914,7 @@ class CarPlayController(
                 traceContext = "wired",
                 onTrace = ::debugLog,
                 onArtwork = ::onArtworkTransfer,
+                traceFrames = { com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.phoneDiagnosticsEnabled },
             )
             ownedCsm = csm
             this.csm = csm

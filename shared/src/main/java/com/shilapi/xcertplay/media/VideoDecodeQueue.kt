@@ -2,8 +2,10 @@ package com.shilapi.xcertplay.media
 
 import android.view.Surface
 import com.shilapi.xcertplay.airplay.VideoCodec
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.ArrayDeque
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 internal sealed interface VideoJob {
     data class Config(val codec: VideoCodec, val codecData: ByteArray) : VideoJob
@@ -41,18 +43,23 @@ internal class VideoDecodeQueue(
     private val maxFrames: Int = 60,
     private val maxBytes: Int = 8 * 1024 * 1024,
 ) {
-    private val jobs = LinkedBlockingQueue<VideoJob>()
+    private val jobs = ArrayDeque<VideoJob>()
+    private val lock = ReentrantLock()
+    private val available = lock.newCondition()
+    private var frameCount = 0
+    private var frameBytes = 0L
 
     data class Backlog(val pendingFrames: Int, val newestPendingReceivedNs: Long?)
-
     data class Snapshot(val frames: Int, val bytes: Long, val oldestNs: Long)
-    @Synchronized fun snapshot(): Snapshot {
-        val frames = jobs.filterIsInstance<VideoJob.Frame>()
-        return Snapshot(frames.size, frames.sumOf { it.nalus.size.toLong() }, frames.firstOrNull()?.receivedNs ?: 0)
+
+    fun snapshot(): Snapshot = lock.withLock {
+        // Control jobs can precede the oldest frame; no temporary frame list is needed.
+        val oldest = jobs.firstOrNull { it is VideoJob.Frame } as? VideoJob.Frame
+        Snapshot(frameCount, frameBytes, oldest?.receivedNs ?: 0)
     }
 
     /** Called by the sole consumer after taking its current frame. Control jobs end this chain. */
-    @Synchronized fun backlogAfterCurrent(): Backlog {
+    fun backlogAfterCurrent(): Backlog = lock.withLock {
         var frames = 0
         var newest: Long? = null
         for (job in jobs) {
@@ -60,41 +67,74 @@ internal class VideoDecodeQueue(
             frames++
             newest = newest?.let { maxOf(it, job.receivedNs) } ?: job.receivedNs
         }
-        return Backlog(frames, newest)
+        Backlog(frames, newest)
     }
 
-    @Synchronized fun offer(job: VideoJob) {
+    fun offer(job: VideoJob) = lock.withLock {
         if (job is VideoJob.Frame) {
-            val frames = jobs.filterIsInstance<VideoJob.Frame>()
-            if (frames.size >= maxFrames || frames.sumOf { it.nalus.size.toLong() } + job.nalus.size > maxBytes) {
+            if (frameCount >= maxFrames || frameBytes + job.nalus.size > maxBytes) {
                 discardFrames()
-                jobs.offer(VideoJob.Resync)
+                jobs.addLast(VideoJob.Resync)
+                available.signal()
             }
             // A single oversized frame is also a lost reference chain.
             if (job.nalus.size > maxBytes) return
+            frameCount++
+            frameBytes += job.nalus.size
         }
-        jobs.offer(job)
+        jobs.addLast(job)
+        available.signal()
+    }
+
+    private fun removed(job: VideoJob) {
+        if (job is VideoJob.Frame) {
+            frameCount--
+            frameBytes -= job.nalus.size
+        }
     }
 
     /** Drop only the invalidated chain; the next config/surface owns later frames. */
-    @Synchronized fun discardCurrentChain() {
+    fun discardCurrentChain() = lock.withLock {
+        while (true) {
+            val job = jobs.peekFirst() ?: return
+            if (job !is VideoJob.Frame && job != VideoJob.Resync) return
+            removed(jobs.removeFirst())
+        }
+    }
+
+    fun discardFrames() = lock.withLock {
         val iterator = jobs.iterator()
         while (iterator.hasNext()) {
-            when (iterator.next()) {
-                is VideoJob.Frame, VideoJob.Resync -> iterator.remove()
-                else -> return
+            val job = iterator.next()
+            if (job is VideoJob.Frame || job == VideoJob.Resync) {
+                iterator.remove()
+                removed(job)
             }
         }
     }
 
-    @Synchronized fun discardFrames() {
-        jobs.removeIf { it is VideoJob.Frame || it is VideoJob.Resync }
+    fun poll(timeoutMillis: Long): VideoJob? {
+        lock.lockInterruptibly()
+        try {
+            var remaining = TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+            while (jobs.isEmpty()) {
+                if (remaining <= 0) return null
+                remaining = available.awaitNanos(remaining)
+            }
+            return jobs.removeFirst().also { removed(it) }
+        } finally {
+            lock.unlock()
+        }
     }
 
-    fun poll(timeoutMillis: Long): VideoJob? = jobs.poll(timeoutMillis, TimeUnit.MILLISECONDS)
-
     /** Removes and returns every queued job, for a worker that is shutting down. */
-    @Synchronized fun drain(): List<VideoJob> = ArrayList<VideoJob>().also { jobs.drainTo(it) }
+    fun drain(): List<VideoJob> = lock.withLock {
+        ArrayList(jobs).also {
+            jobs.clear()
+            frameCount = 0
+            frameBytes = 0
+        }
+    }
 }
 
 /** Drain output while waiting for input: full output buffers can otherwise starve input forever. Video and audio decoders share it. */

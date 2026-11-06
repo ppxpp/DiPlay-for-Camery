@@ -100,6 +100,9 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     }
 
     private fun run(sock: Socket, inputOverride: InputStream? = null) {
+        if (com.shilapi.xcertplay.pioneer.PioneerUsbPolicy.matchesDevice()) runCatching {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY)
+        }
         var failure: Throwable? = null
         val stats = StreamReceiveStats("video", onDiagnostic)
         try {
