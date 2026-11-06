@@ -6,10 +6,23 @@ import org.json.JSONObject
 /** DiPlay owns navigation output while its worker renews the filter. OEM maps keep running. */
 class PioneerHudMapOwnership(context: Context) {
     private val filter = PioneerHudFilter(context)
+    private var selectedSource = -1
+    private var sourceResult: Result<Int>? = null
+    private val sourceController by lazy {
+        Class.forName("jp.pioneer.ceam.widget.SettingServer.SettingServerController")
+            .getMethod("getInstance").invoke(null)
+    }
+    private val sourceMethod by lazy { sourceController.javaClass.getMethod("getMapType") }
     private var held = false
     private var heldSource: Int? = null
     private var state = "waiting"
     private var error: String? = null
+
+    /** Reset only for a new CarPlay session, never for a prompt ending or HUD toggle. */
+    fun beginSession() {
+        sourceResult = null
+        selectedSource = -1
+    }
 
     fun maintain(active: Boolean) { filter.maintain(active && runCatching { source() in 0..1 }.getOrDefault(false)) }
 
@@ -30,14 +43,19 @@ class PioneerHudMapOwnership(context: Context) {
     fun release() { filter.release(); held = false; heldSource = null; state = "released"; error = null }
     fun meterType(): Int = if ((heldSource ?: source()) == 0) 2 else 1
     private fun source(): Int {
-        val cls = Class.forName("jp.pioneer.ceam.widget.SettingServer.SettingServerController")
-        return cls.getMethod("getMapType").invoke(cls.getMethod("getInstance").invoke(null)) as Int
+        // Cache failures too: a broken vehicle service must not create a per-frame Binder retry loop.
+        val result = sourceResult ?: runCatching {
+            sourceMethod.invoke(sourceController) as Int
+        }.also { sourceResult = it }
+        return result.getOrThrow().also { selectedSource = it }
     }
     fun snapshot(): JSONObject {
-        val selected = runCatching { source() }.getOrDefault(-1)
-        return JSONObject().put("held", held && filter.ready()).put("state", state)
+        // Observability must not issue extra vehicle Binder calls on every route frame.
+        val selected = selectedSource
+        val filterState = filter.snapshot()
+        return JSONObject().put("held", held && filterState.optBoolean("ready")).put("state", state)
             .put("error", error ?: JSONObject.NULL).put("mapType", selected)
             .put("meterType", if (selected == 0) 2 else 1).put("pausedPackage", JSONObject.NULL)
-            .put("filter", filter.snapshot())
+            .put("filter", filterState)
     }
 }

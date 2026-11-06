@@ -55,6 +55,8 @@ internal object PioneerNavigationBridge {
     private var settingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var suppressedUpdates = 0L
     private var inputDistanceMeters: Int? = null
+    private var outputQueued = false
+    private var inputQueueDelayMs = 0L
     private var candidateAvailable = false
     private val controllerType by lazy { Class.forName("jp.pioneer.ceam.MeterService.MeterServiceController") }
     private val infoType by lazy { Class.forName("jp.pioneer.ceam.MeterService.MeterNaviInfo") }
@@ -122,6 +124,7 @@ internal object PioneerNavigationBridge {
         onAppOpened(context)
         if (!applicable) return
         worker.start {
+            mapOwnership?.beginSession()
             initialized = true
             PioneerHudCapture.event("session_start")
             requestClear("session_start")
@@ -142,6 +145,7 @@ internal object PioneerNavigationBridge {
         worker.submit {
             route.accept(frame.messageId, frame.payload)
             parsedAtMs = System.currentTimeMillis()
+            inputQueueDelayMs = ((System.nanoTime() - receivedNs) / 1_000_000L).coerceAtLeast(0)
             if (route.lastFrameValid) parsedReceivedNs = receivedNs
             if (!route.lastFrameValid) invalidFrames++
             val apple = route.currentApple()
@@ -149,19 +153,24 @@ internal object PioneerNavigationBridge {
             if (route.lastFrameValid && route.distanceUpdated && apple != null && configured.enabled) {
                 route.currentManeuverIndex()?.let { index ->
                     policy.sample(CamryHudPolicy.Input(index, apple.type, apple.road, apple.distanceMeters),
-                        configured, System.nanoTime())
+                        configured, receivedNs)
                 }
             }
             if (PioneerHudCapture.isEnabled()) PioneerHudCapture.event("frame", JSONObject().put("messageId", frame.messageId)
-                .put("receivedAtMs", received).put("valid", route.lastFrameValid)
+                .put("receivedAtMs", received).put("queueDelayMs", inputQueueDelayMs).put("valid", route.lastFrameValid)
                 .put("routeReason", route.diagnosticReason()).put("appleType", apple?.type ?: JSONObject.NULL)
                 .put("drivingSide", apple?.drivingSide ?: JSONObject.NULL)
                 .put("distanceMeters", apple?.distanceMeters ?: JSONObject.NULL).put("road", apple?.road.orEmpty().take(128))
                 .put("maneuverIndex", route.currentManeuverIndex() ?: JSONObject.NULL)
                 .put("payloadBytes", frame.payload.size).put("payloadTruncated", frame.payload.size > 8192)
                 .put("payloadHex", payloadHex(frame.payload)))
-            refresh()
-            publish()
+            // Parse every incremental TLV, but only write the newest state after queued input is drained.
+            // SDK/Binder work on every intermediate frame otherwise turns CPU contention into seconds of lag.
+            if (!outputQueued) outputQueued = worker.maintenance {
+                outputQueued = false
+                refresh()
+                publish()
+            }
         }
     }
 
@@ -225,7 +234,14 @@ internal object PioneerNavigationBridge {
                 meterRefreshPending.set(false) // This new frame also satisfies an outstanding refresh.
                 send(next)
             }
-            else suppressedUpdates++
+            else {
+                suppressedUpdates++
+                if (updates.shouldClear(last, next)) {
+                    // Confirm the new instruction without leaving the completed turn on screen.
+                    // Index aliases/road-text corrections of the same instruction must not flash the HUD.
+                    requestClear("maneuver_changed", preservePendingGuidance = true)
+                }
+            }
         } else if (next != null && ownsOutput && meterRefreshPending.get() && updates.canRefresh(System.nanoTime())) {
             // Consume before entering the SDK so a callback during the write remains pending.
             meterRefreshPending.set(false)
@@ -266,6 +282,7 @@ internal object PioneerNavigationBridge {
     }
 
     private fun clear() {
+        outputQueued = false
         route.clear()
         policy.reset()
         candidateAvailable = false
@@ -276,10 +293,10 @@ internal object PioneerNavigationBridge {
         publish()
     }
 
-    private fun requestClear(cause: String) {
+    private fun requestClear(cause: String, preservePendingGuidance: Boolean = false) {
         acceptsMeterRefresh = false
         meterRefreshPending.set(false)
-        updates.reset()
+        if (!preservePendingGuidance) updates.reset()
         reason = cause
         // A clear is also a Meter write: never erase a native map the user has reopened.
         if (mapOwnership?.mayClear() != true) {
@@ -387,6 +404,7 @@ internal object PioneerNavigationBridge {
             .put("queueAccepting", queue.first).put("queueDepth", queue.second)
             .put("queueOverflows", worker.overflowCount).put("queueStopReason", worker.stopReason).put("sdkSuccesses", successes).put("sdkFailures", failures)
             .put("inputDistanceMeters", inputDistanceMeters ?: JSONObject.NULL)
+            .put("inputQueueDelayMs", inputQueueDelayMs)
             .put("suppressedUpdates", suppressedUpdates).put("distanceRefreshMinMs", 500)
             .put("meterListenerRegistered", meterListener != null).put("meterListenerError", listenerError ?: JSONObject.NULL)
             .put("meterRefreshRequests", meterRefreshRequests.get()).put("meterRefreshSends", meterRefreshSends)

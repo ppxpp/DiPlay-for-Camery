@@ -19,7 +19,8 @@ object PioneerHudCapture {
     @Volatile private var enabled = false
     private val dropped = AtomicLong()
     private var sequence = 0L
-    private val recent = ArrayDeque<Pair<Long, String>>()
+    private data class Entry(val seq: Long, val line: String, val bytes: Int)
+    private val recent = ArrayDeque<Entry>()
     @Volatile private var lastError: String? = null
     private const val LIMIT = 2 * 1024 * 1024
     fun isEnabled(): Boolean = enabled
@@ -34,24 +35,33 @@ object PioneerHudCapture {
     @Synchronized fun status(): JSONObject = JSONObject().put("enabled", enabled)
         .put("droppedEvents", dropped.get()).put("error", lastError ?: JSONObject.NULL)
         .put("directory", "pioneer-hud").put("maxBytesPerFile", LIMIT).put("fileCount", 2)
-        .put("latestSeq", sequence).put("oldestSeq", recent.firstOrNull()?.first ?: sequence)
+        .put("latestSeq", sequence).put("oldestSeq", recent.firstOrNull()?.seq ?: sequence)
 
     /** A bounded live cursor avoids repeatedly exporting/reading rotating files during a drive. */
-    @Synchronized fun read(afterSeq: Long): JSONObject {
+    fun read(afterSeq: Long): JSONObject {
         require(afterSeq >= 0)
-        val items = JSONArray()
-        var last = afterSeq
-        var bytes = 0
-        for ((seq, line) in recent) {
-            if (seq <= afterSeq) continue
-            val size = line.toByteArray(Charsets.UTF_8).size
-            if (bytes + size > 128 * 1024) break
-            items.put(JSONObject(line)); bytes += size; last = seq
+        val entries = ArrayList<Entry>()
+        val latest: Long
+        val oldest: Long
+        val capture: JSONObject
+        synchronized(this) {
+            var bytes = 0
+            for (entry in recent) {
+                if (entry.seq <= afterSeq) continue
+                if (bytes + entry.bytes > 128 * 1024) break
+                entries.add(entry)
+                bytes += entry.bytes
+            }
+            latest = sequence
+            oldest = recent.firstOrNull()?.seq ?: sequence
+            capture = status()
         }
-        val oldest = recent.firstOrNull()?.first ?: sequence
-        return JSONObject().put("events", items).put("lastSeq", last).put("latestSeq", sequence)
-            .put("pid", android.os.Process.myPid()).put("lostEvents", afterSeq < oldest - 1)
-            .put("capture", status())
+        // JSON parsing/export must never hold the producer monitor.
+        val items = JSONArray()
+        for (entry in entries) items.put(JSONObject(entry.line))
+        return JSONObject().put("events", items).put("lastSeq", entries.lastOrNull()?.seq ?: afterSeq)
+            .put("latestSeq", latest).put("pid", android.os.Process.myPid())
+            .put("lostEvents", afterSeq < oldest - 1).put("capture", capture)
     }
 
     @Synchronized fun command(context: Context, action: String, label: String): JSONObject {
@@ -78,7 +88,8 @@ object PioneerHudCapture {
             .put("monoNs", SystemClock.elapsedRealtimeNanos()).put("monoClock", "BOOTTIME")
             .put("seq", ++sequence).put("pid", android.os.Process.myPid())
             .put("event", kind).put("data", fields).toString() + "\n"
-        recent.addLast(sequence to line)
+        val lineBytes = line.toByteArray(Charsets.UTF_8).size
+        recent.addLast(Entry(sequence, line, lineBytes))
         while (recent.size > 1024) recent.removeFirst()
         try {
             io.execute {
@@ -86,7 +97,7 @@ object PioneerHudCapture {
                     synchronized(fileLock) {
                         val dir = File(context.filesDir, "pioneer-hud").apply { mkdirs() }
                         val file = File(dir, "current.ndjson")
-                        if (file.length() + line.toByteArray(Charsets.UTF_8).size > LIMIT) {
+                        if (file.length() + lineBytes > LIMIT) {
                             val previous = File(dir, "previous.ndjson")
                             check(!previous.exists() || previous.delete()) { "Cannot rotate HUD trace" }
                             check(file.renameTo(previous)) { "Cannot rotate HUD trace" }

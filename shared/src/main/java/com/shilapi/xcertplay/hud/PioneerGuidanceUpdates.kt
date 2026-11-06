@@ -30,6 +30,11 @@ internal class PioneerGuidanceUpdates {
         return lastAttemptNs?.let { nowNs - it >= 500_000_000L } ?: true
     }
 
+    /** Clear a completed turn while the next instruction is still being confirmed. */
+    fun shouldClear(previous: Guidance?, next: Guidance): Boolean =
+        previous != null && next.maneuverIndex != previous.maneuverIndex &&
+            (next.direction != previous.direction || next.distance.toLong() > previous.distance.toLong() + 50)
+
     fun attempted(nowNs: Long) { lastAttemptNs = nowNs }
 
     fun canRefresh(nowNs: Long): Boolean = lastAttemptNs?.let { nowNs - it >= 500_000_000L } ?: true
