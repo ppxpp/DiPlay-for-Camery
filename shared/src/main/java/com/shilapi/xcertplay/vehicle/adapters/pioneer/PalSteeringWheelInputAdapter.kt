@@ -4,10 +4,8 @@ import android.content.Context
 import android.os.SystemClock
 import com.shilapi.xcertplay.vehicle.api.MediaCommand
 import com.shilapi.xcertplay.vehicle.api.SteeringWheelInputSource
-import dalvik.system.DexClassLoader
 import java.io.File
 import java.lang.reflect.Proxy
-import java.security.MessageDigest
 
 /** One PAL registration per process. A stopped session leaves an inert callback. */
 internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
@@ -34,15 +32,13 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
         if (initialized || initializing) return
         val context = appContext ?: return
         initializing = true
-        // Android 7 verifies/optimizes this provisioned DEX at first use. That can take seconds;
-        // steering-wheel integration must never block the host UI or USB startup callbacks.
+        // Keep vendor class initialization and service binding off startup callbacks.
+        // SDK bytecode is part of the APK and is optimized by Android during installation.
         Thread({ initializeSdk(context) }, "pioneer-pal-init").apply { isDaemon = true; start() }
     }
 
     private fun initializeSdk(context: Context) {
         runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND) }
-        val started = SystemClock.elapsedRealtime()
-        com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, "PAL_SDK_LOAD begin background=true")
         report("Vehicle: PAL SDK initialization starting asynchronously")
         try {
             val loader = loadSdk(context)
@@ -62,16 +58,12 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
                 }
                 null
             }
-            val loadMillis = SystemClock.elapsedRealtime() - started
-            com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, "PAL_SDK_LOAD loaded elapsedMs=$loadMillis")
-            // Preserve the SDK's original main-thread invocation; only DEX loading/verification
-            // moves to the worker. Some SDK versions create a Handler during initialization.
+            // Preserve the SDK's main-thread invocation: it may create a Handler during initialization.
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 try {
                     manager.getMethod("a", Context::class.java, callbackType).invoke(null, context, serviceCallback)
                     synchronized(this) { initialized = true }
-                    com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.log(context, "PAL_SDK_LOAD connectedRequest totalMs=${SystemClock.elapsedRealtime() - started}")
-                    report("Vehicle: PAL initialization requested loadMs=$loadMillis totalMs=${SystemClock.elapsedRealtime() - started}")
+                    report("Vehicle: PAL initialization requested")
                 } catch (error: Exception) {
                     report("Vehicle: PAL unavailable ${error.javaClass.simpleName}: ${error.message}")
                 } finally {
@@ -115,39 +107,32 @@ internal object PalSteeringWheelInputAdapter : SteeringWheelInputSource {
 
     private fun loadSdk(context: Context): ClassLoader = synchronized(sdkLoadLock) {
         cachedLoader?.let { return@synchronized it }
-        // Provision this asset locally; proprietary SDK bytes are not committed to the fork.
-        val bytes = context.assets.open("vehicle/pal-client.dex").use { it.readBytes() }
-        val digest = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        // Android 7 names optimized output after the input DEX. Sharing a directory
-        // makes the optimizer overwrite/delete its input (DexPathList then becomes empty).
-        val directory = File(context.filesDir, "vehicle-pal-sdk").apply { mkdirs() }
-        val optimized = File(context.codeCacheDir, "vehicle-pal-opt").apply { mkdirs() }
-        val dex = File(directory, "pal-$digest.dex")
-        File(directory, "pal.tmp").delete()
-        if (!dex.exists()) {
-            val temporary = File(directory, "pal.tmp")
-            try {
-                temporary.outputStream().use { it.write(bytes) }
-                check(temporary.renameTo(dex)) { "PAL dex install failed" }
-            } finally {
-                temporary.delete()
-            }
-        }
-        pruneOldPalDex(directory, dex)
-        dex.setReadOnly()
-        DexClassLoader(dex.absolutePath, optimized.absolutePath, null, context.classLoader).also { cachedLoader = it }
+        val loader = context.classLoader
+        // Reflection keeps builds without the locally provisioned vehicle SDK usable on other cars.
+        loader.loadClass("com.tencent.tai.pal.client.PALServiceManager")
+        cachedLoader = loader
+        clearLegacySdkCache(context)
+        loader
     }
 
-    /** Keep only the DEX selected by the current bundled PAL asset. */
-    internal fun pruneOldPalDex(directory: File, current: File): Int {
-        var deleted = 0
-        directory.listFiles()
-            ?.filter {
-                it.isFile && it != current && it.name.startsWith("pal-") &&
-                    it.extension.equals("dex", ignoreCase = true)
+    /** One background migration of our obsolete extracted SDK and optimized output. */
+    private fun clearLegacySdkCache(context: Context) {
+        for (directory in listOf(File(context.filesDir, "vehicle-pal-sdk"),
+                File(context.codeCacheDir, "vehicle-pal-opt"), File(context.noBackupFilesDir, "vehicle-pal-opt"))) {
+            clearLegacySdkCacheDirectory(directory)
+        }
+    }
+
+    internal fun clearLegacySdkCacheDirectory(directory: File) {
+        val artifact = Regex("""pal-[0-9a-f]{64}\.dex(?:\.flock)?""")
+        runCatching {
+            // Do not follow a substituted directory outside the app-owned cache location.
+            if (directory.canonicalFile != File(directory.parentFile.canonicalFile, directory.name)) return@runCatching
+            for (file in directory.listFiles().orEmpty()) {
+                if ((artifact.matches(file.name) || file.name == "pal.tmp") && file.isFile) file.delete()
             }
-            ?.forEach { if (it.delete()) deleted += 1 }
-        return deleted
+            if (directory.listFiles()?.isEmpty() == true) directory.delete()
+        }
     }
 
     private fun register(loader: ClassLoader, managerClass: Class<*>) {
