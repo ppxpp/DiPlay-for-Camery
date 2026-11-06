@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_vehicle_playback_control">Aceptar controles de reproducción y pausa del vehículo</string>
+    <string name="settings_camry_vehicle_playback_control_description">Envía a CarPlay las órdenes de reproducción y pausa del vehículo. Desactiva esta opción para ignorarlas y evitar que la música se reanude al ajustar el volumen. Los controles de pista anterior y siguiente no cambian. Requiere la versión correspondiente de AiQuTing.</string>
+</resources>

@@ -1964,6 +1964,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 com.shilapi.xcertplay.pioneer.ShortcutBarPolicy.setHidesBottomArrow(this, hide)
             }
 
+            toggle(card, getString(R.string.settings_camry_vehicle_playback_control),
+                getString(R.string.settings_camry_vehicle_playback_control_description),
+                com.shilapi.xcertplay.pioneer.PioneerMediaControlSettings.acceptsPlayback(this)) { enabled ->
+                com.shilapi.xcertplay.pioneer.PioneerMediaControlSettings.setAcceptsPlayback(this, enabled)
+            }
+
             if (com.shilapi.xcertplay.pioneer.PioneerAdbDebug.supported()) {
                 card.addView(label(getString(R.string.settings_camry_usb_adb_description), 14, MUTED))
                 lateinit var adbButton: SettingButton

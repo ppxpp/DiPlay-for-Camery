@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_vehicle_playback_control">接受车机播放/暂停控制</string>
+    <string name="settings_camry_vehicle_playback_control_description">开启后，车机发来的播放、暂停命令会同步到 CarPlay。关闭后忽略这些命令，可避免调节音量时音乐自动恢复播放。上下首不受影响。需安装配套的爱趣听版本。</string>
+</resources>
