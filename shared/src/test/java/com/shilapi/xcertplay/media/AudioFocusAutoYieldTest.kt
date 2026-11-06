@@ -89,7 +89,43 @@ class AudioFocusAutoYieldTest {
         assertSame(speechFocus.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
         assertSame(speechFocus, shadowOf(manager).lastAudioFocusRequest)
         coordinator.release(media)
+        assertSame(speechFocus.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+        coordinator.close()
         assertSame(mediaFocus.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+    }
+
+    @Config(sdk = [25])
+    @Test fun pausedVehicleMediaRetainsFocusAcrossGuidanceWithoutSelectingOrReacquiringSource() {
+        var selections = 0
+        val routing = object : AudioRouteController by DefaultAudioRouteController {
+            override val available = true
+            override fun streamType(channel: AudioChannel): Int? = if (channel == AudioChannel.MEDIA) 401 else 400
+            override fun focusStream(attributes: AudioAttributes): Int? = attributes.contentType.takeIf { it in 400..401 }
+            override fun independentSpeechFocus(attributes: AudioAttributes) = focusStream(attributes) == 400
+            override fun selectMediaSource(report: (String) -> Unit) { selections++ }
+        }
+        val coordinator = AudioFocusCoordinator(context, false, audioRouting = routing).also(coordinators::add)
+        val mediaAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+        val speechAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).build()
+        ReflectionHelpers.setField(mediaAttributes, "mContentType", 401)
+        ReflectionHelpers.setField(speechAttributes, "mContentType", 400)
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, mediaAttributes)
+        val main = shadowOf(manager).lastAudioFocusRequest
+        coordinator.release(media)
+        assertNull(shadowOf(manager).lastAbandonedAudioFocusListener)
+        assertSame(main, shadowOf(manager).lastAudioFocusRequest)
+        val speech = track()
+        coordinator.acquire(speech, AudioChannel.NAVIGATION, speechAttributes)
+        val guidance = shadowOf(manager).lastAudioFocusRequest
+        coordinator.release(speech)
+        assertSame(guidance.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+        assertEquals(1, selections)
+        assertTrue(coordinator.recoverVehicleMedia())
+        coordinator.cancelVehicleRecovery()
+        assertSame(guidance.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
+        coordinator.close()
+        assertSame(main.listener, shadowOf(manager).lastAbandonedAudioFocusListener)
     }
 
     @Config(sdk = [25])

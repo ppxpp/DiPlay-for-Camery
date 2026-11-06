@@ -153,8 +153,10 @@ internal class AudioFocusCoordinator(
         if (closed || manager == null || !audioRouting.available || independentSpeechTracks.isNotEmpty() ||
             active.values.any { it.channel == AudioChannel.PHONE || it.channel == AudioChannel.ASSISTANT }) return false
         val attributes = active.values.firstOrNull { it.channel == AudioChannel.MEDIA }?.attributes
+            ?: request?.takeIf { requestedChannel == AudioChannel.MEDIA }?.attributes
             ?: AudioAttributes.Builder().setLegacyStreamType(audioRouting.streamType(AudioChannel.MEDIA) ?: return false).build()
         val stream = audioRouting.focusStream(attributes) ?: return false
+        val temporaryRecovery = request == null || recoveryOnly
         if (request == null) {
             focusGeneration++
             currentListener = listenerFor(focusGeneration)
@@ -164,7 +166,7 @@ internal class AudioFocusCoordinator(
         }
         val result = request!!.request(manager)
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
-        if (active.isEmpty()) {
+        if (active.isEmpty() && temporaryRecovery) {
             recoveryOnly = true
             val epoch = ++recoveryEpoch
             Handler(Looper.getMainLooper()).postDelayed({
@@ -226,6 +228,17 @@ internal class AudioFocusCoordinator(
             if (it.isVehicleCall()) 4 else it.channel.focusPriority()
         }
         if (primary == null) {
+            // A paused iPhone tears down its MEDIA stream after a short delay. On Pioneer,
+            // abandoning token 401 closes source 300 even while MIX navigation is speaking.
+            // Match the OEM player's pause: retain only the existing main-source request,
+            // without a track, focus re-request, source selection, or transport PLAY command.
+            // The connection owner closes this coordinator to release the retained request.
+            val held = request
+            if (!closed && requestedChannel == AudioChannel.MEDIA && held != null &&
+                audioRouting.focusStream(held.attributes) == 401) {
+                mediaVolume = FULL_VOLUME
+                return
+            }
             focusGeneration += 1
             val abandoned = request
             request = null
