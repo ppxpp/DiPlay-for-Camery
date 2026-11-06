@@ -1011,6 +1011,10 @@ class AdaptiveSettingsUiTest {
                 descendants(destination).filterIsInstance<ImageView>().count() == 1
         }.toList()
         assertEquals(SettingsCategory.entries.size, destinations.size)
+        assertEquals("Open ${screen.getString(R.string.settings_overview)} settings",
+            destinations[0].contentDescription.toString())
+        assertEquals("Open ${screen.getString(R.string.settings_camry_category)} settings",
+            destinations[1].contentDescription.toString())
         destinations.forEach { destination ->
             assertEquals(1, descendants(destination).filterIsInstance<ImageView>().count())
         }
