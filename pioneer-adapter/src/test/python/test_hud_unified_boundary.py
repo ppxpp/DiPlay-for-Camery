@@ -31,8 +31,19 @@ class UnifiedHudBoundaryTest(unittest.TestCase):
         self.assertRegex(helper, r"new ProcessBuilder\(runtimeHost.getPath\(\),\s*"
                                  r"String.valueOf\(Process.myPid\(\)\),\s*injector.getPath\(\)")
         native = (MAIN / "cpp/wireless/pioneer_hud_runtime_host.c").read_text()
-        self.assertIn("PR_SET_PDEATHSIG", native)
+        self.assertIn("PR_SET_PDEATHSIG, SIGKILL", native)
         self.assertIn("getppid() != owner", native)
+
+    def test_orphan_identity_is_bracketed_by_process_start_checks(self):
+        helper = (JAVA / "PioneerHudFilterHelper.java").read_text()
+        method = helper[helper.index("private static void retireOrphanedRuntimes"):helper.index("private static void signalIfPresent")]
+        captured = method.index("processStart = start(pid)")
+        identity = method.index("Os.stat(process.getPath())")
+        verified = method.index("if (!sameProcess(pid, processStart)) continue;")
+        self.assertLess(captured, identity)
+        self.assertLess(identity, verified)
+        self.assertLess(verified, method.index("signalIfPresent(pid,"))
+        self.assertIn("ended.errno != OsConstants.ESRCH", helper)
 
     def test_state_monitor_never_contains_filesystem_or_observer_operations(self):
         service = (JAVA / "PioneerRootHudService.java").read_text()

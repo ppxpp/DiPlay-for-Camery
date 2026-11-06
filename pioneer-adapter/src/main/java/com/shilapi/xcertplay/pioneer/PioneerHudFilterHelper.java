@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo;
 import android.os.Process;
 import android.os.SystemClock;
 import android.system.Os;
+import android.system.ErrnoException;
 import android.system.OsConstants;
 import org.json.JSONObject;
 import java.io.*;
@@ -53,6 +54,7 @@ public final class PioneerHudFilterHelper {
             }
             if (runtime.lock == null) throw new IOException("HUD_FILTER_HOST_ALREADY_RUNNING");
             requireOwner(request);
+            retireOrphanedRuntimes(area, request);
             File controlDir = new File(area, "control"), feedbackDir = new File(area, "feedback");
             directory(controlDir, 0, 0755, uid); // Migrate legacy app-owned control to root-only writes.
             directory(feedbackDir, 1000, 0755);
@@ -152,12 +154,88 @@ public final class PioneerHudFilterHelper {
         Os.chown(dir.getPath(), uid, uid); Os.chmod(dir.getPath(), mode);
     }
     private static void extract(ZipFile apk, String name, File dest, int mode, int limit) throws Exception {
-        try (InputStream in = apk.getInputStream(apk.getEntry("assets/" + name));
-             FileOutputStream out = PioneerRootFiles.output(dest.getPath(),
-                 OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, mode)) {
-            byte[] bytes = new byte[8192]; int count, total = 0;
-            while ((count = in.read(bytes)) >= 0) { total += count; if (total > limit) throw new IOException("HUD_FILTER_ASSET_SIZE"); out.write(bytes, 0, count); }
-            Os.fchown(out.getFD(), 0, 0); Os.fchmod(out.getFD(), mode);
+        File stage = new File(dest.getPath() + ".stage");
+        try {
+            try (InputStream in = apk.getInputStream(apk.getEntry("assets/" + name));
+                 FileOutputStream out = PioneerRootFiles.output(stage.getPath(),
+                     OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, mode)) {
+                byte[] bytes = new byte[8192]; int count, total = 0;
+                while ((count = in.read(bytes)) >= 0) {
+                    total += count;
+                    if (total > limit) throw new IOException("HUD_FILTER_ASSET_SIZE");
+                    out.write(bytes, 0, count);
+                }
+                Os.fchown(out.getFD(), 0, 0); Os.fchmod(out.getFD(), mode); out.getFD().sync();
+            }
+            // Never truncate an executable inode that a legacy process may still have mapped.
+            Os.rename(stage.getPath(), dest.getPath());
+        } finally { stage.delete(); }
+    }
+
+    /** Recognize only this application's fixed injector invocation and private lease paths. */
+    static JSONObject legacyRuntimeOwner(String[] args, File area, JSONObject current) {
+        try {
+            if (args.length != 9 || !args[0].equals(new File(area, "injector").getPath()) ||
+                !args[1].equals("-p") || Integer.parseInt(args[2]) <= 1 ||
+                !args[3].equals("-s") || !args[4].equals(new File(area, "filter.js").getPath()) ||
+                !args[5].equals("-P") || !args[7].equals("-R") || !args[8].equals("qjs")) return null;
+            JSONObject old = new JSONObject(args[6]);
+            if (!old.getString("package").equals(current.getString("package")) ||
+                old.getInt("uid") != current.getInt("uid") ||
+                !old.getString("boot").equals(current.getString("boot")) ||
+                !old.getString("control").equals(new File(area, "control/lease.json").getPath()) ||
+                !old.getString("status").equals(new File(area, "feedback/status.json").getPath()) ||
+                old.getInt("appPid") <= 1 || old.getInt("helperPid") <= 1 ||
+                !old.getString("appStart").matches("[0-9]+") || !old.getString("helperStart").matches("[0-9]+")) return null;
+            return old;
+        } catch (Exception invalid) { return null; }
+    }
+
+    private static boolean sameProcess(int pid, String expectedStart) {
+        try { return start(pid).equals(expectedStart); } catch (Exception ended) { return false; }
+    }
+
+    private static void retireOrphanedRuntimes(File area, JSONObject current) throws Exception {
+        File[] processes = new File("/proc").listFiles();
+        if (processes == null) throw new IOException("HUD_FILTER_PROCESS_DISCOVERY_FAILED");
+        for (File process : processes) {
+            final int pid;
+            final JSONObject old;
+            final String processStart;
+            final boolean previousOwnerActive;
+            try {
+                pid = Integer.parseInt(process.getName());
+                if (pid <= 1 || pid == Process.myPid()) continue;
+                processStart = start(pid);
+                if (Os.stat(process.getPath()).st_uid != 0) continue;
+                String[] args = read(new File(process, "cmdline"), 8192).split("\u0000");
+                old = legacyRuntimeOwner(args, area, current);
+                if (old == null) continue;
+                String exe = Os.readlink(new File(process, "exe").getPath());
+                String expected = new File(area, "injector").getPath();
+                if (!exe.equals(expected) && !exe.equals(expected + " (deleted)")) continue;
+                if (!sameProcess(pid, processStart)) continue;
+                // A live matching supervisor is never a migration target.
+                previousOwnerActive = sameProcess(old.getInt("appPid"), old.getString("appStart")) &&
+                    sameProcess(old.getInt("helperPid"), old.getString("helperStart"));
+            } catch (Exception unrelatedOrEnded) { continue; }
+            if (previousOwnerActive) throw new IOException("HUD_FILTER_PREVIOUS_OWNER_ACTIVE");
+            if (!sameProcess(pid, processStart)) continue;
+            signalIfPresent(pid, OsConstants.SIGTERM);
+            long until = SystemClock.elapsedRealtime() + 500;
+            while (sameProcess(pid, processStart) && SystemClock.elapsedRealtime() < until) Thread.sleep(20);
+            if (sameProcess(pid, processStart)) {
+                signalIfPresent(pid, OsConstants.SIGKILL);
+                until = SystemClock.elapsedRealtime() + 500;
+                while (sameProcess(pid, processStart) && SystemClock.elapsedRealtime() < until) Thread.sleep(20);
+            }
+            if (sameProcess(pid, processStart)) throw new IOException("HUD_FILTER_ORPHAN_EXIT_UNCONFIRMED");
+        }
+    }
+    private static void signalIfPresent(int pid, int signal) throws ErrnoException {
+        try { Os.kill(pid, signal); }
+        catch (ErrnoException ended) {
+            if (ended.errno != OsConstants.ESRCH) throw ended;
         }
     }
     private static String sha(File file) throws Exception {

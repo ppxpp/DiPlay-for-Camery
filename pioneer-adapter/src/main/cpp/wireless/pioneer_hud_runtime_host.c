@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     char *end = NULL;
     long owner = strtol(argv[1], &end, 10);
     if (!end || *end || owner <= 1) return 126;
-    if (prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0) || getppid() != owner) return 125;
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) || getppid() != owner) return 125;
     execv(argv[2], &argv[2]);
     return 126;
 }
