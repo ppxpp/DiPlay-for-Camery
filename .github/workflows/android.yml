@@ -42,14 +42,22 @@ jobs:
           } > .signing/signing.properties
           chmod 600 .signing/signing.properties
       - uses: gradle/actions/setup-gradle@v4
+      - name: Root service and PAL packaging guards
+        run: |
+          node --test pioneer-adapter/src/test/js/hud-filter.test.cjs
+          python3 pioneer-adapter/src/test/python/test_hud_unified_boundary.py
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror pioneer-adapter/src/main/cpp/wireless/pioneer_command_runner.c -o "$RUNNER_TEMP/diplay-command-runner"
+          python3 pioneer-adapter/src/test/python/test_command_runner.py "$RUNNER_TEMP/diplay-command-runner"
+          python3 -m unittest discover -s scripts/tests -p 'test_prepare_pioneer_pal_sdk.py'
       - name: Unit tests, lint and source-only debug build
-        run: ./gradlew -PdiplaySourceOnly=true :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug :home:lintDebug :maphost:lintDebug :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug --stacktrace
+        run: ./gradlew -PdiplaySourceOnly=true :pioneer-adapter:testDebugUnitTest :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug :home:lintDebug :maphost:lintDebug :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug --stacktrace
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: |
+            pioneer-adapter/build/reports/tests/
             shared/build/reports/tests/
             common/build/reports/tests/
             common/build/reports/album-artwork-ui/

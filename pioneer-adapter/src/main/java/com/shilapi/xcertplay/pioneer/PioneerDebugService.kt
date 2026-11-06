@@ -33,6 +33,11 @@ class PioneerDebugService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!PioneerDebugRuntime.automaticStartEnabled(this)) {
+            closed = true
+            stopSelf()
+            return
+        }
         PioneerDebugRuntime.phoneDiagnosticsEnabled = getSharedPreferences("pioneer-debug", MODE_PRIVATE)
             .getBoolean("phone_auth_diagnostics", false)
         if (Build.VERSION.SDK_INT >= 26) getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -74,6 +79,7 @@ class PioneerDebugService : Service() {
     }
 
     private fun handle(socket: Socket, request: JSONObject) {
+        check(PioneerDebugRuntime.automaticStartEnabled(this)) { "Debug build required" }
         val reply = JSONObject().put("ok", true)
         when (val command = request.getString("cmd")) {
             "async-session-logs", "freescale-reorder" -> {
@@ -602,6 +608,8 @@ class PioneerDebugService : Service() {
 
     override fun onDestroy() {
         closed = true; runCatching { listener?.close() }; connections.close()
+        PioneerDiagnostics.enabled = false
+        PioneerDebugRuntime.phoneDiagnosticsEnabled = false
         PioneerDebugRuntime.port = 0; PioneerDebugRuntime.listenerState = "已停止"
         super.onDestroy()
     }

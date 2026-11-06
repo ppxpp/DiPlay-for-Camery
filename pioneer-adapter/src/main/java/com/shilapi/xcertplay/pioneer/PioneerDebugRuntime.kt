@@ -62,6 +62,7 @@ object PioneerDebugRuntime {
         context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     fun start(context: Context) {
+        check(automaticStartEnabled(context)) { "LAN diagnostics are available only in debug builds" }
         ContextCompat.startForegroundService(context, Intent(context, PioneerDebugService::class.java))
     }
     fun logFile(context: Context) = File(context.filesDir, "pioneer-debug/adapter.log")
