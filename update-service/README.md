@@ -14,7 +14,7 @@ dist/                                                          generated Pages o
 schema/                                                        v1 manifest, response and feedback contracts
 scripts/build-site.mjs                                         build site and assemble dist
 scripts/publish-update.mjs                                     generic publisher
-scripts/derived.mjs                                            rebuild releases-index/latest-any read models
+scripts/derived.mjs                                            rebuild releases-index/latest-all/latest-any read models
 scripts/apply-edge-security.mjs                                WAF rate limiting + cache rules (dry-run by default)
 scripts/restore-release-snapshot.mjs                           restore a history snapshot from an existing artifact
 SECURITY.md                                                    threat model, edge/app controls, rotation runbook
@@ -40,13 +40,15 @@ DELETE /api/v1/admin/feedback/{id}                                 (admin)
 
 The `install-kits` endpoint serves the payload for the DiPlay 装车助手 (installer) app. Its static parts — the device profile, the uninstall notice, and the 爱趣听 / 微信 replacement packages (fixed R2 asset URLs, sizes and SHA-256) — are authored in `functions/_shared/install-kits.ts`. The DiPlay entry is resolved at request time from the app update interface: the Function reads `apps/diplay/android/stable/latest.json` and `apps/diplay/android/beta/latest.json`, skips disabled channels, and uses whichever carries the higher `versionCode` (preferring stable on a tie), so the installer always gets the newest DiPlay build without republishing the kit. If no DiPlay release is available it returns `503 {"error":"diplay_release_unavailable"}`; an unknown `kitId` returns `404`. Responses use `Cache-Control: no-store`.
 
-`DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining deliverable release, or removes the pointer when none is left.
+`DELETE` removes a release snapshot together with its APK and `SHA256SUMS.txt`. Deleting the current release repoints the channel at the newest remaining published release and marks it as delivered (enabled + published), so clients switch to it immediately instead of falling past it to an older release; when nothing is left, the pointer is removed and clients see no update.
 
-A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable. Whitelist and percentage delivery are bypassed only for this legacy no-id stable request.
+A stable `latest` request without `id` is treated as the historical DiPlay versionCode 1000 client. Because that client cannot choose a channel, the endpoint reads both the stable and beta manifests and returns the release with the higher `versionCode`, preferring stable on a tie. Only a full release counts here: a release held to a whitelist (or a legacy percentage below 100%) is never offered to a client that sends no `id`. A disabled release is skipped; if neither channel can serve, the endpoint still returns 200 with `{"schemaVersion":1,"appId":…,"platform":…,"channel":"stable","updateAvailable":false}` so the legacy client shows its up-to-date message instead of a failed check. New clients must always send `id`; the client stores a stable fallback ID if Android ID is unavailable.
 
-Public `latest`, `public-latest`, `releases` (with `?limit=`, default 100, max 500) and `install-kits` responses carry `Cache-Control: public, max-age=60, s-maxage=60` plus a weak `ETag`; per-client manifests and admin data stay `no-store`. `releases` serves the derived `releases-index.json` and the legacy no-id `latest` serves `latest-any.json`, so each request costs one bucket read; both are rebuilt by the publisher and by admin mutations. See `SECURITY.md` for edge rate limiting, caching and the secrets runbook.
+A client that is not served the current release — because it misses the whitelist, falls outside a legacy percentage pool, or because that release is no longer the current version — is not left with nothing: the endpoint serves that channel's newest full release (`mode: all`, or a legacy `percentage: 100`) from `latest-all.json`, which never points at the release being delivered now. Only a channel with no such release returns 404 `update_unavailable`. Releases that were never delivered (candidates with no `published` flag) and releases marked 不下发 are excluded from that pool, while a release demoted by publishing a newer one stays eligible. Clients compare `versionCode` themselves, so an already-updated device reads the fallback as "up to date" rather than downgrading.
 
-The app update endpoint applies the release's enabled/mode/percentage/whitelist policy and accepts the stable client identifier as `?id=...`. `public-latest` serves the current APK for the public homepage regardless of automatic delivery policy. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
+Public `latest`, `public-latest`, `releases` (with `?limit=`, default 100, max 500) and `install-kits` responses carry `Cache-Control: public, max-age=60, s-maxage=60` plus a weak `ETag`; per-client manifests and admin data stay `no-store`. `releases` serves the derived `releases-index.json`, and `latest` serves `latest-any.json` (which mirrors each channel's `latest-all.json` full-release pointer), so a normal request costs one bucket read; a client outside a gray pool adds one read of `latest-all.json`. All three are rebuilt by the publisher and by admin mutations. See `SECURITY.md` for edge rate limiting, caching and the secrets runbook.
+
+The app update endpoint applies the current release's scope (all, whitelist or withdrawn; legacy percentage data is still honoured) and accepts the stable client identifier as `?id=...`. A request that names no usable channel is served the beta channel. A release held to a whitelist or a partial percentage reaches clients only through this endpoint: `public-latest`, `install-kits` and the public `releases` history all point at the newest full release instead, so a grey build never appears on the download page or in the installer. `releases` returns the permanent public history for that channel. The admin endpoints under `/api/v1/admin/` require a signed admin session.
 
 The Function reads this private metadata object:
 
@@ -224,7 +226,7 @@ The DiPlay repository uses `.github/workflows/release.yml`:
 - The workflow builds `:mobile:assembleRelease`, verifies the APK version matches the tag, rejects a `versionCode` that is not greater than the currently published one, uploads to R2 and checks the public endpoint.
 - It then installs `update-service` dependencies, rebuilds the Astro site with the newly published manifests baked in, and deploys the Pages project. A site deploy failure fails the workflow after the R2 release is already live.
 
-CI uploads every release as a disabled candidate and never moves the delivered version. Sign in to `/admin/`, review it, and use “设为当前下发版本”; that also enables delivery. Release APKs and APK-derived identity fields are immutable; the console edits only release notes and delivery settings.
+CI uploads every release as a candidate and never moves the current version. Sign in to `/admin/`, review it, then use “设为当前版本”; that is the only switch that makes clients see it. The console edits two things per release: **发布范围** (全量, 白名单 or 不下发) and **发布说明**. 不下发 keeps a release on record while removing it from every delivery path and every public surface. A release is delivered only while it is the channel's current version, so there is no separate enable toggle — to stop delivering a build, point 当前版本 at another release. Release APKs and APK-derived identity fields are immutable.
 
 ### Deploy only the site
 
@@ -251,7 +253,7 @@ ADMIN_SESSION_SECRET=<local random value, for example from openssl rand -hex 32>
 
 Wrangler loads `.dev.vars` for `npm run dev`; the file is git-ignored. The local username remains the `ADMIN_USERNAME` value in `wrangler.toml` (`admin` by default). Use `http://localhost:8788/admin/` while the dev server is running.
 
-The public `/history/` page lists all permanent release snapshots. It reads a public history API and does not depend on automatic delivery being enabled. The homepage reads `public-latest`; the app update endpoint `latest` applies the release delivery policy and accepts the client's `id` query parameter.
+The public `/history/` page lists every delivered release that has rolled out to everyone; a grey release joins it once its mode becomes 全量. It reads a public history API and does not depend on automatic delivery being enabled. The homepage reads `public-latest`; the app update endpoint `latest` applies the release delivery policy and accepts the client's `id` query parameter.
 
 Repository secrets:
 
@@ -310,7 +312,7 @@ node scripts/publish-update.mjs \
   --arch universal
 ```
 
-The client checks `GET /api/v1/apps/installer/android/stable/latest?id=<ANDROID_ID>` on every home screen visit, compares the manifest `versionCode` with its own `longVersionCode`, and offers to download and install the APK. `latest` (not `public-latest`) is used so release rollout stays under admin delivery control. A release must be manually enabled in `/admin/` after publishing, same as DiPlay releases.
+The client checks `GET /api/v1/apps/installer/android/stable/latest?id=<ANDROID_ID>` on every home screen visit, compares the manifest `versionCode` with its own `longVersionCode`, and offers to download and install the APK. `latest` (not `public-latest`) is used so release rollout stays under admin delivery control. A release must be set as the current version in `/admin/` after uploading, same as DiPlay releases.
 
 ## Notes
 

@@ -1,35 +1,21 @@
-import { isManifest as isManagedManifest } from "./management";
+import {
+  isManifest as isManagedManifest,
+  mayDeliver,
+  type StoredManifest,
+} from "./management";
+import { isOpenDelivery, readLatestAll } from "./derived";
 
 export interface Env {
   META: R2Bucket;
   ASSET_BASE_URL: string;
 }
 
-interface StoredArtifact {
-  name: string;
-  arch?: string;
-  key: string;
-  checksumsKey: string;
-  sha256?: string;
-  size?: number;
-}
-
-interface StoredManifest {
-  schemaVersion: number;
-  version: string;
-  versionName?: string;
-  versionCode: number;
-  publishedAt?: string;
-  mandatory?: boolean;
-  notesUrl?: string;
-  management?: {
-    enabled: boolean;
-    mode: "all" | "percentage" | "whitelist";
-    percentage?: number;
-    ids?: string[];
-    notes?: string;
-  };
-  artifacts: StoredArtifact[];
+interface LegacySnapshot {
+  stable: StoredManifest | null;
+  beta: StoredManifest | null;
+  stableAll?: StoredManifest | null;
+  betaAll?: StoredManifest | null;
+  invalid?: boolean;
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -118,7 +104,7 @@ async function readLatestAny(
   env: Env,
   appId: string,
   platform: string,
-): Promise<{ stable: StoredManifest | null; beta: StoredManifest | null } | null> {
+): Promise<LegacySnapshot | null> {
   const object = await env.META.get(`apps/${appId}/${platform}/latest-any.json`);
   if (!object) return null;
   try {
@@ -127,10 +113,32 @@ async function readLatestAny(
     return {
       stable: isManagedManifest(value.stable) ? value.stable : null,
       beta: isManagedManifest(value.beta) ? value.beta : null,
+      ...("stableAll" in value ? { stableAll: isManagedManifest(value.stableAll) ? value.stableAll : null } : {}),
+      ...("betaAll" in value ? { betaAll: isManagedManifest(value.betaAll) ? value.betaAll : null } : {}),
     };
   } catch {
     return null;
   }
+}
+
+// The newest release every client is entitled to, so a client outside a gray
+// pool, or one whose current release was switched off, still gets the current
+// full release instead of nothing. An open live release needs no extra read;
+// only a held or switched-off one consults the per-channel pointer, and a
+// pointer an older deploy never wrote falls back to the live manifest.
+async function fullRolloutRelease(
+  env: Env,
+  appId: string,
+  platform: string,
+  channel: string,
+  hints: { live?: StoredManifest | null; all?: StoredManifest | null } = {},
+): Promise<StoredManifest | null> {
+  if (hints.all !== undefined) return hints.all;
+  if (hints.live && isOpenDelivery(hints.live)) return hints.live;
+  const pointer = await readLatestAll(env.META, appId, platform, channel);
+  if (pointer !== undefined) return pointer;
+  const live = await loadManifest(env, `apps/${appId}/${platform}/${channel}/latest.json`);
+  return live.kind === "ok" && isOpenDelivery(live.stored) ? live.stored : null;
 }
 
 export async function latestManifestResponse(
@@ -143,9 +151,11 @@ export async function latestManifestResponse(
   const appId = first(appIdValue);
   const platform = first(platformValue);
   const requestedChannel = first(channelValue);
-  if (!appId || !platform || !requestedChannel || ![appId, platform, requestedChannel].every((value) => SLUG.test(value))) {
+  if (!appId || !platform || !SLUG.test(appId) || !SLUG.test(platform)) {
     return json({ error: "invalid_path" }, 400);
   }
+  // A request that names no usable channel is treated as the test channel.
+  const channelParam = requestedChannel && SLUG.test(requestedChannel) ? requestedChannel : "beta";
 
   const base = env.ASSET_BASE_URL?.trim();
   if (!base) return json({ error: "asset_base_url_not_configured" }, 500);
@@ -162,46 +172,49 @@ export async function latestManifestResponse(
   // The historical versionCode 1000 client queried stable without an id or a
   // channel choice. New clients always send their client id, including the
   // persisted fallback when Android ID is unavailable.
-  const legacyStable = requestedChannel === "stable" && !clientId;
+  const legacyStable = channelParam === "stable" && !clientId;
 
-  let channel = requestedChannel;
+  let channel = channelParam;
   let stored: StoredManifest;
 
   if (legacyStable) {
-    // The legacy client cannot choose a channel, so serve whichever published
-    // channel carries the newer version. Equal versions keep stable first.
-    let stable: ManifestLoad;
-    let beta: ManifestLoad;
-    const snapshot = await readLatestAny(env, appId, platform);
-    if (snapshot) {
-      stable = snapshot.stable ? { kind: "ok", stored: snapshot.stable } : { kind: "missing" };
-      beta = snapshot.beta ? { kind: "ok", stored: snapshot.beta } : { kind: "missing" };
-    } else {
-      [stable, beta] = await Promise.all([
-        loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
-        loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
-      ]);
-    }
+    // The legacy client cannot choose a channel, so serve whichever channel
+    // carries the newer full release. Equal versions keep stable first. A
+    // release still held to a whitelist or a percentage is never offered here.
+    const snapshot = await readLatestAny(env, appId, platform)
+      ?? await (async (): Promise<LegacySnapshot> => {
+        const [stableLive, betaLive] = await Promise.all([
+          loadManifest(env, `apps/${appId}/${platform}/stable/latest.json`),
+          loadManifest(env, `apps/${appId}/${platform}/beta/latest.json`),
+        ]);
+        return {
+          stable: stableLive.kind === "ok" ? stableLive.stored : null,
+          beta: betaLive.kind === "ok" ? betaLive.stored : null,
+          invalid: stableLive.kind === "invalid" || betaLive.kind === "invalid",
+        };
+      })();
+    const [stableRelease, betaRelease] = await Promise.all([
+      // A channel without a live manifest has no published release to fall
+      // back to, so it is skipped instead of paying for a pointer read.
+      snapshot.stable
+        ? fullRolloutRelease(env, appId, platform, "stable", { live: snapshot.stable, all: snapshot.stableAll })
+        : null,
+      snapshot.beta
+        ? fullRolloutRelease(env, appId, platform, "beta", { live: snapshot.beta, all: snapshot.betaAll })
+        : null,
+    ]);
     const candidates: Array<{ channel: string; stored: StoredManifest }> = [];
-    for (const [candidateChannel, loaded] of [
-      ["stable", stable],
-      ["beta", beta],
-    ] as const) {
-      if (loaded.kind === "ok" && loaded.stored.management?.enabled !== false) {
-        candidates.push({ channel: candidateChannel, stored: loaded.stored });
-      }
-    }
+    if (stableRelease) candidates.push({ channel: "stable", stored: stableRelease });
+    if (betaRelease) candidates.push({ channel: "beta", stored: betaRelease });
     if (candidates.length === 0) {
-      if (stable.kind === "invalid" || beta.kind === "invalid") {
-        return json({ error: "invalid_manifest" }, 502);
-      }
+      if (snapshot.invalid) return json({ error: "invalid_manifest" }, 502);
       // The legacy client renders a 404 as a failed check. A 200 response
       // without release fields is parsed as "no update available".
       return json({
         schemaVersion: 1,
         appId,
         platform,
-        channel: requestedChannel,
+        channel: channelParam,
         updateAvailable: false,
       });
     }
@@ -220,22 +233,15 @@ export async function latestManifestResponse(
     stored = loaded.stored;
   }
 
-  const management = stored.management ?? { enabled: true, mode: "all" as const, notes: "" };
-  if (!legacyStable && !management.enabled) return json({ error: "update_unavailable" }, 404);
-
-  if (!legacyStable) {
-    if (management.mode === "whitelist" && (!clientId || !management.ids?.includes(clientId))) {
-      return json({ error: "update_unavailable" }, 404);
-    }
-    if (management.mode === "percentage") {
-      const percentage = management.percentage ?? 0;
-      if (percentage < 100) {
-        if (!clientId) return json({ error: "update_unavailable" }, 404);
-        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clientId));
-        const bucket = new DataView(digest).getUint32(0, false) % 100;
-        if (bucket >= percentage) return json({ error: "update_unavailable" }, 404);
-      }
-    }
+  let management = stored.management ?? { enabled: true, mode: "all" as const, notes: "" };
+  if (!legacyStable && !await mayDeliver(management, clientId)) {
+    // Outside the pool, or with delivery switched off for the current release,
+    // the client takes this channel's newest full release; only a channel that
+    // has none reports no update.
+    const fallback = await fullRolloutRelease(env, appId, platform, channel);
+    if (!fallback) return json({ error: "update_unavailable" }, 404);
+    stored = fallback;
+    management = stored.management ?? { enabled: true, mode: "all" as const, notes: "" };
   }
 
   const arch = archParam;

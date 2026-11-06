@@ -105,15 +105,73 @@ describe("public release visibility", () => {
     expect(body.releases.map((item) => item.versionCode)).toEqual([2001]);
   });
 
-  it("keeps a published release visible after delivery is turned off", async () => {
+  it("leaves a switched-off release on the history but off the download page", async () => {
     const disabled = release("0.2.21", 2001, false, "2026-10-26T07:39:36Z", true);
 
-    const latestResponse = await publicLatest(context({ [latestKey]: disabled }));
-    expect(latestResponse.status).toBe(200);
-    expect((await latestResponse.json() as { versionCode: number }).versionCode).toBe(2001);
+    // Nothing open to download and no earlier full release to fall back to.
+    const latestResponse = await publicLatest(context({
+      [latestKey]: disabled,
+      [`${snapshots}0.2.21.json`]: disabled,
+    }));
+    expect(latestResponse.status).toBe(404);
 
     const historyResponse = await publicReleases(context({ [`${snapshots}0.2.21.json`]: disabled }));
     const body = await historyResponse.json() as { releases: Array<{ versionCode: number }> };
     expect(body.releases.map((item) => item.versionCode)).toEqual([2001]);
+  });
+
+  it("keeps a grey release off the download page", async () => {
+    const grey = { ...release("0.4.1", 4001, true, "2026-11-05T05:02:07Z"), management: { enabled: true, mode: "whitelist", ids: ["vghF7E4n8g"], notes: "" } };
+    const full = release("0.4.0", 4000, true, "2026-10-30T13:23:29Z");
+    const pointer = {
+      schemaVersion: 1,
+      updatedAt: "2026-11-05T05:02:07Z",
+      manifest: { ...full, management: { enabled: false, published: true, mode: "all", notes: "" } },
+    };
+
+    const response = await publicLatest(context({
+      [latestKey]: grey,
+      [`${snapshots}0.4.1.json`]: grey,
+      [`${snapshots}0.4.0.json`]: full,
+      "apps/diplay/android/beta/latest-all.json": pointer,
+    }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json() as { versionCode: number }).versionCode).toBe(4000);
+  });
+
+  it("keeps a withdrawn release off the download page and the history", async () => {
+    const withdrawn = { ...release("0.4.1", 4001, true, "2026-11-05T05:02:07Z"), management: { enabled: true, mode: "none", notes: "" } };
+    const full = release("0.4.0", 4000, true, "2026-10-30T13:23:29Z");
+
+    const download = await publicLatest(context({
+      [latestKey]: withdrawn,
+      [`${snapshots}0.4.1.json`]: withdrawn,
+      [`${snapshots}0.4.0.json`]: full,
+    }));
+    expect(download.status).toBe(200);
+    expect((await download.json() as { versionCode: number }).versionCode).toBe(4000);
+
+    const history = await publicReleases(context({
+      [`${snapshots}0.4.1.json`]: withdrawn,
+      [`${snapshots}0.4.0.json`]: full,
+    }));
+    expect(history.status).toBe(200);
+    const body = await history.json() as { releases: Array<{ versionCode: number }> };
+    expect(body.releases.map((item) => item.versionCode)).toEqual([4000]);
+  });
+
+  it("hides a grey release from the public history", async () => {
+    const grey = { ...release("0.4.1", 4001, true, "2026-11-05T05:02:07Z"), management: { enabled: true, mode: "whitelist", ids: ["a"], notes: "" } };
+    const full = release("0.4.0", 4000, true, "2026-10-30T13:23:29Z");
+
+    const response = await publicReleases(context({
+      [`${snapshots}0.4.1.json`]: grey,
+      [`${snapshots}0.4.0.json`]: full,
+    }));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { releases: Array<{ versionCode: number }> };
+    expect(body.releases.map((item) => item.versionCode)).toEqual([4000]);
   });
 });

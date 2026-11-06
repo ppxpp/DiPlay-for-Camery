@@ -129,10 +129,10 @@ break login.
 
 ## Layer 3 — Derived read models
 
-`releases-index.json` and `latest-any.json` are written by:
+`releases-index.json`, `latest-all.json` and `latest-any.json` are written by:
 
 - `scripts/publish-update.mjs` after each publish (`scripts/derived.mjs`), and
-- the admin API after enable/disable, rollback, and delete.
+- the admin API after publishing a current version, a scope change, and delete.
 
 Readers use them when present and fall back to the legacy multi-read paths when
 they are missing or invalid. If a derived object is ever stale, delete it; the
@@ -184,10 +184,14 @@ curl -s -o /dev/null -w "%{http_code}\n" https://diplay.mgulu.com/api/v1/admin/f
 
 ## Known residual risks
 
-- **Rollout gating is not secrecy.** `percentage`/`whitelist` rely on a
-  self-reported `?id=`; an attacker can probe ids, and `public-latest`/legacy
-  paths expose the newest build regardless. Accepted because APKs are public
-  artifacts. If gating must be enforced, move to server-issued tickets.
+- **Rollout gating is not secrecy.** `whitelist` (and legacy `percentage`) rely on a
+  self-reported `?id=`; an attacker who knows a pool id can ask for the grey
+  build. Severity is limited because grey builds are not published anywhere
+  else: the legacy no-id `latest` path only sees full releases, a client outside
+  a pool is served the channel's newest full release, and `public-latest`,
+  `install-kits` and the public history all point at the newest full release.
+  Accepted because APKs are public artifacts. If gating must be enforced, move
+  to server-issued tickets.
 - **Asset bandwidth** is not rate limited by these rules unless you add a rule
   for the asset host; prefer Cloudflare edge caching (already `immutable`).
 - **No WAF managed rules by default** — enable them manually (Layer 1 step 3).
