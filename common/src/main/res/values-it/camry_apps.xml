@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">Gestione app del veicolo</string>
+    <string name="settings_camry_apps_description">Queste app possono usare molte risorse in background e causare scatti nel video o interruzioni audio di CarPlay. Disabilitale se non servono. La disabilitazione resta attiva dopo il riavvio ed è reversibile senza eliminare i dati.</string>
+    <string name="settings_camry_apps_amap">Disabilita Amap</string>
+    <string name="settings_camry_apps_amap_description">Ferma Amap sul sistema del veicolo, senza modificare Amap su iPhone.</string>
+    <string name="settings_camry_apps_tencent_map">Disabilita Tencent Maps</string>
+    <string name="settings_camry_apps_tencent_map_description">Ferma Tencent Maps sul sistema del veicolo, senza modificare la versione per iPhone.</string>
+    <string name="settings_camry_apps_tencent_speech">Disabilita Tencent Voice</string>
+    <string name="settings_camry_apps_tencent_speech_description">Ferma Tencent Voice sul veicolo. Potrebbe influire sui comandi vocali e sulla relativa attivazione del sistema originale.</string>
+    <string name="settings_camry_apps_enabled">Abilitata</string>
+    <string name="settings_camry_apps_disabled">Disabilitata</string>
+    <string name="settings_camry_apps_not_installed">Non installata</string>
+    <string name="settings_camry_apps_loading">Lettura dello stato…</string>
+    <string name="settings_camry_apps_disabling">Disabilitazione…</string>
+    <string name="settings_camry_apps_enabling">Abilitazione…</string>
+    <string name="settings_camry_apps_unknown">Stato non disponibile. Aggiorna per riprovare.</string>
+    <string name="settings_camry_apps_failed">Operazione non riuscita. Aggiorna lo stato e riprova.</string>
+    <string name="settings_camry_apps_refresh">Aggiorna stato</string>
+    <string name="settings_camry_apps_adaptation_required">Abilita prima la compatibilità Camry.</string>
+</resources>

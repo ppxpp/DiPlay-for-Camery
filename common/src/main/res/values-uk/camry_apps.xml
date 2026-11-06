@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">Програми головного пристрою</string>
+    <string name="settings_camry_apps_description">Ці програми можуть споживати багато ресурсів у фоні та спричиняти затримки зображення чи звуку CarPlay. Вимикайте їх, якщо вони не потрібні. Вимкнення зберігається після перезапуску та скасовується без видалення даних.</string>
+    <string name="settings_camry_apps_amap">Вимкнути Amap</string>
+    <string name="settings_camry_apps_amap_description">Зупиняє Amap на головному пристрої, не впливаючи на Amap на iPhone.</string>
+    <string name="settings_camry_apps_tencent_map">Вимкнути Tencent Maps</string>
+    <string name="settings_camry_apps_tencent_map_description">Зупиняє Tencent Maps на головному пристрої, не впливаючи на програму на iPhone.</string>
+    <string name="settings_camry_apps_tencent_speech">Вимкнути Tencent Voice</string>
+    <string name="settings_camry_apps_tencent_speech_description">Зупиняє Tencent Voice на головному пристрої. Може вплинути на штатну голосову активацію та керування.</string>
+    <string name="settings_camry_apps_enabled">Увімкнено</string>
+    <string name="settings_camry_apps_disabled">Вимкнено</string>
+    <string name="settings_camry_apps_not_installed">Не встановлено</string>
+    <string name="settings_camry_apps_loading">Читання стану…</string>
+    <string name="settings_camry_apps_disabling">Вимкнення…</string>
+    <string name="settings_camry_apps_enabling">Увімкнення…</string>
+    <string name="settings_camry_apps_unknown">Стан недоступний. Оновіть для повтору.</string>
+    <string name="settings_camry_apps_failed">Помилка операції. Оновіть стан і повторіть спробу.</string>
+    <string name="settings_camry_apps_refresh">Оновити стан</string>
+    <string name="settings_camry_apps_adaptation_required">Спочатку ввімкніть адаптацію Camry.</string>
+</resources>

@@ -53,7 +53,7 @@ public final class PioneerRootSessionHelper {
         Set<LocalSocket> peers = ConcurrentHashMap.newKeySet();
         ThreadPoolExecutor input = lane("root-ipc-input", 2, 8), control = lane("root-ipc-control", 2, 8),
             init = lane("root-ipc-permission", 2, 8), hotspot = lane("root-ipc-hotspot", 1, 4),
-            tools = lane("root-ipc-tools", 1, 4), callbacks = lane("root-ipc-callback", 1, 4), diagnostics = lane("root-ipc-diagnostic", 1, 2);
+            applications = lane("root-ipc-apps", 1, 4), tools = lane("root-ipc-tools", 1, 4), callbacks = lane("root-ipc-callback", 1, 4), diagnostics = lane("root-ipc-diagnostic", 1, 2);
         PioneerRootHudService hud = null;
         try {
             descriptor = new File(args[0]).getCanonicalFile();
@@ -135,6 +135,7 @@ public final class PioneerRootSessionHelper {
                                     case "HOTSPOT": case "HOTSPOT_WARM": executor = hotspot; break;
                                     case "TASK": executor = init; break;
                                     case "CALLBACK": executor = callbacks; break;
+                                    case "APPLICATIONS": executor = applications; break;
                                     case "ADB": executor = tools; break;
                                     case "DIAGNOSTIC": executor = diagnostics; break;
                                     case "CANCEL": case "PING": case "HUD_START": case "HUD_LEASE": case "HUD_STATUS": case "HUD_RELEASE": executor = control; break;
@@ -167,6 +168,7 @@ public final class PioneerRootSessionHelper {
                                             }); break;
                                             case "HOTSPOT_WARM": result = PioneerRootHotspotService.warm(payload, owner, files); break;
                                             case "CALLBACK": result = PioneerRootHotspotService.callback(payload, owner, files); break;
+                                            case "APPLICATIONS": result = PioneerRootApplications.handle(payload, owner); break;
                                             case "ADB": result = PioneerAdbHelper.runTask(payload.getBoolean("enabled")); break;
                                             case "DIAGNOSTIC": result = PioneerRootDiagnostics.run(payload.getString("name"), () -> task.current(closed)); break;
                                             default: result = hudService.handle(operation, payload); break;
@@ -196,7 +198,7 @@ public final class PioneerRootSessionHelper {
             if (request != null && descriptor != null) try { publish(descriptor, request.put("state", "ERROR").put("error", error.toString()), request.getInt("uid")); } catch (Exception ignored) { }
         } finally {
             closed.set(true); if (hud != null) hud.close();
-            for (ThreadPoolExecutor executor : new ThreadPoolExecutor[]{input, control, init, hotspot, tools, callbacks, diagnostics}) executor.shutdownNow();
+            for (ThreadPoolExecutor executor : new ThreadPoolExecutor[]{input, control, init, hotspot, applications, tools, callbacks, diagnostics}) executor.shutdownNow();
             for (LocalSocket peer : peers) try { peer.close(); } catch (IOException ignored) { }
             deadlines.shutdownNow();
         }

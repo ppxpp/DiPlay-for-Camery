@@ -123,6 +123,7 @@ internal enum class SettingsCategory {
 internal enum class SettingsSection {
     CAMRY_ADAPTATION,
     CAMRY_HUD,
+    CAMRY_APPLICATIONS,
     CARPLAY_CONTROLS,
     WHEEL_KEYS,
     CONNECTION_SETUP,
@@ -165,7 +166,7 @@ internal object SettingsInformationArchitecture {
             SettingsSection.WHEEL_KEYS,
             SettingsSection.CAR_BUTTON,
         ),
-        SettingsCategory.CAMRY to setOf(SettingsSection.CAMRY_ADAPTATION, SettingsSection.CAMRY_HUD),
+        SettingsCategory.CAMRY to setOf(SettingsSection.CAMRY_ADAPTATION, SettingsSection.CAMRY_HUD, SettingsSection.CAMRY_APPLICATIONS),
         SettingsCategory.DIAGNOSTICS to setOf(SettingsSection.DIAGNOSTICS),
         SettingsCategory.ADVANCED to setOf(
             SettingsSection.CLUSTER_MAP,
@@ -2022,6 +2023,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         filteredSection(content, SettingsSection.CAMRY_HUD,
             getString(R.string.settings_camry_hud_title), R.drawable.ic_dp_navigation) { card ->
             card.addView(com.shilapi.xcertplay.settings.CamryHudSettingsSection.create(this, palette,
+                indexText = { searchIndexSink?.add(it) }))
+        }
+        filteredSection(content, SettingsSection.CAMRY_APPLICATIONS,
+            getString(R.string.settings_camry_apps_title), R.drawable.ic_dp_car) { card ->
+            card.addView(com.shilapi.xcertplay.settings.CamryApplicationSettingsSection.create(this, palette,
                 indexText = { searchIndexSink?.add(it) }))
         }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,

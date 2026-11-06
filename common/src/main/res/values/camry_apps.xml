@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">Vehicle app management</string>
+    <string name="settings_camry_apps_description">These apps may use substantial resources in the background, causing CarPlay video or audio stutter. Disable them when not needed. Disabling persists after a restart and can be reversed without deleting app data.</string>
+    <string name="settings_camry_apps_amap">Disable Amap</string>
+    <string name="settings_camry_apps_amap_description">Stop Amap on the head unit. Amap on the iPhone is unaffected.</string>
+    <string name="settings_camry_apps_tencent_map">Disable Tencent Maps</string>
+    <string name="settings_camry_apps_tencent_map_description">Stop Tencent Maps on the head unit. Tencent Maps on the iPhone is unaffected.</string>
+    <string name="settings_camry_apps_tencent_speech">Disable Tencent Voice</string>
+    <string name="settings_camry_apps_tencent_speech_description">Stop Tencent Voice on the head unit. Factory voice wake-up and voice controls may be affected.</string>
+    <string name="settings_camry_apps_enabled">Enabled</string>
+    <string name="settings_camry_apps_disabled">Disabled</string>
+    <string name="settings_camry_apps_not_installed">Not installed</string>
+    <string name="settings_camry_apps_loading">Reading status…</string>
+    <string name="settings_camry_apps_disabling">Disabling…</string>
+    <string name="settings_camry_apps_enabling">Enabling…</string>
+    <string name="settings_camry_apps_unknown">Status unavailable. Refresh to retry.</string>
+    <string name="settings_camry_apps_failed">Operation failed. Refresh the status and try again.</string>
+    <string name="settings_camry_apps_refresh">Refresh status</string>
+    <string name="settings_camry_apps_adaptation_required">Enable Camry adaptation first.</string>
+</resources>

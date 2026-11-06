@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_camry_apps_title">車載機アプリの管理</string>
+    <string name="settings_camry_apps_description">これらのアプリはバックグラウンドで多くのリソースを消費し、CarPlay の映像や音声が途切れる原因になる場合があります。使用しない場合は無効にできます。再起動後も無効状態を維持し、データを削除せずに元に戻せます。</string>
+    <string name="settings_camry_apps_amap">高徳地図を無効にする</string>
+    <string name="settings_camry_apps_amap_description">車載機の高徳地図を停止します。iPhone の高徳地図には影響しません。</string>
+    <string name="settings_camry_apps_tencent_map">Tencent Maps を無効にする</string>
+    <string name="settings_camry_apps_tencent_map_description">車載機の Tencent Maps を停止します。iPhone のアプリには影響しません。</string>
+    <string name="settings_camry_apps_tencent_speech">Tencent Voice を無効にする</string>
+    <string name="settings_camry_apps_tencent_speech_description">車載機の Tencent Voice を停止します。純正の音声起動や音声操作に影響する場合があります。</string>
+    <string name="settings_camry_apps_enabled">有効</string>
+    <string name="settings_camry_apps_disabled">無効</string>
+    <string name="settings_camry_apps_not_installed">未インストール</string>
+    <string name="settings_camry_apps_loading">状態を取得中…</string>
+    <string name="settings_camry_apps_disabling">無効化中…</string>
+    <string name="settings_camry_apps_enabling">有効化中…</string>
+    <string name="settings_camry_apps_unknown">状態を取得できません。更新して再試行してください。</string>
+    <string name="settings_camry_apps_failed">操作に失敗しました。状態を更新して再試行してください。</string>
+    <string name="settings_camry_apps_refresh">状態を更新</string>
+    <string name="settings_camry_apps_adaptation_required">先にカムリ対応を有効にしてください。</string>
+</resources>
