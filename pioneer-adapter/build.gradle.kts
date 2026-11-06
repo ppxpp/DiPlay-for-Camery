@@ -51,3 +51,10 @@ androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(buildPioneerWirelessAssets) { it.assetsDirectory }
     variant.sources.assets?.addGeneratedSourceDirectory(buildPioneerHudFilterAssets) { it.assetsDirectory }
 }
+
+val checkRootServiceArchitecture by tasks.registering(Exec::class) {
+    inputs.files(fileTree("src/main/java"), rootProject.fileTree("shared/src/main/java/com/shilapi/xcertplay/vehicle/adapters/pioneer/wireless"))
+    inputs.file(rootProject.file("scripts/check_root_service_architecture.py"))
+    commandLine("python3", rootProject.file("scripts/check_root_service_architecture.py").absolutePath)
+}
+tasks.named("preBuild") { dependsOn(checkRootServiceArchitecture) }

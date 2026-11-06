@@ -16,8 +16,6 @@ import java.util.concurrent.atomic.AtomicReference
 /** Single-flight, background-only root authorization. Never opens a consent window. */
 object PioneerVpnPermissionGrant {
     private val taskLock = Any()
-    private var nextTestDispatchDelayMs = 0L
-    private var delayedTestGrantsRemaining = 0
     @Volatile private var verifiedSelfNetworks = emptySet<android.net.Network>()
 
     fun status(context: Context): JSONObject {
@@ -87,21 +85,14 @@ object PioneerVpnPermissionGrant {
 
     /** Idle-only TCP caller uses the same dispatcher and validation as the connection. */
     fun run(context: Context, action: String): JSONObject {
-        require(action in setOf("STATUS", "INSPECT", "GRANT", "REVOKE", "REVOKE_FOR_RETRY_TEST", "REVOKE_FOR_RETRY_LIMIT_TEST"))
+        require(action in setOf("STATUS", "INSPECT", "GRANT", "REVOKE"))
         if (action == "STATUS") return status(context)
         if (action == "INSPECT") return synchronized(taskLock) {
             execute(context.applicationContext, action) { true }
         }
         return PioneerDebugUpdateGuard.withCacheMaintenance {
             synchronized(taskLock) {
-                val result = execute(context.applicationContext,
-                    if (action.startsWith("REVOKE_FOR_RETRY")) "REVOKE" else action) { true }
-                if (action.startsWith("REVOKE_FOR_RETRY")) {
-                    nextTestDispatchDelayMs = 16000L
-                    delayedTestGrantsRemaining = if (action == "REVOKE_FOR_RETRY_LIMIT_TEST") 5 else 1
-                    result.put("nextGrantTestDispatchDelayMs", nextTestDispatchDelayMs)
-                        .put("testDelayedGrantCount", delayedTestGrantsRemaining)
-                }
+                val result = execute(context.applicationContext, action) { true }
                 result
             }
         }
@@ -110,11 +101,9 @@ object PioneerVpnPermissionGrant {
     private fun execute(app: Context, action: String, reuse: Boolean = false, current: () -> Boolean): JSONObject {
         check(PioneerUsbPolicy.matchesDevice()) { "Verified Pioneer device required" }
         check(current()) { "VPN authorization cancelled" }
-        if (reuse) {
-            PioneerConnectionTasks.update("permission-request", "RUNNING", "waiting-root")
-            PioneerRootSession.ready(app, current)
-            PioneerConnectionTasks.update("permission-request", "RUNNING")
-        }
+        PioneerConnectionTasks.update("permission-request", "RUNNING", "waiting-root")
+        PioneerRootSession.ready(app, current)
+        PioneerConnectionTasks.update("permission-request", "RUNNING")
         val boot = File("/proc/sys/kernel/random/boot_id").readText().trim()
         val root = File(app.filesDir, "vpn-permission").apply { mkdirs() }
         Os.chmod(root.path, 0x1c0)
@@ -133,32 +122,10 @@ object PioneerVpnPermissionGrant {
             .put("boot", boot).put("appPid", Process.myPid())
             .put("appStart", File("/proc/self/stat").readText().substringAfterLast(") ").split(' ')[19])
             .put("requestedAtMs", started).put("deadline", started + taskBudgetMs)
-        File(directory, "request.json").apply { writeText(request.toString()); Os.chmod(path, 0x180) }
-        val error = AtomicReference<Throwable?>()
-        val command = "CLASSPATH=${PioneerRootDispatcher.quote(app.applicationInfo.sourceDir)} /system/bin/app_process /system/bin " +
-            "com.shilapi.xcertplay.pioneer.PioneerVpnPermissionHelper ${PioneerRootDispatcher.quote(directory.path)} </dev/null >/dev/null 2>&1 &"
         val report = JSONObject().put("action", action).put("token", token).put("startedAt", System.currentTimeMillis())
-        val testDelay = if (action == "GRANT" && delayedTestGrantsRemaining > 0) {
-            delayedTestGrantsRemaining--
-            nextTestDispatchDelayMs
-        } else 0L
-        Thread({ runCatching {
-            if (testDelay > 0) Thread.sleep(testDelay)
-            if (reuse) PioneerRootSession.submit(app, directory, current)
-            else PioneerRootDispatcher.dispatch(command)
-        }.onFailure(error::set) }, "vpn-root-dispatch")
-            .apply { isDaemon = true; start() }
         try {
-            var result: JSONObject? = null
-            while (SystemClock.elapsedRealtime() < started + taskBudgetMs + 500) {
-                check(current()) { "VPN authorization cancelled" }
-                error.get()?.let { throw IllegalStateException("VPN root dispatch rejected", it) }
-                val file = File(directory, "result.json")
-                result = runCatching { if (file.length() in 1..32768) JSONObject(file.readText()) else null }.getOrNull()
-                if (result != null) break
-                Thread.sleep(50)
-            }
-            check(result != null) { "VPN_ROOT_RESULT_UNCONFIRMED" }
+            val result = PioneerRootSession.request(app, "TASK", JSONObject().put("kind", "vpn-permission").put("request", request),
+                taskBudgetMs, current)
             requireResult(result, request)
             report.put("helper", result)
             check(result.optString("code") == "COMPLETED") { result.optString("error", "VPN_ROOT_FAILED") }
@@ -174,7 +141,6 @@ object PioneerVpnPermissionGrant {
             report.put("code", "FAILED").put("error", "${failure.javaClass.simpleName}: ${failure.message}")
             throw failure
         } finally {
-            File(directory, "cancel").writeText("cancel")
             report.put("elapsedMs", SystemClock.elapsedRealtime() - started)
             val logs = File(app.filesDir, "pioneer-debug").apply { mkdirs() }
             File(logs, "vpn-permission.tmp").apply {
@@ -185,12 +151,15 @@ object PioneerVpnPermissionGrant {
         }
     }
 
+    private fun recoveryFile(dir: File, name: String, legacy: String): File =
+        File(dir, name).let { if (it.exists()) it else File(dir, legacy) }
+
     /** Only authenticated terminal results without unresolved children are eligible for retention cleanup. */
     internal fun cleanupCompleted(root: File, keep: Int = 16) {
         root.listFiles().orEmpty().filter { it.isDirectory }.mapNotNull { dir ->
-            val request = runCatching { JSONObject(File(dir, "request.json").readText()) }.getOrNull()
+            val request = runCatching { JSONObject(recoveryFile(dir, "recovery-owner.json", "request.json").readText()) }.getOrNull()
                 ?: return@mapNotNull null
-            val result = runCatching { JSONObject(File(dir, "result.json").readText()) }.getOrNull()
+            val result = runCatching { JSONObject(recoveryFile(dir, "permission-journal.json", "result.json").readText()) }.getOrNull()
                 ?: return@mapNotNull null
             if (runCatching { requireResult(result, request) }.isFailure ||
                 result.optBoolean("unresolvedChild") ||
@@ -209,9 +178,9 @@ object PioneerVpnPermissionGrant {
 
     internal fun requirePreviousFinished(root: File, boot: String, now: Long) {
         root.listFiles().orEmpty().filter { it.isDirectory }.forEach { dir ->
-            val request = runCatching { JSONObject(File(dir, "request.json").readText()) }.getOrNull() ?: return@forEach
+            val request = runCatching { JSONObject(recoveryFile(dir, "recovery-owner.json", "request.json").readText()) }.getOrNull() ?: return@forEach
             if (request.optString("boot") != boot || request.optString("action") !in setOf("GRANT", "REVOKE")) return@forEach
-            val result = runCatching { JSONObject(File(dir, "result.json").readText()) }.getOrNull()
+            val result = runCatching { JSONObject(recoveryFile(dir, "permission-journal.json", "result.json").readText()) }.getOrNull()
             if (result == null) {
                 check(now >= request.optLong("deadline", Long.MAX_VALUE) && !File(dir, "mutation").exists()) {
                     "VPN_PREVIOUS_TASK_UNCONFIRMED"

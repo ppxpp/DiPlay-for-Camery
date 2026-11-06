@@ -21,18 +21,7 @@ import java.util.Objects;
 
 /** Fixed diagnostic operations only; never changes USB configuration or opens a data interface. */
 public final class PioneerUsbPermissionHelper {
-    public static void main(String[] args) {
-        if (args.length != 1 || Process.myUid() != 0) return;
-        Thread watchdog = new Thread(() -> {
-            try { Thread.sleep(8000); } catch (InterruptedException ended) { return; }
-            System.exit(3);
-        }, "permission-task-deadline");
-        watchdog.setDaemon(true); watchdog.start();
-        runTask(new File(args[0]));
-        System.exit(0);
-    }
-
-    static void runTask(File task) {
+    static JSONObject runTask(File task, JSONObject request) {
         long helperEntryMs = SystemClock.elapsedRealtime();
         File directory = null;
         JSONObject result = new JSONObject();
@@ -43,12 +32,7 @@ public final class PioneerUsbPermissionHelper {
             StructStat stat = Os.lstat(candidate.getPath());
             if (!OsConstants.S_ISDIR(stat.st_mode) || stat.st_uid < 10000 || (stat.st_mode & 0777) != 0700)
                 throw new IOException("INVALID_PROBE_OWNER");
-            File input = new File(candidate, "request.json");
-            StructStat file = Os.lstat(input.getPath());
-            if (!OsConstants.S_ISREG(file.st_mode) || file.st_uid != stat.st_uid || file.st_nlink != 1 || (file.st_mode & 0777) != 0600)
-                throw new IOException("INVALID_PROBE_REQUEST");
             directory = candidate;
-            JSONObject request = new JSONObject(read(input, 8192));
             String action = request.getString("action"), pkg = request.getString("package");
             requireAction(action);
             String token = request.getString("token");
@@ -60,8 +44,13 @@ public final class PioneerUsbPermissionHelper {
             if (app.uid != stat.st_uid || app.uid != request.getInt("uid") || app.uid / 100000 != 0 ||
                 !directory.getParentFile().getParentFile().getCanonicalFile().equals(new File(app.dataDir, "files").getCanonicalFile()))
                 throw new IOException("PACKAGE_UID_MISMATCH");
+            PioneerVpnPermissionHelper.requirePackage(app.uid, app.uid, request.getString("apk"), app.sourceDir,
+                System.getenv("CLASSPATH"), candidate.getParentFile().getParentFile(), new File(app.dataDir, "files"));
+            String[] packages = context.getPackageManager().getPackagesForUid(app.uid);
+            if (packages == null || packages.length != 1 || !pkg.equals(packages[0])) throw new IOException("USB_SHARED_UID");
             Guard guard = () -> {
-                if (new File(candidate, "cancel").exists() || SystemClock.elapsedRealtime() >= request.getLong("deadline"))
+                PioneerRootSessionHelper.checkTask();
+                if (SystemClock.elapsedRealtime() >= request.getLong("deadline"))
                     throw new IOException("PROBE_CANCELLED_OR_EXPIRED");
                 if (!request.getString("boot").equals(read(new File("/proc/sys/kernel/random/boot_id"), 128).trim()))
                     throw new IOException("BOOT_CHANGED");
@@ -121,6 +110,7 @@ public final class PioneerUsbPermissionHelper {
             }
             if (action.equals("GRANT") || action.equals("AUTO_GRANT")) {
                 guard.check(); device = current(usb, request);
+                result.put("mutationAttempted", true);
                 invoke("grantDevicePermission", service, new Class<?>[]{UsbDevice.class, int.class}, device, app.uid);
                 result.put("grantCallSucceeded", true);
                 guard.check(); device = current(usb, request);
@@ -148,6 +138,7 @@ public final class PioneerUsbPermissionHelper {
                 requireOwnDefault(defaultFor(device), pkg);
                 guard.check();
                 boolean setting = action.equals("SET_DEFAULT");
+                result.put("mutationAttempted", true);
                 invoke("setDevicePackage", service, new Class<?>[]{UsbDevice.class, String.class, int.class}, device, setting ? pkg : null, 0);
                 result.put(setting ? "defaultSetCallSucceeded" : "defaultClearCallSucceeded", true);
                 String expected = setting ? pkg : "NONE";
@@ -161,6 +152,7 @@ public final class PioneerUsbPermissionHelper {
                 result.put("defaultAfter", after)
                     .put(setting ? "defaultSetVerified" : "defaultClearVerified", after.equals(expected));
             }
+            guard.check();
             result.put("code", "COMPLETED");
         } catch (Throwable error) {
             Throwable cause = error instanceof InvocationTargetException ? ((InvocationTargetException) error).getTargetException() : error;
@@ -168,17 +160,12 @@ public final class PioneerUsbPermissionHelper {
             catch (Exception ignored) { }
         }
         try { result.put("helperOperationMs", SystemClock.elapsedRealtime() - helperEntryMs); } catch (Exception ignored) { }
-        if (directory != null) try { publish(directory, result); } catch (Throwable ignored) { }
+        return result;
     }
 
     /** Reuse the already running module-prewarm process; never start a second ART process at boot. */
     static JSONObject grantDuringPrewarm(String apk, int ownerUid, PioneerRootGuard guard) throws Exception {
         java.util.concurrent.atomic.AtomicBoolean pending = new java.util.concurrent.atomic.AtomicBoolean(true);
-        Thread watchdog = new Thread(() -> {
-            try { Thread.sleep(8000); } catch (InterruptedException ignored) { }
-            if (pending.get()) System.exit(4);
-        }, "usb-prewarm-grant-deadline");
-        watchdog.setDaemon(true); watchdog.start();
         JSONObject result = new JSONObject();
         long started = SystemClock.elapsedRealtime();
         try {
@@ -345,15 +332,5 @@ public final class PioneerUsbPermissionHelper {
     private static String processStart(int pid) throws Exception {
         String stat = read(new File("/proc/" + pid + "/stat"), 8192);
         return stat.substring(stat.lastIndexOf(") ") + 2).split(" ")[19];
-    }
-    private static void publish(File directory, JSONObject value) throws Exception {
-        StructStat owner = Os.lstat(directory.getPath());
-        File temp = new File(directory, "result.tmp");
-        try (FileOutputStream out = PioneerRootFiles.output(temp.getPath(),
-                OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_NOFOLLOW | OsConstants.O_WRONLY, 0600)) {
-            out.write(value.toString().getBytes("UTF-8")); out.getFD().sync();
-        }
-        Os.chown(temp.getPath(), owner.st_uid, owner.st_gid); Os.chmod(temp.getPath(), 0600);
-        Os.rename(temp.getPath(), new File(directory, "result.json").getPath());
     }
 }

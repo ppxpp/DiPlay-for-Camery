@@ -9,7 +9,7 @@ class HudFilterLease {
             Number.isInteger(lease.pid) && lease.pid > 1 && typeof lease.start === 'string' &&
             Number.isSafeInteger(lease.issuedMs) && Number.isSafeInteger(lease.expiresMs) &&
             lease.issuedMs <= now && lease.expiresMs > now &&
-            lease.expiresMs - lease.issuedMs === 10000 && ownerAlive;
+            lease.expiresMs - lease.issuedMs === 20000 && ownerAlive;
     }
     blocks(lease, now, alive, source) {
         return (source === 1 || source === 2) && this.accepts(lease, now, alive);

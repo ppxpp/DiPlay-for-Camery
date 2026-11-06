@@ -12,7 +12,7 @@ import java.nio.channels.FileLock;
 import java.security.MessageDigest;
 import java.util.zip.ZipFile;
 
-/** App-owned standalone injection host. No map package, TPS service or firmware file is modified. */
+/** HUD injector supervisor hosted by PioneerRootHudService; never starts a Java root owner. */
 public final class PioneerHudFilterHelper {
     static final String TPS = "jp.pioneer.ceam.thirdpartyservice";
     static final String ROOT = "/data/local/tmp/diplay-hud-filter";
@@ -23,127 +23,97 @@ public final class PioneerHudFilterHelper {
         {"/system/lib/libNPMeterHandler.so", "937c951c9594057fed65be0bd41163379cca4a48c9ccd2f9b91929cdee2b49a6"}
     };
 
-    public static void main(String[] args) {
-        if (args.length != 1 || Process.myUid() != 0) return;
-        JSONObject request = null;
-        File descriptor = null;
-        java.lang.Process child = null;
+    static void run(JSONObject request, File files, PioneerRootHudService host) throws Exception {
+        RuntimeOwnership runtime = new RuntimeOwnership();
+        int uid = request.getInt("uid");
         try {
-            descriptor = new File(args[0]).getCanonicalFile();
-            if (!descriptor.getPath().matches("/data/(?:data|user/[0-9]+)/[A-Za-z0-9_.]+/files/hud-filter/[0-9a-f-]{36}\\.json"))
-                throw new IOException("HUD_FILTER_REQUEST_PATH");
-            int uid = Os.lstat(descriptor.getPath()).st_uid;
-            PioneerVpnPermissionHelper.requireFile(Os.lstat(descriptor.getPath()), false, uid);
-            request = new JSONObject(read(descriptor, 8192));
-            if (!descriptor.getName().equals(request.getString("token") + ".json") || uid != request.getInt("uid"))
-                throw new IOException("HUD_FILTER_REQUEST_OWNER");
+            if (Process.myUid() != 0) throw new IOException("HUD_FILTER_NOT_ROOT");
             Context context = PioneerVpnPermissionHelper.systemContext();
             ApplicationInfo app = (ApplicationInfo) context.getPackageManager().getClass()
                 .getMethod("getApplicationInfoAsUser", String.class, int.class, int.class)
                 .invoke(context.getPackageManager(), request.getString("package"), 0, uid / 100000);
             PioneerVpnPermissionHelper.requirePackage(uid, app.uid, request.getString("apk"), app.sourceDir,
-                System.getenv("CLASSPATH"), descriptor.getParentFile().getParentFile(), new File(app.dataDir, "files"));
+                System.getenv("CLASSPATH"), files, new File(app.dataDir, "files"));
+            if (Os.stat(files.getPath()).st_uid != uid) throw new IOException("HUD_FILTER_FILES_OWNER");
             CamryAdaptation.INSTANCE.useRequestMode(request);
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("HUD_FILTER_UNSUPPORTED_DEVICE");
-            long age = SystemClock.elapsedRealtime() - request.getLong("requestedMs");
-            if (age < 0 || age > 30000) throw new IOException("HUD_FILTER_REQUEST_EXPIRED");
             requireOwner(request);
             for (String[] module : MODULES)
                 if (!sha(new File(module[0])).equals(module[1])) throw new IOException("HUD_FILTER_FIRMWARE_MISMATCH " + module[0]);
-
             File root = new File(ROOT);
             directory(root, 0, 0755);
             File area = new File(root, String.valueOf(uid));
             directory(area, 0, 0755);
-            try (FileOutputStream lockStream = PioneerRootFiles.output(new File(area, "lock").getPath(),
-                    OsConstants.O_CREAT | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600)) {
-                FileLock lock = null;
-                long until = SystemClock.elapsedRealtime() + 3000;
-                while (lock == null && SystemClock.elapsedRealtime() < until) {
-                    lock = lockStream.getChannel().tryLock();
-                    if (lock == null) Thread.sleep(100);
-                }
-                if (lock == null) throw new IOException("HUD_FILTER_HOST_ALREADY_RUNNING");
-                try {
-                    requireOwner(request);
-                    File controlDir = new File(area, "control"), feedbackDir = new File(area, "feedback");
-                    directory(controlDir, uid, 0755);
-                    directory(feedbackDir, 1000, 0755);
-                    File control = new File(controlDir, "lease.json"), status = new File(feedbackDir, "status.json");
-                    // A new host never inherits an old owner's active lease/acknowledgement.
-                    write(control, "{}", uid, 0644);
-                    write(status, "{}", 1000, 0644);
-                    File injector = new File(area, "injector"), script = new File(area, "filter.js"), runtimeHost = new File(area, "runtime-host");
-                    try (ZipFile apk = new ZipFile(app.sourceDir)) {
-                        extract(apk, "pioneer-hud-injector", injector, 0755, 32 * 1024 * 1024);
-                        extract(apk, "pioneer-hud-filter.js", script, 0644, 65536);
-                        extract(apk, "pioneer-hud-runtime-host", runtimeHost, 0755, 131072);
-                    }
-                    if (!sha(injector).equals(INJECTOR_SHA)) throw new IOException("HUD_FILTER_RUNTIME_MISMATCH");
-                    request.put("state", "RUNNING").put("helperPid", Process.myPid()).put("helperStart", start(Process.myPid()));
-                    publish(descriptor, request, uid);
-                    int target = 0;
-                    String targetStart = "";
-                    long retryAt = 0;
-                    while (true) {
-                        requireOwner(request);
-                        int pid = isTps(target, targetStart) ? target : findTps();
-                        boolean ended = child != null && exited(child);
-                        if (child != null && !ended && SystemClock.elapsedRealtime() >= retryAt) {
-                            JSONObject acknowledgement = new JSONObject(read(status, 4096));
-                            if (!acknowledgement.optBoolean("installed") ||
-                                !request.getString("token").equals(acknowledgement.optString("token"))) {
-                                request.put("runtimeError", "HUD_FILTER_ACK_TIMEOUT"); publish(descriptor, request, uid);
-                                stop(child); child = null;
-                                write(status, "{}", 1000, 0644);
-                                retryAt = SystemClock.elapsedRealtime() + 15000;
-                            } else if (request.has("runtimeError")) {
-                                request.remove("runtimeError"); publish(descriptor, request, uid);
-                            }
-                        }
-                        if (child != null && (pid != target || ended || !start(target).equals(targetStart))) {
-                            stop(child); child = null;
-                            write(status, "{}", 1000, 0644);
-                            retryAt = SystemClock.elapsedRealtime() + 5000;
-                        }
-                        if (child == null && pid > 1 && SystemClock.elapsedRealtime() >= retryAt) {
-                            target = pid; targetStart = start(pid);
-                            JSONObject config = new JSONObject(request.toString())
-                                .put("control", control.getPath()).put("status", status.getPath())
-                                .put("tpsStart", targetStart).put("helperName", command(Process.myPid()));
-                            child = new ProcessBuilder(runtimeHost.getPath(), String.valueOf(Process.myPid()), injector.getPath(), "-p", String.valueOf(pid),
-                                "-s", script.getPath(), "-P", config.toString(), "-R", "qjs")
-                                .redirectErrorStream(true).start();
-                            child.getOutputStream().close();
-                            final java.lang.Process observed = child;
-                            Thread drain = new Thread(() -> {
-                                try (InputStream in = observed.getInputStream()) {
-                                    byte[] bytes = new byte[1024]; int count, logged = 0;
-                                    while ((count = in.read(bytes)) >= 0) {
-                                        if (logged < 4096) android.util.Log.w("DiPlay-HudFilter", new String(bytes, 0, Math.min(count, 4096 - logged), "UTF-8"));
-                                        logged = Math.min(4096, logged + count);
-                                    }
-                                } catch (IOException ignored) { }
-                            }, "hud-filter-runtime-output");
-                            drain.setDaemon(true); drain.start();
-                            retryAt = SystemClock.elapsedRealtime() + 15000;
-                        }
-                        // Owner death is separate from the five-second navigation heartbeat.
-                        Thread.sleep(500);
-                    }
-                } finally { stop(child); child = null; lock.release(); }
+            runtime.lockStream = PioneerRootFiles.output(new File(area, "lock").getPath(),
+                OsConstants.O_CREAT | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600);
+            long until = SystemClock.elapsedRealtime() + 3000;
+            while (runtime.lock == null && SystemClock.elapsedRealtime() < until) {
+                runtime.lock = runtime.lockStream.getChannel().tryLock();
+                if (runtime.lock == null) Thread.sleep(100);
             }
-        } catch (Throwable error) {
-            android.util.Log.w("DiPlay-HudFilter", "Filter host ended", error);
-            if (request != null && descriptor != null) try {
-                request.put("state", "CLOSED").put("error", error.toString());
-                publish(descriptor, request, request.getInt("uid"));
-            } catch (Exception ignored) { }
-        } finally { stop(child); }
-        System.exit(0);
+            if (runtime.lock == null) throw new IOException("HUD_FILTER_HOST_ALREADY_RUNNING");
+            requireOwner(request);
+            File controlDir = new File(area, "control"), feedbackDir = new File(area, "feedback");
+            directory(controlDir, 0, 0755, uid); // Migrate legacy app-owned control to root-only writes.
+            directory(feedbackDir, 1000, 0755);
+            File control = new File(controlDir, "lease.json"), status = new File(feedbackDir, "status.json");
+            // A new host never inherits an old owner's active lease/acknowledgement.
+            write(control, "{}", 0, 0644);
+            write(status, "{}", 1000, 0644);
+            File injector = new File(area, "injector"), script = new File(area, "filter.js"), runtimeHost = new File(area, "runtime-host");
+            try (ZipFile apk = new ZipFile(request.getString("apk"))) {
+                extract(apk, "pioneer-hud-injector", injector, 0755, 32 * 1024 * 1024);
+                extract(apk, "pioneer-hud-filter.js", script, 0644, 65536);
+                extract(apk, "pioneer-hud-runtime-host", runtimeHost, 0755, 131072);
+            }
+            if (!sha(injector).equals(INJECTOR_SHA)) throw new IOException("HUD_FILTER_RUNTIME_MISMATCH");
+            request.put("state", "RUNNING").put("helperPid", Process.myPid()).put("helperStart", start(Process.myPid()));
+            host.prepared(control, status);
+            int target = 0;
+            String targetStart = "";
+            long retryAt = 0;
+            while (!host.stopped()) {
+                requireOwner(request);
+                int pid = isTps(target, targetStart) ? target : findTps();
+                boolean ended = runtime.child != null && exited(runtime.child);
+                if (runtime.child != null && !ended && SystemClock.elapsedRealtime() >= retryAt) {
+                    JSONObject acknowledgement = host.acknowledgement();
+                    if (!acknowledgement.optBoolean("installed") ||
+                        !request.getString("token").equals(acknowledgement.optString("token"))) {
+                        host.failed("HUD_FILTER_ACK_TIMEOUT");
+                        if (!runtime.stopChild()) throw new IOException("HUD_FILTER_RUNTIME_CLEANUP_UNCONFIRMED");
+                        write(status, "{}", 1000, 0644);
+                        retryAt = SystemClock.elapsedRealtime() + 15000;
+                    }
+                }
+                if (runtime.child != null && (pid != target || ended)) {
+                    if (!runtime.stopChild()) throw new IOException("HUD_FILTER_RUNTIME_CLEANUP_UNCONFIRMED");
+                    write(status, "{}", 1000, 0644);
+                    retryAt = SystemClock.elapsedRealtime() + 5000;
+                }
+                if (runtime.child == null && pid > 1 && SystemClock.elapsedRealtime() >= retryAt) {
+                    target = pid; targetStart = start(pid);
+                    JSONObject config = new JSONObject(request.toString())
+                        .put("control", control.getPath()).put("status", status.getPath())
+                        .put("tpsStart", targetStart).put("helperName", command(Process.myPid()));
+                    runtime.attach(new ProcessBuilder(runtimeHost.getPath(), String.valueOf(Process.myPid()), injector.getPath(), "-p", String.valueOf(pid),
+                        "-s", script.getPath(), "-P", config.toString(), "-R", "qjs")
+                        .redirectErrorStream(true).start());
+                    retryAt = SystemClock.elapsedRealtime() + 15000;
+                }
+                // No fast death watchdog: the injected lease expires independently after twenty seconds.
+                // This low-frequency supervision only reclaims helpers and recovers TPS/injector restarts.
+                host.refresh();
+                Thread.sleep(10000);
+            }
+        } finally {
+            // Transfer the actual lock/channel/child/drain, not merely an error flag. Closing the
+            // channel on an uncertain exit would allow another owner to inject into the same TPS.
+            if (!runtime.closeConfirmed()) host.cleanupUnconfirmed(runtime);
+        }
     }
 
-    private static void requireOwner(JSONObject r) throws Exception {
+    static void requireOwner(JSONObject r) throws Exception {
         int pid = r.getInt("appPid");
         if (Os.stat("/proc/" + pid).st_uid != r.getInt("uid") || !start(pid).equals(r.getString("appStart")) ||
             !command(pid).equals(r.getString("package")) ||
@@ -158,7 +128,7 @@ public final class PioneerHudFilterHelper {
         } catch (Exception ignored) { }
         return 0;
     }
-    private static boolean isTps(int pid, String expectedStart) {
+    static boolean isTps(int pid, String expectedStart) {
         try { return pid > 1 && Os.stat("/proc/" + pid).st_uid == 1000 && start(pid).equals(expectedStart) && command(pid).equals(TPS); }
         catch (Exception ignored) { return false; }
     }
@@ -172,9 +142,12 @@ public final class PioneerHudFilterHelper {
         return read(new File("/proc/" + pid + "/cmdline"), 4096).split("\u0000", 2)[0];
     }
     private static void directory(File dir, int uid, int mode) throws Exception {
+        directory(dir, uid, mode, uid);
+    }
+    private static void directory(File dir, int uid, int mode, int legacyUid) throws Exception {
         if (!dir.exists() && !dir.mkdir()) throw new IOException("HUD_FILTER_DIRECTORY");
         android.system.StructStat st = Os.lstat(dir.getPath());
-        if (!OsConstants.S_ISDIR(st.st_mode) || st.st_uid != uid && st.st_uid != 0)
+        if (!OsConstants.S_ISDIR(st.st_mode) || st.st_uid != uid && st.st_uid != 0 && st.st_uid != legacyUid)
             throw new IOException("HUD_FILTER_DIRECTORY_OWNER");
         Os.chown(dir.getPath(), uid, uid); Os.chmod(dir.getPath(), mode);
     }
@@ -196,23 +169,106 @@ public final class PioneerHudFilterHelper {
         return result.toString();
     }
     static String read(File file, int max) throws Exception { return PioneerVpnPermissionHelper.readFile(file, max); }
-    private static void write(File file, String data, int uid, int mode) throws Exception {
+    static void write(File file, String data, int uid, int mode) throws Exception {
         try (FileOutputStream out = PioneerRootFiles.output(file.getPath(),
                 OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, mode)) {
             out.write(data.getBytes("UTF-8")); Os.fchown(out.getFD(), uid, uid); Os.fchmod(out.getFD(), mode);
         }
     }
-    private static void publish(File file, JSONObject data, int uid) throws Exception {
-        File temp = new File(file.getPath() + ".tmp"); write(temp, data.toString(), uid, 0600); Os.rename(temp.getPath(), file.getPath());
-    }
     private static boolean exited(java.lang.Process p) { try { p.exitValue(); return true; } catch (IllegalThreadStateException running) { return false; } }
-    private static void stop(java.lang.Process p) {
-        if (p == null || exited(p)) return;
-        p.destroy();
-        for (int n = 0; n < 50 && !exited(p); n++) try { Thread.sleep(20); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
-        if (!exited(p)) try {
-            java.lang.reflect.Field pid = p.getClass().getDeclaredField("pid"); pid.setAccessible(true);
-            Process.killProcess(pid.getInt(p));
-        } catch (Exception error) { android.util.Log.w("DiPlay-HudFilter", "Runtime exit unconfirmed", error); }
+    /** One bounded native lifetime. An uncertain lifetime retains its OS lock until root exits. */
+    static final class RuntimeOwnership {
+        FileOutputStream lockStream;
+        FileLock lock;
+        java.lang.Process child;
+        Thread drain;
+        private boolean uncertain;
+
+        void attach(java.lang.Process process) throws IOException {
+            if (child != null || uncertain) throw new IOException("HUD_FILTER_RUNTIME_STILL_OWNED");
+            child = process; // Record ownership before any stream/thread setup can fail.
+            drain = new Thread(() -> {
+                try (InputStream in = process.getInputStream()) {
+                    byte[] bytes = new byte[1024]; int count, logged = 0;
+                    while ((count = in.read(bytes)) >= 0) {
+                        if (logged < 4096) android.util.Log.w("DiPlay-HudFilter", new String(bytes, 0, Math.min(count, 4096 - logged), "UTF-8"));
+                        logged = Math.min(4096, logged + count);
+                    }
+                } catch (IOException ignored) { }
+            }, "hud-filter-runtime-output");
+            drain.setDaemon(true); drain.start();
+            process.getOutputStream().close();
+        }
+
+        boolean stopChild() {
+            if (uncertain) return false;
+            boolean interrupted = Thread.interrupted();
+            try {
+                if (child != null && !exited(child)) {
+                    try { child.destroy(); } catch (Exception ignored) { }
+                    interrupted |= await(() -> exited(child), 1000);
+                    if (!exited(child)) {
+                        forceKill(child);
+                        interrupted |= await(() -> exited(child), 500);
+                    }
+                }
+                if (drain != null && drain.isAlive()) {
+                    interrupted |= await(() -> !drain.isAlive(), 250);
+                    if (drain.isAlive()) {
+                        // Never synchronously close a stream whose read/close might itself block.
+                        drain.interrupt();
+                        interrupted |= await(() -> !drain.isAlive(), 250);
+                    }
+                }
+                if ((child != null && !exited(child)) || (drain != null && drain.isAlive())) {
+                    uncertain = true;
+                    return false;
+                }
+                child = null; drain = null;
+                return true;
+            } catch (Throwable failure) {
+                uncertain = true;
+                return false;
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt();
+            }
+        }
+
+        boolean closeConfirmed() {
+            if (!stopChild()) return false;
+            try {
+                if (lock != null) lock.release();
+                if (lockStream != null) lockStream.close();
+                lock = null; lockStream = null;
+                return true;
+            } catch (Exception failure) { uncertain = true; return false; }
+        }
+
+        private interface Finished { boolean get(); }
+        private static boolean await(Finished finished, long millis) {
+            boolean interrupted = false;
+            long until = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(millis);
+            while (!finished.get()) {
+                long remaining = until - System.nanoTime();
+                if (remaining <= 0) break;
+                try { Thread.sleep(Math.max(1, Math.min(20, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(remaining)))); }
+                catch (InterruptedException ignored) { interrupted = true; }
+            }
+            return interrupted;
+        }
+
+        private static void forceKill(java.lang.Process process) {
+            try {
+                // API 26+ through reflection; the target Camry runs API 25.
+                java.lang.Process.class.getMethod("destroyForcibly").invoke(process);
+                return;
+            } catch (Exception ignored) { }
+            try {
+                java.lang.reflect.Field pid = process.getClass().getDeclaredField("pid");
+                pid.setAccessible(true);
+                int value = pid.getInt(process);
+                if (value > 1) Process.killProcess(value);
+            } catch (Exception ignored) { }
+        }
     }
 }

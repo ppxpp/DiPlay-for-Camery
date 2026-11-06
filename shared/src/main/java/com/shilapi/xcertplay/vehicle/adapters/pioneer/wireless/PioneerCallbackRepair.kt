@@ -7,7 +7,6 @@ import android.system.Os
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 /** Root is used for the server's callback registration, never for a second BT stack. */
 internal class PioneerCallbackRepair(
@@ -81,48 +80,30 @@ internal class PioneerCallbackRepair(
     private fun task(mode: String): Result {
         verifyRuntime()
         check(!cancelled.get()) { "连接已停止" }
-        val root = File(context.filesDir,"blueforce-callback").apply { mkdirs(); Os.chmod(path,0x1c0) }
-        root.listFiles()?.filter { it.isDirectory && System.currentTimeMillis()-it.lastModified()>3600000 }
-            ?.forEach { it.deleteRecursively() }
-        val dir=File(root,UUID.randomUUID().toString()).apply { mkdir(); Os.chmod(path,0x1c0) }
-        val result=File(dir,"result.txt").apply { writeText(""); Os.chmod(path,0x180) }
         val binary=File(context.codeCacheDir,"blueforce-callback-repair")
         val temporary=File(context.codeCacheDir,"callback-${UUID.randomUUID()}")
         context.assets.open("blueforce-callback-repair").use { src -> temporary.outputStream().use { src.copyTo(it) } }
         Os.chmod(temporary.path,0x1c0)
         check(temporary.renameTo(binary)) { "无法部署 root 诊断 helper" }
-        val failure=AtomicReference<Throwable?>()
-        Thread({ runCatching { com.shilapi.xcertplay.pioneer.PioneerWirelessRootLauncher.launchCallback(context,binary,result,mode,cleanupAuthorized) }
-            .onFailure { failure.set(it) } },"blueforce-root-dispatch").apply { isDaemon=true;start() }
-        val until=SystemClock.elapsedRealtime()+15000
-        var cancelMarked=false
-        while(SystemClock.elapsedRealtime()<until) {
-            if(cancelled.get() && !cancelMarked) {
-                File(result.path+".cancel").writeText("cancel");cancelMarked=true
-            }
-            failure.get()?.let { throw IllegalStateException("DiPlay root 调度失败",it) }
-            val text=result.readText()
-            if(text.endsWith("complete=1\n")) {
-                log("服务回调 $mode\n${text.trim()}")
-                check(!cancelMarked) { "已停止；root 任务已经收尾，见审计日志" }
-                val fields=text.lineSequence().mapNotNull { line ->
-                    val split=line.indexOf('=');if(split<1)null else line.substring(0,split) to line.substring(split+1)
-                }.toMap()
-                val status=fields["status"].orEmpty()
-                check(status in setOf("AUDIT_OK","REGISTERED","ALREADY_REGISTERED","BASELINE_IDLE")) {
-                    "服务回调处理失败：$status；详情已记录（未进入 CarPlay 验证）"
-                }
-                val ports=(0..8).map { index ->
-                    val values=checkNotNull(fields["port$index"]) { "审计缺少 port$index" }.split(',')
-                    check(values.size==6) { "端口审计格式异常" }
-                    Port(index,values[0].toInt(),values[1].toInt(),values[2]=="1",values[3],values[4])
-                }
-                return Result(status,fields["serial_callback_registered_after"]=="1" ||
-                    fields["serial_callback_registered"]=="1",checkNotNull(fields["pid"]).toInt(),ports)
-            }
-            Thread.sleep(50)
+        val text=com.shilapi.xcertplay.pioneer.PioneerRootSession.request(context,"CALLBACK",
+            org.json.JSONObject().put("mode",mode).put("binary",binary.canonicalPath)
+                .put("cleanupAuthorized",cleanupAuthorized),15_000) { !cancelled.get() }.getString("text")
+        check(!cancelled.get()) { "已停止；root 任务已经收尾，见审计日志" }
+        check(text.endsWith("complete=1\n")) { "root 回调任务未完成" }
+        log("服务回调 $mode\n${text.trim()}")
+        val fields=text.lineSequence().mapNotNull { line ->
+            val split=line.indexOf('=');if(split<1)null else line.substring(0,split) to line.substring(split+1)
+        }.toMap()
+        val status=fields["status"].orEmpty()
+        check(status in setOf("AUDIT_OK","REGISTERED","ALREADY_REGISTERED","BASELINE_IDLE")) {
+            "服务回调处理失败：$status；详情已记录（未进入 CarPlay 验证）"
         }
-        File(result.path+".cancel").writeText("timeout")
-        error("root 回调任务超时；已取消尚未开始的操作。停止测试并检查蓝牙服务，禁止继续发起连接")
+        val ports=(0..8).map { index ->
+            val values=checkNotNull(fields["port$index"]) { "审计缺少 port$index" }.split(',')
+            check(values.size==6) { "端口审计格式异常" }
+            Port(index,values[0].toInt(),values[1].toInt(),values[2]=="1",values[3],values[4])
+        }
+        return Result(status,fields["serial_callback_registered_after"]=="1" ||
+            fields["serial_callback_registered"]=="1",checkNotNull(fields["pid"]).toInt(),ports)
     }
 }

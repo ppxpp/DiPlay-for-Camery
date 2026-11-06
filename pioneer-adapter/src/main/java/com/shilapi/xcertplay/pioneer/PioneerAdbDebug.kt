@@ -2,8 +2,6 @@ package com.shilapi.xcertplay.pioneer
 
 import android.content.Context
 import android.os.SystemClock
-import java.io.File
-import java.util.UUID
 
 /** USB diagnostics only. Does not depend on ADB, Bluetooth, or a CarPlay session. */
 object PioneerAdbDebug {
@@ -28,23 +26,13 @@ object PioneerAdbDebug {
     @Synchronized fun setEnabled(context: Context, enable: Boolean) {
         check(supported()) { "仅支持凯美瑞 A 导航" }
         if(enabled()==enable)return
-        val output=File(context.cacheDir,"adb-toggle-${UUID.randomUUID()}.log")
-        output.writeText("")
-        try {
-            val command="CLASSPATH=${PioneerRootDispatcher.quote(context.applicationInfo.sourceDir)} /system/bin/app_process /system/bin " +
-                "com.shilapi.xcertplay.pioneer.PioneerAdbHelper ${if(enable) "1" else "0"} " +
-                "> ${PioneerRootDispatcher.quote(output.path)} 2>&1 </dev/null &"
-            PioneerRootDispatcher.dispatch(command)
-            val deadline=SystemClock.elapsedRealtime()+15_000
-            while(SystemClock.elapsedRealtime()<deadline) {
-                val result=output.readText()
-                check(!result.contains("DIPLAY_ADB_RESULT=ERROR")) {
-                    "原厂 ADB 切换失败 enable=$enable state=${enabled()} result=${result.takeLast(512)}"
-                }
-                if(result.contains("DIPLAY_ADB_RESULT=OK") && enabled()==enable)return
-                Thread.sleep(250)
-            }
-            error("ADB 状态未确认 enable=$enable state=${enabled()} result=${output.readText().takeLast(512)}")
-        } finally { output.delete() }
+        val result = PioneerRootSession.request(context, "ADB", org.json.JSONObject().put("enabled", enable), 15_000)
+        check(result.optBoolean("accepted")) { "原厂 ADB 切换未受理" }
+        val deadline = SystemClock.elapsedRealtime() + 3000
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (enabled() == enable) return
+            Thread.sleep(100)
+        }
+        error("ADB 状态未确认 enable=$enable state=${enabled()}")
     }
 }

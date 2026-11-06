@@ -880,8 +880,6 @@ class CarPlayController(
             if (closed) return
             closed = true
             connectionProgress?.stop(ConnectionOutcome.CANCELLED)
-            if (config.wiredBackend == com.shilapi.xcertplay.pioneer.PioneerWiredBackend.Mode.VPN)
-                com.shilapi.xcertplay.pioneer.PioneerRootSession.finish(appContext)
             // Order cancellation with address-preference commits and generation replacement.
             wirelessGeneration.incrementAndGet()
             dashboardMapOutputVisible = false

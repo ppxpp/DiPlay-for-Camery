@@ -2,7 +2,7 @@
 
 // This agent is loaded into the verified TPS process only. DiPlay has its own MeterClient.
 const FILTER_PROCESS = 'jp.pioneer.ceam.thirdpartyservice';
-let configuration, leasePolicy, clockTime, lease = null, timer;
+let configuration, leasePolicy, clockTime, clockBuffer, chmod, rename, lease = null, controlStream;
 let blockedFrames = 0, blockedExits = 0, lastStatus = '';
 let installed = false;
 const callbacks = [];
@@ -29,23 +29,60 @@ function identity(pid, start, name) {
     } catch (_) { return false; }
 }
 function nowMs() {
-    const value = Memory.alloc(8);
+    const value = clockBuffer;
     if (clockTime(7, value) !== 0) throw new Error('BOOTTIME unavailable');
     return value.readU32() * 1000 + value.add(4).readU32() / 1000000;
 }
-function ownerAlive(candidate) {
-    return candidate !== null && candidate.pid === configuration.appPid &&
-        candidate.start === configuration.appStart &&
-        identity(candidate.pid, candidate.start, configuration.package) &&
-        identity(configuration.helperPid, configuration.helperStart, configuration.helperName);
-}
 function protectedNow() {
-    if (!installed) return false;
-    try {
-        const candidate = JSON.parse(readText(configuration.control));
-        lease = candidate;
-        return leasePolicy.accepts(candidate, nowMs(), ownerAlive(candidate));
-    } catch (_) { lease = null; return false; }
+    return installed && lease !== null && lease.pid === configuration.appPid &&
+        lease.start === configuration.appStart && leasePolicy.accepts(lease, nowMs(), true);
+}
+function refreshLease() {
+    try { lease = JSON.parse(readText(configuration.control)); }
+    catch (_) { lease = null; } // Failed/malformed updates always release protection.
+    publish();
+}
+// Watch the directory because DiPlay atomically renames lease.json on each heartbeat/release.
+// No polling or file/process reads execute on a native navigation callback.
+function watchLease() {
+    const init = new NativeFunction(Module.getGlobalExportByName('inotify_init1'), 'int', ['int']);
+    const watch = new NativeFunction(Module.getGlobalExportByName('inotify_add_watch'), 'int', ['int', 'pointer', 'uint']);
+    const close = new NativeFunction(Module.getGlobalExportByName('close'), 'int', ['int']);
+    const fd = init(0x80000); // O_CLOEXEC; asynchronous stream reads wait without a polling timer.
+    if (fd < 0) throw new Error('Cannot watch navigation lease');
+    const directory = configuration.control.slice(0, configuration.control.lastIndexOf('/')) || '/';
+    if (watch(fd, Memory.allocUtf8String(directory), 0x80 | 0x200 | 0x400 | 0x800) < 0) {
+        close(fd); throw new Error('Cannot watch navigation lease directory');
+    }
+    controlStream = new UnixInputStream(fd, { autoClose: true });
+    async function receive() {
+        try {
+            while (installed) {
+                const data = await controlStream.read(4096);
+                if (data.byteLength === 0) throw new Error('Lease watcher closed');
+                const bytes = new Uint8Array(data), view = new DataView(data);
+                let changed = false;
+                for (let offset = 0; offset + 16 <= bytes.length;) {
+                    const mask = view.getUint32(offset + 4, true);
+                    const length = view.getUint32(offset + 12, true);
+                    if (offset + 16 + length > bytes.length) throw new Error('Truncated lease event');
+                    if (mask & (0x400 | 0x800 | 0x4000 | 0x8000)) throw new Error('Lease watcher invalidated');
+                    const nameBytes = bytes.subarray(offset + 16, offset + 16 + length);
+                    const end = nameBytes.indexOf(0);
+                    const name = String.fromCharCode(...nameBytes.subarray(0, end < 0 ? nameBytes.length : end));
+                    if (name === 'lease.json' && mask & (0x80 | 0x200)) changed = true;
+                    offset += 16 + length;
+                }
+                if (changed) refreshLease();
+            }
+        } catch (_) {
+            lease = null;
+            installed = false; // The root supervisor sees this acknowledgement and reinstalls the agent.
+            try { publish(); } catch (_) { }
+            try { await controlStream.close(); } catch (_) { }
+        }
+    }
+    receive();
 }
 function publish() {
     const active = protectedNow();
@@ -53,17 +90,15 @@ function publish() {
         tpsPid: Process.id, tpsStart: configuration.tpsStart,
         helperPid: configuration.helperPid, helperStart: configuration.helperStart,
         installed: installed, active: active, expiresMs: active ? lease.expiresMs : 0,
-        healthMs: Math.floor(nowMs() / 5000) * 5000,
+        healthMs: Math.floor(nowMs()),
         blockedFrames: blockedFrames, blockedExits: blockedExits };
     // Count in memory; acknowledge every five seconds or immediately on a lease/lifecycle change.
-    const key = JSON.stringify([state.installed, state.active, state.expiresMs, state.healthMs]);
+    const key = JSON.stringify([state.installed, state.active, state.expiresMs, Math.floor(state.healthMs / 5000)]);
     if (key === lastStatus) return;
     const data = JSON.stringify(state);
     const tmp = configuration.status + '.tmp';
     File.writeAllText(tmp, data);
-    const chmod = new NativeFunction(Module.getGlobalExportByName('chmod'), 'int', ['pointer', 'int']);
     if (chmod(Memory.allocUtf8String(tmp), 420) !== 0) throw new Error('Cannot publish filter status');
-    const rename = new NativeFunction(Module.getGlobalExportByName('rename'), 'int', ['pointer', 'pointer']);
     if (rename(Memory.allocUtf8String(tmp), Memory.allocUtf8String(configuration.status)) !== 0)
         throw new Error('Cannot acknowledge installed filter');
     lastStatus = key;
@@ -74,7 +109,12 @@ rpc.exports.init = function (_stage, config) {
         throw new Error('Unsupported filter process');
     if (!identity(Process.id, config.tpsStart, FILTER_PROCESS)) throw new Error('TPS changed');
     leasePolicy = new HudFilterLease(config.boot, config.token);
-    clockTime = new NativeFunction(Module.getGlobalExportByName('clock_gettime'), 'int', ['int', 'pointer']);
+    if (!identity(config.appPid, config.appStart, config.package) ||
+        !identity(config.helperPid, config.helperStart, config.helperName)) throw new Error('Owner changed');
+    clockTime = new NativeFunction(Module.getGlobalExportByName('clock_gettime'), 'int', ['int', 'pointer'], { scheduling: 'exclusive' });
+    clockBuffer = Memory.alloc(8);
+    chmod = new NativeFunction(Module.getGlobalExportByName('chmod'), 'int', ['pointer', 'int']);
+    rename = new NativeFunction(Module.getGlobalExportByName('rename'), 'int', ['pointer', 'pointer']);
     const library = Process.getModuleByName('libmeterservice_jni.so');
     const navi = library.getExportByName('_ZN7android11MeterClient10onNaviInfoERNS_19MeterNaviInfoNotifyE');
     const exit = library.getExportByName('_ZN7android11MeterClient9onMapExitEv');
@@ -97,18 +137,8 @@ rpc.exports.init = function (_stage, config) {
         Interceptor.replace(exit, exitCallback);
         Interceptor.flush();
         installed = true;
-        publish();
-        timer = setInterval(() => {
-            try {
-                if (!identity(config.appPid, config.appStart, config.package) ||
-                    !identity(config.helperPid, config.helperStart, config.helperName)) {
-                    installed = false;
-                    Interceptor.revert(navi); Interceptor.revert(exit); Interceptor.flush();
-                    clearInterval(timer);
-                }
-                publish();
-            } catch (_) { /* A failed status write cannot extend the navigation lease. */ }
-        }, 500);
+        watchLease();
+        refreshLease();
     } catch (error) {
         installed = false;
         Interceptor.revert(navi); Interceptor.revert(exit); Interceptor.flush();

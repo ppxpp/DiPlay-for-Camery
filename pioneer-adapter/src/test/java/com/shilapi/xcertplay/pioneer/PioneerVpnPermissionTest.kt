@@ -101,6 +101,31 @@ class PioneerVpnPermissionTest {
         } finally { root.deleteRecursively() }
     }
 
+    @Test fun socketTaskRecoveryJournalsFenceUnconfirmedChildren() {
+        val root = Files.createTempDirectory("vpn-socket-fence").toFile()
+        try {
+            val dir = File(root, "lease").apply { mkdir() }
+            File(dir, "recovery-owner.json").writeText(request().toString())
+            File(dir, "mutation").writeText("token")
+            assertThrows(IllegalStateException::class.java) {
+                PioneerVpnPermissionGrant.requirePreviousFinished(root, "boot", 7000)
+            }
+            File(dir, "permission-journal.json").writeText(result().put("unresolvedChild", true).toString())
+            assertThrows(IllegalStateException::class.java) {
+                PioneerVpnPermissionGrant.requirePreviousFinished(root, "boot", 7000)
+            }
+            File(dir, "permission-journal.json").writeText(result().toString())
+            PioneerVpnPermissionGrant.requirePreviousFinished(root, "boot", 7000)
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun releaseEntryRejectsRetryFaultModes() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        for (action in listOf("REVOKE_FOR_RETRY_TEST", "REVOKE_FOR_RETRY_LIMIT_TEST")) {
+            assertThrows(IllegalArgumentException::class.java) { PioneerVpnPermissionGrant.run(context, action) }
+        }
+    }
+
     @Test fun completedTaskRetentionPreservesUnknownMutationsAndChildren() {
         val root = Files.createTempDirectory("vpn-retention").toFile()
         try {

@@ -15,18 +15,7 @@ import java.util.Arrays;
 
 /** Fixed INSPECT/GRANT tasks for the requesting package only. Does not load any USB driver. */
 public final class PioneerVpnPermissionHelper {
-    public static void main(String[] args) {
-        if (args.length != 1 || Process.myUid() != 0) return;
-        Thread watchdog = new Thread(() -> {
-            try { Thread.sleep(20000); } catch (InterruptedException ended) { return; }
-            System.exit(3);
-        }, "permission-task-deadline");
-        watchdog.setDaemon(true); watchdog.start();
-        runTask(new File(args[0]));
-        System.exit(0);
-    }
-
-    static void runTask(File task) {
+    static JSONObject runTask(File task, JSONObject request) {
         long helperEntryMs = SystemClock.elapsedRealtime();
         File directory = null;
         JSONObject result = new JSONObject();
@@ -36,13 +25,6 @@ public final class PioneerVpnPermissionHelper {
             requireDirectory(candidate.getPath());
             StructStat dir = Os.lstat(candidate.getPath());
             requireFile(dir, true, dir.st_uid);
-            File input = new File(candidate, "request.json");
-            JSONObject request;
-            try (FileInputStream stream = PioneerRootFiles.input(input.getPath(),
-                    OsConstants.O_RDONLY | OsConstants.O_NOFOLLOW, 0)) {
-                requireFile(Os.fstat(stream.getFD()), false, dir.st_uid);
-                request = new JSONObject(read(stream, 8192));
-            }
             String token = request.getString("token"), action = request.getString("action");
             requireAction(action);
             if (!token.equals(candidate.getName())) throw new IOException("VPN_TOKEN_MISMATCH");
@@ -64,8 +46,8 @@ public final class PioneerVpnPermissionHelper {
                 .put("package", pkg).put("targetUid", uid).put("userId", user).put("action", action)
                 .put("helperStartupMs", entered - request.getLong("requestedAtMs"));
             PioneerRootGuard guard = () -> {
+                PioneerRootSessionHelper.checkTask();
                 requireLive(request, SystemClock.elapsedRealtime());
-                if (new File(candidate, "cancel").exists()) throw new IOException("VPN_TASK_CANCELLED");
                 if (!request.getString("boot").equals(readFile(new File("/proc/sys/kernel/random/boot_id"), 128).trim()))
                     throw new IOException("VPN_BOOT_CHANGED");
                 int pid = request.getInt("appPid");
@@ -86,6 +68,7 @@ public final class PioneerVpnPermissionHelper {
                 guard.check();
                 requireNoOtherVpn(pkg, user);
                 guard.check();
+                result.put("mutationAttempted", true);
                 // Persist the uncertain-mutation fence before launching an appops child.
                 try (FileOutputStream marker = PioneerRootFiles.output(new File(candidate, "mutation").getPath(),
                         OsConstants.O_CREAT | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600)) {
@@ -141,6 +124,7 @@ public final class PioneerVpnPermissionHelper {
                     }
                 } catch(Exception error) { result.put("topActivityReadError",error.toString()); }
             }
+            guard.check();
             result.put("code", "COMPLETED");
         } catch (Throwable error) {
             Throwable cause = error instanceof java.lang.reflect.InvocationTargetException
@@ -157,6 +141,7 @@ public final class PioneerVpnPermissionHelper {
         try { result.put("childrenFinished", !result.optBoolean("unresolvedChild")); } catch (Exception ignored) { }
         try { result.put("helperOperationMs", SystemClock.elapsedRealtime() - entered); } catch (Exception ignored) { }
         if (directory != null) try { publish(directory, result); } catch (Throwable ignored) { }
+        return result;
     }
 
     private static final java.util.regex.Pattern EXIT_EVENT_PATTERN=java.util.regex.Pattern.compile(
@@ -288,15 +273,20 @@ public final class PioneerVpnPermissionHelper {
         }
         return bytes.toString("UTF-8");
     }
+    /** Legacy request files are consulted only to recover previously owned state. */
+    static File recoveryRequest(File dir) {
+        File current = new File(dir, "recovery-owner.json");
+        return current.exists() ? current : new File(dir, "request.json");
+    }
     static void publish(File dir, JSONObject result) throws Exception { publish(dir, result, true); }
     static void publish(File dir, JSONObject result, boolean durable) throws Exception {
         StructStat owner = Os.lstat(dir.getPath());
-        File temp = new File(dir, "result.tmp");
+        File temp = new File(dir, "permission-journal.tmp");
         try (FileOutputStream out = PioneerRootFiles.output(temp.getPath(),
                 OsConstants.O_CREAT | OsConstants.O_TRUNC | OsConstants.O_WRONLY | OsConstants.O_NOFOLLOW, 0600)) {
             out.write(result.toString().getBytes("UTF-8")); if (durable) out.getFD().sync();
             Os.fchown(out.getFD(), owner.st_uid, owner.st_gid);
         }
-        Os.rename(temp.getPath(), new File(dir, "result.json").getPath());
+        Os.rename(temp.getPath(), new File(dir, "permission-journal.json").getPath());
     }
 }
