@@ -15,12 +15,24 @@ typedef int (*vpn_urb_discard)(void *context, unsigned slot);
 typedef int (*vpn_urb_chunk)(void *context, const unsigned char *data, size_t length);
 typedef int (*vpn_urb_build)(void *context, unsigned char *buffer, size_t capacity,
                              unsigned max_frames, int *frame_count);
+typedef void (*vpn_urb_before_cleanup)(void *context, const char *stage, int result, unsigned slot);
+
+/* A snapshot of the first failure, taken before cancellation can change errno/status. */
+struct vpn_urb_failure {
+    const char *operation;
+    int result;
+    int error_number;
+    int urb_status;
+    int slot;
+    int running;
+};
 
 struct vpn_urb_io {
     void *context;
     vpn_urb_submit submit;
     vpn_urb_reap reap;
     vpn_urb_discard discard;
+    vpn_urb_before_cleanup before_cleanup;
 };
 
 enum vpn_urb_slot_state {
@@ -40,6 +52,8 @@ struct vpn_urb_runner {
     unsigned slot_count;
     unsigned in_flight;
     volatile int *running;
+    const char *stage;
+    unsigned current_slot;
 };
 
 void vpn_urb_init(struct vpn_urb_runner *runner, struct vpn_urb_io io,
@@ -57,11 +71,12 @@ struct vpn_linux_urb_context *vpn_linux_urb_create(
 void vpn_linux_urb_destroy(struct vpn_linux_urb_context *context);
 int vpn_linux_urb_reader(struct vpn_linux_urb_context *context,
                          unsigned slots, volatile int *running,
-                         vpn_urb_chunk callback, void *callback_context);
+                         vpn_urb_chunk callback, void *callback_context,
+                         struct vpn_urb_failure *failure);
 int vpn_linux_urb_writer(struct vpn_linux_urb_context *context,
                          unsigned pipeline_depth, unsigned max_frames,
                          volatile int *running, vpn_urb_build build,
-                         void *callback_context);
+                         void *callback_context, struct vpn_urb_failure *failure);
 int vpn_linux_urb_sync_write(struct vpn_linux_urb_context *context,
                              const unsigned char *data, size_t length);
 void vpn_linux_urb_snapshot(struct vpn_linux_urb_context *context,

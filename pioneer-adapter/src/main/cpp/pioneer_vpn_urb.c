@@ -14,6 +14,8 @@ void vpn_urb_init(struct vpn_urb_runner *runner, struct vpn_urb_io io,
 }
 
 static int submit_slot(struct vpn_urb_runner *runner, unsigned slot, size_t length) {
+    runner->stage = "submit";
+    runner->current_slot = slot;
     struct vpn_urb_slot *item = &runner->slots[slot];
     if (item->state != VPN_URB_FREE) return -EBUSY;
     item->state = VPN_URB_SUBMITTED;
@@ -27,8 +29,10 @@ static int submit_slot(struct vpn_urb_runner *runner, unsigned slot, size_t leng
 /* A failed URB is still a completed URB: account for its released buffer
  * before propagating its status, or shutdown would wait for it a second time. */
 static int reap_slot(struct vpn_urb_runner *runner, unsigned *slot, size_t *length) {
+    runner->stage = "reap";
     *slot = runner->slot_count;
     int result = runner->io.reap(runner->io.context, slot, length, VPN_URB_TIMEOUT_MS);
+    runner->current_slot = *slot;
     if (*slot < runner->slot_count && runner->slots[*slot].state == VPN_URB_SUBMITTED) {
         runner->slots[*slot].state = VPN_URB_FREE;
         if (runner->in_flight) runner->in_flight--;
@@ -73,6 +77,7 @@ static int reader_run(struct vpn_urb_runner *runner, vpn_urb_chunk on_chunk,
         if (result == -EAGAIN || result == -EINTR) continue;
         if (result < 0) return result;
         runner->slots[slot].state = VPN_URB_CONSUMING;
+        runner->stage = "process-input";
         if (length > VPN_URB_BUFFER_BYTES) return -EMSGSIZE;
         result = on_chunk(context, runner->slots[slot].buffer, length);
         if (result < 0) return result;
@@ -111,6 +116,8 @@ static int writer_run(struct vpn_urb_runner *runner, unsigned pipeline_depth,
             if (slot == runner->slot_count) break;
         }
         int frames = 0;
+        runner->stage = "build-output";
+        runner->current_slot = slot;
         int length = build(context, runner->slots[slot].buffer,
                            sizeof(runner->slots[slot].buffer), max_frames, &frames);
         if (length < 0) return length;
@@ -138,12 +145,16 @@ static int writer_run(struct vpn_urb_runner *runner, unsigned pipeline_depth,
 
 int vpn_urb_reader_run(struct vpn_urb_runner *runner, vpn_urb_chunk on_chunk, void *context) {
     int result = reader_run(runner, on_chunk, context);
+    if (runner->io.before_cleanup)
+        runner->io.before_cleanup(runner->io.context, runner->stage, result, runner->current_slot);
     discard_and_reap(runner);
     return result;
 }
 int vpn_urb_writer_run(struct vpn_urb_runner *runner, unsigned pipeline_depth,
                        unsigned max_frames, vpn_urb_build build, void *context) {
     int result = writer_run(runner, pipeline_depth, max_frames, build, context);
+    if (runner->io.before_cleanup)
+        runner->io.before_cleanup(runner->io.context, runner->stage, result, runner->current_slot);
     discard_and_reap(runner);
     return result;
 }
