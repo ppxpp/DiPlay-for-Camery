@@ -105,7 +105,9 @@ jobs:
           GRADLE_TASKS: ${{ needs.scope.outputs.tests }}
         run: |
           read -r -a tasks <<< "$GRADLE_TASKS"
-          ./gradlew -PdiplaySourceOnly=true --build-cache "${tasks[@]}" --stacktrace
+          # Robolectric suites already use most of a runner; parallel test workers contend for
+          # CPU and make the heaviest module several times slower than running them in sequence.
+          ./gradlew -PdiplaySourceOnly=true --build-cache --no-parallel "${tasks[@]}" --stacktrace
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@v4
