@@ -35,8 +35,8 @@ android {
         applicationId = "com.gtmc.app.fengyunyx.b819"
         minSdk = 23
         targetSdk = 37
-        versionCode = 5001 // 0.5.1 -> 000 005 001
-        versionName = "DiPlay凯美瑞A导航适配版_0.5.1"
+        versionCode = 5002 // 0.5.2 -> 000 005 002
+        versionName = "DiPlay凯美瑞A导航适配版_0.5.2"
 
     }
 
