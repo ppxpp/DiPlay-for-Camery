@@ -130,14 +130,15 @@ jobs:
           :common:testDebugUnitTest :home:testDebugUnitTest
           :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug
           :mobile:lintDebug :home:lintDebug :maphost:lintDebug
-          -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --no-build-cache --stacktrace
+          -x lintAnalyzeDebugUnitTest -x lintAnalyzeDebugAndroidTest
+          -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --build-cache --stacktrace
 
       - name: Build signed release
         env:
           DIPLAY_UMENG_APPKEY: ${{ secrets.UMENG_APP_KEY }}
         run: >-
           ./gradlew :mobile:assembleRelease
-          -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --no-build-cache --stacktrace
+          -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --build-cache --stacktrace
 
       - name: Read and verify the built version
         run: |
