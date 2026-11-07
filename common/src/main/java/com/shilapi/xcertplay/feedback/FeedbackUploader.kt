@@ -48,8 +48,11 @@ internal object FeedbackUploader {
             bundle.length() +
             closing.toByteArray(Charsets.UTF_8).size
 
-        val connection = runCatching { openConnection(endpoint) }.getOrNull()
-            ?: return Result.Retryable("no_network")
+        val connection = try {
+            openConnection(endpoint) ?: return Result.Retryable("no_network")
+        } catch (error: Exception) {
+            return Result.Retryable(error.javaClass.simpleName)
+        }
         val http = connection as? HttpURLConnection ?: return Result.Retryable("not_http")
         try {
             http.requestMethod = "POST"

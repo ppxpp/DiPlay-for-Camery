@@ -2,9 +2,7 @@ package com.shilapi.xcertplay.feedback
 
 import android.content.Context
 import androidx.work.BackoffPolicy
-import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -20,7 +18,6 @@ internal class FeedbackUploadWorker(context: Context, parameters: WorkerParamete
         FeedbackOutbox.cleanup(context)
         val records = FeedbackOutbox.pending(context)
         if (records.isEmpty()) return Result.success()
-        if (FeedbackConnectivity.select(context) == null) return Result.retry()
 
         for (record in records) {
             if (!record.userInitiated &&
@@ -54,11 +51,9 @@ internal object FeedbackScheduler {
 
     fun schedule(context: Context, immediate: Boolean = false) {
         runCatching {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+            // WorkManager's CONNECTED constraint can require system validation too.
+            // The worker selects an internet route itself and backs off while offline.
             val request = OneTimeWorkRequestBuilder<FeedbackUploadWorker>()
-                .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(

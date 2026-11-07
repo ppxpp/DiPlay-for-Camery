@@ -46,6 +46,27 @@ class FeedbackUploaderTest {
     }
 
     @Test
+    fun triesDefaultRouteEvenWhenAndroidReportsNoNetworks() {
+        context = RuntimeEnvironment.getApplication()
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+        org.robolectric.Shadows.shadowOf(manager).clearAllNetworks()
+        org.robolectric.Shadows.shadowOf(manager).setActiveNetworkInfo(null)
+        val endpoint = start(201, """{"ok":true}""") { }
+        assertTrue(upload(endpoint, useFeedbackRoute = true) is FeedbackUploader.Result.Sent)
+    }
+
+    @Test
+    fun connectionFailurePreservesActualFailureType() {
+        context = RuntimeEnvironment.getApplication()
+        val bundle = File(context.cacheDir, "failed-open.zip").apply { writeText("zip") }
+        try {
+            val result = FeedbackUploader.upload(context, meta(), bundle,
+                openConnection = { throw java.net.UnknownHostException("test") })
+            assertEquals(FeedbackUploader.Result.Retryable("UnknownHostException"), result)
+        } finally { bundle.delete() }
+    }
+
+    @Test
     fun treatsRateLimitAsRetryable() {
         context = RuntimeEnvironment.getApplication()
         val endpoint = start(429, """{"error":"too_many"}""") { }
@@ -59,7 +80,7 @@ class FeedbackUploaderTest {
         assertTrue(upload(endpoint) is FeedbackUploader.Result.Permanent)
     }
 
-    private fun upload(endpoint: URL): FeedbackUploader.Result {
+    private fun upload(endpoint: URL, useFeedbackRoute: Boolean = false): FeedbackUploader.Result {
         val bundle = File(context.cacheDir, "upload-${System.nanoTime()}.zip").apply { writeText("zip bytes") }
         return try {
             FeedbackUploader.upload(
@@ -67,7 +88,7 @@ class FeedbackUploaderTest {
                 meta = meta(),
                 bundle = bundle,
                 endpoint = endpoint,
-                openConnection = { it.openConnection() },
+                openConnection = { if (useFeedbackRoute) FeedbackConnectivity.openConnection(context, it) else it.openConnection() },
             )
         } finally {
             bundle.delete()
