@@ -37,7 +37,7 @@ android {
         targetSdk = 37
         versionCode = 5002 // 0.5.2 -> 000 005 002
         versionName = "DiPlay凯美瑞A导航适配版_0.5.2"
-
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
 
