@@ -15,10 +15,15 @@ concurrency:
 
 permissions:
   contents: read
+
 jobs:
-  check:
+  scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
+    outputs:
+      tests: ${{ steps.scope.outputs.tests }}
+      lint: ${{ steps.scope.outputs.lint }}
+      build: ${{ steps.scope.outputs.build }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,31 +33,53 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
           FULL_VALIDATION: ${{ inputs.full_validation }}
         run: |
-          if [ "$EVENT_NAME" = push ] || [ "$FULL_VALIDATION" = true ]; then
+          if [ "$FULL_VALIDATION" = true ]; then
             python3 scripts/ci_android_tasks.py --full --github-output "$GITHUB_OUTPUT"
-          else
-            if [ "$EVENT_NAME" = pull_request ]; then
-              git fetch --no-tags --depth=1 origin "$BASE_SHA"
-            else
-              BASE_SHA="$(git rev-parse HEAD^)"
-            fi
+          elif [ "$EVENT_NAME" = pull_request ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
             python3 scripts/ci_android_tasks.py --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git fetch --no-tags --depth=1 origin "$PUSH_BEFORE" 2>/dev/null; then
+            python3 scripts/ci_android_tasks.py --base "$PUSH_BEFORE" --github-output "$GITHUB_OUTPUT"
+          elif BASE_SHA="$(git rev-parse HEAD^ 2>/dev/null)"; then
+            python3 scripts/ci_android_tasks.py --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
+          else
+            python3 scripts/ci_android_tasks.py --full --github-output "$GITHUB_OUTPUT"
           fi
+
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
       - name: Reject credential files in public source
         run: python3 scripts/check_public_tree.py
+      - name: Root service and PAL packaging guards
+        run: |
+          node --test pioneer-adapter/src/test/js/hud-filter.test.cjs
+          python3 pioneer-adapter/src/test/python/test_hud_unified_boundary.py
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror pioneer-adapter/src/main/cpp/wireless/pioneer_command_runner.c -o "$RUNNER_TEMP/diplay-command-runner"
+          python3 pioneer-adapter/src/test/python/test_command_runner.py "$RUNNER_TEMP/diplay-command-runner"
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+  tests:
+    needs: scope
+    if: needs.scope.outputs.tests != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        if: steps.scope.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: '25'
       - uses: android-actions/setup-android@v3
-        if: steps.scope.outputs.android == 'true'
         with:
-          packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358 cmake;3.10.2.4988404
+          packages: platforms;android-37.0 build-tools;36.0.0
       - name: Provision shared signing keystore
-        if: steps.scope.outputs.android == 'true'
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
@@ -73,23 +100,14 @@ jobs:
           } > .signing/signing.properties
           chmod 600 .signing/signing.properties
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.scope.outputs.android == 'true'
-      - name: Root service and PAL packaging guards
-        run: |
-          node --test pioneer-adapter/src/test/js/hud-filter.test.cjs
-          python3 pioneer-adapter/src/test/python/test_hud_unified_boundary.py
-          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror pioneer-adapter/src/main/cpp/wireless/pioneer_command_runner.c -o "$RUNNER_TEMP/diplay-command-runner"
-          python3 pioneer-adapter/src/test/python/test_command_runner.py "$RUNNER_TEMP/diplay-command-runner"
-          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-      - name: Run selected Android checks
-        if: steps.scope.outputs.android == 'true'
+      - name: Run selected unit tests
         env:
-          GRADLE_TASKS: ${{ steps.scope.outputs.tasks }}
+          GRADLE_TASKS: ${{ needs.scope.outputs.tests }}
         run: |
           read -r -a tasks <<< "$GRADLE_TASKS"
           ./gradlew -PdiplaySourceOnly=true --build-cache "${tasks[@]}" --stacktrace
       - name: Test reports
-        if: always() && steps.scope.outputs.android == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
@@ -97,11 +115,123 @@ jobs:
             pioneer-adapter/build/reports/tests/
             shared/build/reports/tests/
             common/build/reports/tests/
-            common/build/reports/album-artwork-ui/
-            mobile/build/reports/lint-results-debug.html
-            common/build/reports/lint-results-debug.html
-            shared/build/reports/lint-results-debug.html
-            pioneer-adapter/build/reports/lint-results-debug.html
             samples/home/build/reports/tests/
+          if-no-files-found: ignore
+
+  lint:
+    needs: scope
+    if: needs.scope.outputs.lint != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-37.0 build-tools;36.0.0
+      - name: Provision shared signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::error::Set the SIGNING_KEYSTORE_BASE64 repository secret; values come from scripts/provision-signing.sh."
+            exit 1
+          fi
+          mkdir -p .signing
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 -d > .signing/repack.keystore
+          {
+            echo "storeFile=.signing/repack.keystore"
+            echo "storePassword=$SIGNING_KEYSTORE_PASSWORD"
+            echo "keyAlias=$SIGNING_KEY_ALIAS"
+            echo "keyPassword=$SIGNING_KEY_PASSWORD"
+          } > .signing/signing.properties
+          chmod 600 .signing/signing.properties
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run selected lint checks
+        env:
+          GRADLE_TASKS: ${{ needs.scope.outputs.lint }}
+        run: |
+          read -r -a tasks <<< "$GRADLE_TASKS"
+          # Test sources still compile and run in the tests job; skipping their lint models
+          # removes duplicate analysis without weakening the unit-test gate.
+          ./gradlew -PdiplaySourceOnly=true --build-cache "${tasks[@]}" \
+            -x lintAnalyzeDebugUnitTest -x lintAnalyzeDebugAndroidTest --stacktrace
+      - name: Lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: |
+            pioneer-adapter/build/reports/lint-results-debug.html
+            shared/build/reports/lint-results-debug.html
+            common/build/reports/lint-results-debug.html
+            mobile/build/reports/lint-results-debug.html
             samples/home/build/reports/lint-results-debug.html
             samples/maphost/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+
+  build:
+    needs: scope
+    if: needs.scope.outputs.build != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358 cmake;3.10.2.4988404
+      - name: Provision shared signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::error::Set the SIGNING_KEYSTORE_BASE64 repository secret; values come from scripts/provision-signing.sh."
+            exit 1
+          fi
+          mkdir -p .signing
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 -d > .signing/repack.keystore
+          {
+            echo "storeFile=.signing/repack.keystore"
+            echo "storePassword=$SIGNING_KEYSTORE_PASSWORD"
+            echo "keyAlias=$SIGNING_KEY_ALIAS"
+            echo "keyPassword=$SIGNING_KEY_PASSWORD"
+          } > .signing/signing.properties
+          chmod 600 .signing/signing.properties
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run selected compile and packaging checks
+        env:
+          GRADLE_TASKS: ${{ needs.scope.outputs.build }}
+        run: |
+          read -r -a tasks <<< "$GRADLE_TASKS"
+          ./gradlew -PdiplaySourceOnly=true --build-cache "${tasks[@]}" --stacktrace
+
+  # Aggregates the split jobs so branch protection can keep requiring the stable "check" context.
+  check:
+    name: check
+    needs: [scope, guards, tests, lint, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all checks passed or were skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS"
+          if printf '%s' "$NEEDS" | jq -e 'to_entries | any(.value.result == "failure" or .value.result == "cancelled")' >/dev/null; then
+            echo "::error::One or more required checks failed"
+            exit 1
+          fi
