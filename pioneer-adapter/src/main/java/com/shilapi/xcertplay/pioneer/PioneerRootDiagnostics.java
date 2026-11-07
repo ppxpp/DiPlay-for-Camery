@@ -5,15 +5,18 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 /** Fixed read-only commands, with no intermediary shell and one bounded child/output lifetime. */
 public final class PioneerRootDiagnostics {
     // Even fully JSON-escaped output must fit the common IPC response frame.
     private static final int OUTPUT_LIMIT = 512 * 1024;
+    private static final Pattern USB_KERNEL_LINE = Pattern.compile("(?i)(\\busb\\b|usbfs|[xoeu]hci|ci_hdrc|dwc[23]?|\\botg\\b)");
     private static final Map<String, String[]> COMMANDS = new LinkedHashMap<>();
     static {
         COMMANDS.put("identity", new String[]{"id"});
-        COMMANDS.put("logcat", new String[]{"logcat", "-b", "main", "-b", "system", "-b", "crash", "-d", "-t", "2500", "-v", "threadtime", "*:S", "DiPlay:I", "DiPlayUpdate:I", "Pioneer:I", "AndroidRuntime:E", "DEBUG:E", "ActivityManager:W", "WifiStateMachine:I", "WifiService:I", "wpa_supplicant:I", "hostapd:I", "dnsmasq:I", "Blueforce:I", "BlueforceService:I", "BluetoothAdapter:I", "BluetoothJni:I", "Tethering:I", "WifiController:I", "ConnectivityService:I"});
+        COMMANDS.put("logcat", new String[]{"logcat", "-b", "main", "-b", "system", "-b", "crash", "-d", "-t", "2500", "-v", "threadtime", "*:S", "DiPlay:I", "DiPlayUpdate:I", "DiPlay-USB:E", "Pioneer:I", "UsbHostManager:I", "UsbDeviceManager:I", "UsbPortManager:I", "AndroidRuntime:E", "DEBUG:E", "ActivityManager:W", "WifiStateMachine:I", "WifiService:I", "wpa_supplicant:I", "hostapd:I", "dnsmasq:I", "Blueforce:I", "BlueforceService:I", "BluetoothAdapter:I", "BluetoothJni:I", "Tethering:I", "WifiController:I", "ConnectivityService:I"});
+        COMMANDS.put("kernel_usb", new String[]{"dmesg"});
         COMMANDS.put("interfaces", new String[]{"ip", "addr", "show"});
         COMMANDS.put("routes", new String[]{"ip", "route", "show", "table", "all"});
         COMMANDS.put("rules", new String[]{"ip", "rule", "show"});
@@ -25,6 +28,15 @@ public final class PioneerRootDiagnostics {
     }
     private static final Lane lane = new Lane();
     public static String[] names() { return COMMANDS.keySet().toArray(new String[0]); }
+    static String kernelUsbLines(String text) {
+        StringBuilder result = new StringBuilder();
+        for (String line : text.split("\\r?\\n")) {
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (USB_KERNEL_LINE.matcher(line).find() && !lower.contains("serialnumber") &&
+                    !lower.contains("serial number") && !lower.contains("serial=")) result.append(line).append('\n');
+        }
+        return result.toString();
+    }
     static JSONObject run(String name, Callable<Boolean> current) throws Exception {
         String[] command = COMMANDS.get(name);
         if (command == null) throw new IOException("ROOT_DIAGNOSTIC_UNKNOWN_COMMAND");
@@ -69,6 +81,8 @@ public final class PioneerRootDiagnostics {
                 reader.join(250);
                 String text;
                 synchronized (bytes) { text = bytes.toString("UTF-8"); }
+                // Keep command errors intact; a denied dmesg must not look like an empty USB history.
+                if ("kernel_usb".equals(name) && exit != null && exit == 0) text = kernelUsbLines(text);
                 String status = exit == null ? "timeout" : readFailed.get() ? "unavailable" :
                     truncated.get() || reader.isAlive() ? "truncated" : exit != 0 ? "command_failed" : text.isEmpty() ? "empty" : "success";
                 return new JSONObject().put("name", name).put("status", status).put("text", text);
