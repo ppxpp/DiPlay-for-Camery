@@ -10,6 +10,14 @@ on:
           - stable
           - beta
         default: stable
+      full_validation:
+        description: Re-run Android unit tests and Debug lint before packaging
+        type: boolean
+        default: false
+      deploy_update_site:
+        description: Also deploy the update website (normally use its separate workflow)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,14 +67,19 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DEPLOY_UPDATE_SITE: ${{ inputs.deploy_update_site }}
         run: |
           missing=0
-          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ASSETS_BUCKET R2_META_BUCKET UPDATE_API_BASE CLOUDFLARE_API_TOKEN; do
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ASSETS_BUCKET R2_META_BUCKET UPDATE_API_BASE; do
             if [ -z "${!name}" ]; then
               echo "::error::Set $name before manually publishing a release."
               missing=1
             fi
           done
+          if [ "$DEPLOY_UPDATE_SITE" = true ] && [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Set CLOUDFLARE_API_TOKEN when deploying the update site."
+            missing=1
+          fi
           exit "$missing"
 
       - uses: actions/setup-java@v4
@@ -107,21 +120,24 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Run update tests and build signed release
+      - name: Optional Android regression checks
+        if: inputs.full_validation
         env:
           DIPLAY_UMENG_APPKEY: ${{ secrets.UMENG_APP_KEY }}
         run: >-
           ./gradlew
-          :common:testDebugUnitTest
-          --tests "com.shilapi.xcertplay.update.*"
-          --tests "com.shilapi.xcertplay.UpdateHomeAvailabilityTest"
-          :common:lintDebug
-          :shared:lintDebug
-          :pioneer-adapter:lintDebug
-          :mobile:assembleRelease
-          -PdiplayUpdateChannel="${CHANNEL}"
-          -Pdiplay.analytics=umeng
-          --stacktrace
+          :pioneer-adapter:testDebugUnitTest :shared:testDebugUnitTest
+          :common:testDebugUnitTest :home:testDebugUnitTest
+          :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug
+          :mobile:lintDebug :home:lintDebug :maphost:lintDebug
+          -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --no-build-cache --stacktrace
+
+      - name: Build signed release
+        env:
+          DIPLAY_UMENG_APPKEY: ${{ secrets.UMENG_APP_KEY }}
+        run: >-
+          ./gradlew :mobile:assembleRelease
+          -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --no-build-cache --stacktrace
 
       - name: Read and verify the built version
         run: |
@@ -309,6 +325,7 @@ jobs:
           retention-days: 14
 
       - name: Set up Node for the update site
+        if: inputs.deploy_update_site
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -318,7 +335,7 @@ jobs:
             update-service/site/package-lock.json
 
       - name: Deploy the update site
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.deploy_update_site
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}

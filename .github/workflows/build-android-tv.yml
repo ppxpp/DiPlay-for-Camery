@@ -2,6 +2,11 @@ name: Build DiPlay Android TV source APK (diplay)
 
 on:
   workflow_dispatch:
+    inputs:
+      full_validation:
+        description: Re-run unit tests and lint before building the APK
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,8 +47,11 @@ jobs:
           } > .signing/signing.properties
           chmod 600 .signing/signing.properties
       - uses: gradle/actions/setup-gradle@v4
-      - name: Test, lint and build without authentication assets
-        run: ./gradlew -PdiplaySourceOnly=true :shared:testDebugUnitTest :common:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug :mobile:assembleDebug --stacktrace
+      - name: Optional unit tests and lint
+        if: inputs.full_validation
+        run: ./gradlew -PdiplaySourceOnly=true --build-cache :shared:testDebugUnitTest :common:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug --stacktrace
+      - name: Build source-only APK
+        run: ./gradlew -PdiplaySourceOnly=true --build-cache :mobile:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: DiPlay-Android-TV-source-only
