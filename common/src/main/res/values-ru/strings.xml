@@ -987,7 +987,7 @@
     <string name="feedback_contents">Includes: device and version, recent DiPlay logs, a crash record if any, and a redacted system log if available.</string>
     <string name="feedback_preparing">Preparing diagnostics…</string>
     <string name="feedback_uploading">Uploading…</string>
-    <string name="feedback_queued">Saved. It will upload automatically when the head unit is online.</string>
+    <string name="feedback_queued">Saved. Upload is pending; you can retry.</string>
     <string name="feedback_sent_with_code">Feedback sent · code %1$s</string>
     <string name="feedback_failed_permanent">Send failed: %1$s</string>
     <string name="feedback_build_failed">Could not prepare diagnostics.</string>
@@ -1000,7 +1000,7 @@
     <string name="feedback_network_dialog_message">The head unit cannot upload right now. Connect it to a Wi-Fi network with internet access, or turn on its cellular data.</string>
     <string name="feedback_open_network_settings">Open network settings</string>
     <string name="feedback_open_network_failed">Open network settings on the head unit manually.</string>
-    <string name="feedback_state_pending">Waiting for network</string>
+    <string name="feedback_state_pending">Waiting to upload</string>
     <string name="feedback_state_uploading">Uploading</string>
     <string name="feedback_state_retryable">Upload failed, will retry</string>
     <string name="feedback_state_permanent">Send failed</string>
