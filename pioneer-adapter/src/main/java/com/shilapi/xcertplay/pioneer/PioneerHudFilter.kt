@@ -16,6 +16,7 @@ internal class PioneerHudFilter(
     private val inFlight = AtomicBoolean()
     @Volatile private var feedback = JSONObject()
     @Volatile private var launchError: String? = null
+    @Volatile private var exceptionChain: String? = null
     @Volatile private var requestedActive = false
     @Volatile private var released = true
     @Volatile private var generation = 0L
@@ -69,6 +70,7 @@ internal class PioneerHudFilter(
                 synchronized(this) {
                     if (version == generation) {
                         feedback = response
+                        exceptionChain = null
                         if (!active) released = true
                         launchError = if (response.isNull("error")) null else response.optString("error").ifEmpty { null }
                         // Acknowledgement polling never renews the navigation-worker lease.
@@ -81,6 +83,7 @@ internal class PioneerHudFilter(
                 synchronized(this) {
                     if (version == generation) {
                         launchError = error.toString()
+                        exceptionChain = android.util.Log.getStackTraceString(error).take(4096)
                         // A missed acknowledgement cannot revoke the previous confirmed lease early.
                         // Keep its original expiry on timeouts; explicit failures still revoke readiness.
                         if (!renewalTimedOut(error)) {
@@ -145,6 +148,10 @@ internal class PioneerHudFilter(
             .put("expiresAtElapsedMs", writtenDeadline).put("error", launchError ?: JSONObject.NULL)
             .put("blockedFrames", state.optLong("blockedFrames")).put("blockedExits", state.optLong("blockedExits"))
             .put("tpsPid", state.optInt("tpsPid"))
+            .put("exceptionChain", exceptionChain ?: JSONObject.NULL)
+            .put("state", state.optString("state", "not_started"))
+            .put("readyUntilElapsedMs", state.optLong("readyUntilElapsedMs"))
+            .put("firmwareVerification", state.optJSONObject("firmwareVerification") ?: JSONObject.NULL)
     }
 
     companion object {

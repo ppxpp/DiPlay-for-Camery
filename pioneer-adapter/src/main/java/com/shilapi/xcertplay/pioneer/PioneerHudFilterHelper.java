@@ -18,11 +18,7 @@ public final class PioneerHudFilterHelper {
     static final String TPS = "jp.pioneer.ceam.thirdpartyservice";
     static final String ROOT = "/data/local/tmp/diplay-hud-filter";
     private static final String INJECTOR_SHA = "7caeb6014c15bc5df22cbb64ee8b639ba824a9a05a6cd90962d8877c7c303e8e";
-    private static final String[][] MODULES = {
-        {"/system/lib/libmeterservice.so", "20d3521ff1294d3a56579e1b0c649be581a94a9a0276a362ad79e130271dc660"},
-        {"/system/lib/libmeterservice_jni.so", "e880f91b1932645d3ae2a83b739aa24c1fb0209cbc3f393b5f0539ef7981dbbc"},
-        {"/system/lib/libNPMeterHandler.so", "937c951c9594057fed65be0bd41163379cca4a48c9ccd2f9b91929cdee2b49a6"}
-    };
+
 
     static void run(JSONObject request, File files, PioneerRootHudService host) throws Exception {
         RuntimeOwnership runtime = new RuntimeOwnership();
@@ -39,8 +35,9 @@ public final class PioneerHudFilterHelper {
             CamryAdaptation.INSTANCE.useRequestMode(request);
             if (!PioneerUsbPolicy.INSTANCE.matchesDevice()) throw new IOException("HUD_FILTER_UNSUPPORTED_DEVICE");
             requireOwner(request);
-            for (String[] module : MODULES)
-                if (!sha(new File(module[0])).equals(module[1])) throw new IOException("HUD_FILTER_FIRMWARE_MISMATCH " + module[0]);
+            JSONObject firmware = PioneerHudFirmware.inspect("startup_enforced", path -> sha(new File(path)));
+            host.firmwareVerification(firmware);
+            PioneerHudFirmware.requirePassed(firmware);
             File root = new File(ROOT);
             directory(root, 0, 0755);
             File area = new File(root, String.valueOf(uid));

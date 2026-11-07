@@ -33,6 +33,18 @@ public class PioneerRootHudServiceTest {
         return new JSONObject().put("token", "root-owner-token").put("uid", 10001)
             .put("appPid", 42).put("appStart", "100").put("boot", "boot");
     }
+    @Test public void startupFirmwareEvidenceIsIncludedInStatusWithoutStartingInjector() throws Exception {
+        try (PioneerRootHudService service = new PioneerRootHudService(owner(), new File("unused"), (o, f, h) -> {})) {
+            JSONObject evidence = PioneerHudFirmware.inspect("startup_enforced", path -> "0".repeat(64));
+            service.firmwareVerification(evidence);
+            evidence.put("passed", true); // service owns an immutable copy
+            JSONObject snapshot = service.handle("HUD_STATUS", new JSONObject());
+            assertFalse(snapshot.getJSONObject("firmwareVerification").getBoolean("passed"));
+            assertEquals(3, snapshot.getJSONObject("firmwareVerification").getJSONArray("modules").length());
+            assertFalse(snapshot.getBoolean("ready"));
+        }
+    }
+
     private JSONObject lease(long now) throws Exception {
         return new JSONObject().put("active", true).put("issuedMs", now);
     }
