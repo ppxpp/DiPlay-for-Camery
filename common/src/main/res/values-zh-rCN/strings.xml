@@ -1065,7 +1065,7 @@
     <string name="feedback_contents">将包含：设备与版本信息、最近的 DiPlay 日志、崩溃记录（如有）、脱敏后的系统日志（如有）。</string>
     <string name="feedback_preparing">正在整理诊断信息…</string>
     <string name="feedback_uploading">正在上传…</string>
-    <string name="feedback_queued">已保存，联网后自动上传</string>
+    <string name="feedback_queued">已保存，等待上传，可稍后重试</string>
     <string name="feedback_sent_with_code">反馈已发送 · 编号 %1$s</string>
     <string name="feedback_failed_permanent">发送失败：%1$s</string>
     <string name="feedback_build_failed">无法整理诊断信息</string>
@@ -1078,7 +1078,7 @@
     <string name="feedback_network_dialog_message">当前无法上传。请让车机连接可上网的 Wi-Fi，或确认车机 4G/5G 已开启。</string>
     <string name="feedback_open_network_settings">打开网络设置</string>
     <string name="feedback_open_network_failed">请从车机设置中手动开启网络</string>
-    <string name="feedback_state_pending">等待联网</string>
+    <string name="feedback_state_pending">等待上传</string>
     <string name="feedback_state_uploading">正在上传</string>
     <string name="feedback_state_retryable">上传失败，将自动重试</string>
     <string name="feedback_state_permanent">发送失败</string>

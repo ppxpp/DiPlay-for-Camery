@@ -148,21 +148,20 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun renderPending(container: LinearLayout) {
-        val online = FeedbackConnectivity.isOnline(this)
         val pending = FeedbackOutbox.pending(this)
         val permanent = FeedbackOutbox.permanentFailures(this)
         val networkRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         networkRow.addView(TextView(this).apply {
-            text = getString(if (online) R.string.feedback_network_online else R.string.feedback_network_offline)
+            text = getString(R.string.feedback_network_requirement)
             textSize = 14f
-            setTextColor(if (online) palette.success else palette.warning)
+            setTextColor(palette.secondaryText)
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         networkRow.addView(DiPlayButton(this).apply {
-            text = getString(R.string.feedback_check_network)
+            text = getString(R.string.feedback_open_network_settings)
             textSize = 13f
             minHeight = dp(40)
             style(DiPlayButtonKind.SECONDARY, palette, overlay = false)
-            setOnClickListener { if (!FeedbackConnectivity.isOnline(this@FeedbackRecordsActivity)) showNetworkDialog() else render() }
+            setOnClickListener { openNetworkSettings() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(8) })
         container.addView(networkRow)
 
@@ -178,7 +177,7 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
             return
         }
 
-        if (online && (pending.isNotEmpty() || permanent.isNotEmpty())) {
+        if (pending.isNotEmpty() || permanent.isNotEmpty()) {
             container.addView(DiPlayButton(this).apply {
                 text = getString(R.string.feedback_retry_all)
                 textSize = 15f
@@ -316,10 +315,6 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun retry(record: FeedbackRecord) {
-        if (!FeedbackConnectivity.isOnline(this)) {
-            showNetworkDialog()
-            return
-        }
         toast(getString(R.string.feedback_retrying))
         FeedbackScheduler.schedule(this, immediate = true)
         handler.postDelayed({ render() }, 900)
@@ -368,15 +363,6 @@ class FeedbackRecordsActivity : ComponentActivity(), AppAppearanceOwner {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(12)
         }
-    }
-
-    private fun showNetworkDialog() {
-        appDialogBuilder()
-            .setTitle(R.string.feedback_network_dialog_title)
-            .setMessage(R.string.feedback_network_dialog_message)
-            .setPositiveButton(R.string.feedback_open_network_settings) { _, _ -> openNetworkSettings() }
-            .setNegativeButton(R.string.feedback_ok, null)
-            .show()
     }
 
     private fun openNetworkSettings() {

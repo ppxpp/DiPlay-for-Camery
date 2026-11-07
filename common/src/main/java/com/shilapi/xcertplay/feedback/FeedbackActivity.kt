@@ -85,14 +85,10 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
                     handler.postDelayed(this, 700)
                 }
                 FeedbackState.PENDING -> {
-                    statusView?.text = if (FeedbackConnectivity.isOnline(this@FeedbackActivity)) {
-                        getString(R.string.feedback_uploading)
-                    } else {
-                        getString(R.string.feedback_queued)
-                    }
+                    statusView?.text = getString(R.string.feedback_uploading)
                     handler.postDelayed(this, 700)
                 }
-                FeedbackState.FAILED_RETRYABLE -> showQueued(id)
+                FeedbackState.FAILED_RETRYABLE -> showQueued(id, record.lastError)
                 FeedbackState.FAILED_PERMANENT -> showPermanent(id, record.lastError)
             }
         }
@@ -124,13 +120,13 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         DiPlayHeaderChrome.applySystemBars(this, palette)
         window.decorView.isFocusableInTouchMode = true
         window.decorView.requestFocus()
-        refreshNetwork()
+        refreshUploadInfo()
         updateSendEnabled()
     }
 
     override fun onResume() {
         super.onResume()
-        refreshNetwork()
+        refreshUploadInfo()
         if (pendingId != null && !submitting) startPolling()
     }
 
@@ -273,11 +269,11 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         val networkText = networkView!!
         networkRow.addView(networkText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         networkButton = DiPlayButton(this).apply {
-            text = getString(R.string.feedback_check_network)
+            text = getString(R.string.feedback_open_network_settings)
             textSize = 13f
             minHeight = dp(40)
             style(DiPlayButtonKind.SECONDARY, palette, overlay = false)
-            setOnClickListener { networkHelp() }
+            setOnClickListener { openNetworkSettings() }
         }
         val networkAction = networkButton!!
         networkRow.addView(networkAction, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(8) })
@@ -374,12 +370,10 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         dialog.show()
     }
 
-    private fun refreshNetwork() {
-        val online = FeedbackConnectivity.isOnline(this)
-        networkView?.text = getString(if (online) R.string.feedback_network_online else R.string.feedback_network_offline)
-        networkView?.setTextColor(if (online) palette.success else palette.warning)
-        networkButton?.visibility = if (online) View.GONE else View.VISIBLE
-        sendButton?.text = getString(if (online) R.string.feedback_send_short else R.string.feedback_save_offline)
+    private fun refreshUploadInfo() {
+        networkView?.text = getString(R.string.feedback_network_requirement)
+        networkView?.setTextColor(palette.secondaryText)
+        sendButton?.text = getString(R.string.feedback_send_short)
         updateSendEnabled()
     }
 
@@ -427,11 +421,7 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
                 }
                 pendingId = id
                 submitting = false
-                if (FeedbackConnectivity.isOnline(this)) {
-                    statusView?.text = getString(R.string.feedback_uploading)
-                } else {
-                    statusView?.text = getString(R.string.feedback_queued)
-                }
+                statusView?.text = getString(R.string.feedback_uploading)
                 showActions(canRetry = true)
                 startPolling()
             }
@@ -501,10 +491,11 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         bottomInfo?.visibility = View.GONE
     }
 
-    private fun showQueued(id: String) {
+    private fun showQueued(id: String, error: String? = null) {
         handler.removeCallbacks(poller)
         statusView?.setTextColor(palette.warning)
-        statusView?.text = getString(R.string.feedback_queued)
+        statusView?.text = if (error == null) getString(R.string.feedback_queued) else
+            getString(R.string.feedback_state_retryable) + "\n" + getString(R.string.feedback_reason, error)
         retryButton?.text = getString(R.string.feedback_retry)
         retryButton?.visibility = View.VISIBLE
         recordsButton?.visibility = View.VISIBLE
@@ -556,10 +547,6 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
             submit()
             return
         }
-        if (!FeedbackConnectivity.isOnline(this)) {
-            showNetworkDialog()
-            return
-        }
         statusView?.setTextColor(palette.primaryText)
         statusView?.text = getString(R.string.feedback_uploading)
         FeedbackScheduler.schedule(this, immediate = true)
@@ -574,17 +561,6 @@ class FeedbackActivity : ComponentActivity(), AppAppearanceOwner {
         bottomInfo?.visibility = if (resources.configuration.screenHeightDp >= 360) View.VISIBLE else View.GONE
         categoryButton?.isEnabled = true
         updateSendEnabled()
-    }
-
-    private fun networkHelp() = showNetworkDialog()
-
-    private fun showNetworkDialog() {
-        appDialogBuilder()
-            .setTitle(R.string.feedback_network_dialog_title)
-            .setMessage(R.string.feedback_network_dialog_message)
-            .setPositiveButton(R.string.feedback_open_network_settings) { _, _ -> openNetworkSettings() }
-            .setNegativeButton(R.string.feedback_ok, null)
-            .show()
     }
 
     private fun openNetworkSettings() {
