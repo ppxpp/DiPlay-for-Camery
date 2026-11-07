@@ -130,7 +130,6 @@ jobs:
           :common:testDebugUnitTest :home:testDebugUnitTest
           :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug
           :mobile:lintDebug :home:lintDebug :maphost:lintDebug
-          -x lintAnalyzeDebugUnitTest -x lintAnalyzeDebugAndroidTest
           -PdiplayUpdateChannel="${CHANNEL}" -Pdiplay.analytics=umeng --build-cache --stacktrace
 
       - name: Build signed release
