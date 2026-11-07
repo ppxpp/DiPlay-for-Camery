@@ -11,6 +11,8 @@ public class PioneerInterfaceFirewallTest {
         final Map<String, List<String>> chains = new LinkedHashMap<>();
         final List<String> journal = new ArrayList<>();
         int inserts, deletes, dumps; boolean ignoreInsert, ignoreDelete, uncertain, stopped, corruptCheck, guardFails;
+        String failAction, failChain, failOutput;
+        int failExit;
         PioneerInterfaceFirewall firewall;
         Fixture() {
             chains.put("CARNET_IN", new ArrayList<>(Collections.singletonList("-A CARNET_IN -j DROP")));
@@ -21,6 +23,8 @@ public class PioneerInterfaceFirewallTest {
         }
         @Override public PioneerInterfaceFirewall.Result run(String[] args) throws Exception {
             String action = args[3], chain = args[4];
+            if (action.equals(failAction) && chain.equals(failChain))
+                return new PioneerInterfaceFirewall.Result(failExit, failOutput);
             List<String> rules = chains.get(chain);
             if (rules == null) return new PioneerInterfaceFirewall.Result(1, "chain missing");
             if (action.equals("-S")) { dumps++; return new PioneerInterfaceFirewall.Result(0, "-N " + chain + "\n" + String.join("\n", rules)); }
@@ -37,6 +41,45 @@ public class PioneerInterfaceFirewallTest {
             return new PioneerInterfaceFirewall.Result(0, "");
         }
     }
+    @Test public void chainFailureRetainsCommandExitAndStderrBeforeAnyMutation() {
+        Fixture f = new Fixture();
+        f.failAction = "-S"; f.failChain = "CARNET_OUT"; f.failExit = 4;
+        f.failOutput = "Another app is currently holding the xtables lock.\n";
+        IOException error = assertThrows(IOException.class, f.firewall::ensureFromSnapshots);
+        assertTrue(error.getMessage().contains("FIREWALL_CHAIN_UNREADABLE CARNET_OUT"));
+        assertTrue(error.getMessage().contains("command=/system/bin/ip6tables -t filter -S CARNET_OUT"));
+        assertTrue(error.getMessage().contains("exit=4 output=Another app is currently holding the xtables lock."));
+        assertFalse(error.getMessage().contains("\n"));
+        assertEquals(0, f.inserts); assertEquals(0, f.deletes);
+    }
+
+    @Test public void mutationFailureRetainsErrorWithoutReplayingCommand() {
+        Fixture f = new Fixture();
+        f.failAction = "-I"; f.failChain = "CARNET_IN"; f.failExit = 2;
+        f.failOutput = "Permission denied";
+        IOException error = assertThrows(IOException.class, f.firewall::ensure);
+        assertTrue(error.getMessage().contains("FIREWALL_COMMAND_FAILED I0"));
+        assertTrue(error.getMessage().contains("exit=2 output=Permission denied"));
+        assertEquals(Arrays.asList("I0:false", "none:false"), f.journal);
+    }
+
+    @Test public void commandFailureOutputIsBoundedAndSingleLine() {
+        Fixture f = new Fixture();
+        f.failAction = "-S"; f.failChain = "CARNET_IN"; f.failExit = 1;
+        f.failOutput = String.join("", Collections.nCopies(2000, "x\r\n\t"));
+        String message = assertThrows(IOException.class, f.firewall::ensure).getMessage();
+        assertTrue(message.endsWith("[truncated]"));
+        assertTrue(message.length() < 1300);
+        assertFalse(message.contains("\r")); assertFalse(message.contains("\n")); assertFalse(message.contains("\t"));
+    }
+
+    @Test public void emptyCommandOutputIsExplicit() {
+        Fixture f = new Fixture();
+        f.failAction = "-S"; f.failChain = "CARNET_IN"; f.failExit = 1;
+        f.failOutput = "";
+        assertTrue(assertThrows(IOException.class, f.firewall::ensure).getMessage().endsWith("output=[empty]"));
+    }
+
     @Test public void persistentEnsureReusesRulesWithoutInsertingDuplicates() throws Exception {
         Fixture f = new Fixture();
         f.firewall.ensure(); f.firewall.verify();
