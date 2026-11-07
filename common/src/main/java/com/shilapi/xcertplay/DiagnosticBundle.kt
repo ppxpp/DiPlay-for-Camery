@@ -15,7 +15,7 @@ import java.util.zip.ZipOutputStream
 
 /** Generates a private immutable archive. The HTTP service streams this file, not a giant byte array. */
 internal object DiagnosticBundle {
-    @Synchronized fun collect(context: Context, report: () -> String): File {
+    @Synchronized fun collect(context: Context, includeSystemComponents: Boolean = false, report: () -> String): File {
         val app = context.applicationContext
         val directory = File(app.cacheDir, "diagnostic-bundles").apply { check(isDirectory || mkdirs()) }
         directory.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }
@@ -31,59 +31,49 @@ internal object DiagnosticBundle {
                     "manufacturer=${Build.MANUFACTURER}\nmodel=${Build.MODEL}\n" +
                         "build=${Build.DISPLAY}\nfingerprint=${Build.FINGERPRINT}\nandroid=${Build.VERSION.RELEASE}\napi=${Build.VERSION.SDK_INT}\nabis=${Build.SUPPORTED_ABIS.joinToString()}\n"
                 }
+                archive.json("hud/state.json") {
+                    val state = com.shilapi.xcertplay.pioneer.PioneerDebugRuntime.hudSnapshot()
+                    state.put("snapshotAvailable", state.length() > 0)
+                        .put("adaptationMode", com.shilapi.xcertplay.pioneer.CamryAdaptation.mode(app).name)
+                        .put("adaptationEnabled", com.shilapi.xcertplay.pioneer.CamryAdaptation.enabled(app))
+                        .put("snapshotAgeMs", state.optLong("updatedAtMs").takeIf { it > 0 }?.let { (System.currentTimeMillis() - it).coerceAtLeast(0) } ?: JSONObject.NULL)
+                        .put("exportedAtMs", System.currentTimeMillis())
+                }
+                archive.json("hud/settings.json") {
+                    val config = com.shilapi.xcertplay.hud.CamryHudSettings.load(app)
+                    JSONObject().put("enabled", config.enabled).put("strategy", config.strategy.name)
+                        .put("fixedMeters", config.fixedMeters).put("turnMeters", config.turnMeters)
+                        .put("complexMeters", config.complexMeters).put("straightMeters", config.straightMeters)
+                        .put("advance", config.advance.name)
+                }
+                archive.jsonLines("hud/recent.ndjson") { com.shilapi.xcertplay.pioneer.PioneerHudDiagnostics.recent() }
                 runCatching { PioneerVehicleWireless.diagnosticSnapshot(DiPlayPreferences.phoneAddress(app)) }.fold({ state ->
                     val status = if (state.contains("status=complete")) "success" else "incomplete"
                     archive.text("bluetooth/state.txt", status) { state }
                 }, { archive.unavailable("bluetooth/state.txt", "unavailable", it.javaClass.simpleName) })
                 runCatching { PioneerDiagnosticReader.collect(app) }.fold({ items ->
-                    items.forEach { archive.text("system/${it.name}.txt", it.status) { it.text } }
-                }, { archive.unavailable("system/root", "collection_failed", it.javaClass.simpleName) })
-                // Read only OS-shipped code, never Bluetooth databases, hotspot configuration or app data.
-                // Bluetooth/Blueforce binaries are intentionally excluded; bluetooth/state.txt keeps the
-                // read-only state snapshot without copying the vendor stack or its compiled code.
-                val libraries = listOf("/system/lib", "/system/lib64", "/vendor/lib", "/vendor/lib64", "/system/framework")
-                val components = libraries.flatMap { directory ->
-                    File(directory).listFiles()
-                        ?.filter { file -> file.isFile && DiagnosticComponentPolicy.isSelectedLibrary(file.name) }
-                        .orEmpty()
-                }.toMutableList()
-                DiagnosticComponentPolicy.explicitFiles.forEach { components += File(it) }
-                @Suppress("DEPRECATION")
-                val packages = runCatching { app.packageManager.getInstalledApplications(0) }
-                packages.onSuccess { installed ->
-                    val selected = installed.filter { it.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
-                        DiagnosticComponentPolicy.isSelectedPackage(it.packageName) }
-                    archive.text("system/packages.txt") {
-                        selected.joinToString("\n") { info ->
-                            val version = runCatching { app.packageManager.getPackageInfo(info.packageName, 0).versionName }.getOrNull()
-                            "package=${info.packageName} version=$version source=${info.sourceDir}"
-                        }
+                    items.forEach {
+                        val path = if (it.name == "hud_firmware") "hud/firmware.json" else "system/${it.name}.txt"
+                        if (it.name == "hud_firmware") archive.json(path, it.status) {
+                            runCatching { JSONObject(it.text) }.getOrElse { error ->
+                                JSONObject().put("status", it.status).put("error", error.toString()).put("detail", it.text)
+                            }
+                        } else archive.text(path, it.status) { it.text }
                     }
-                    selected.forEach { info ->
-                            info.sourceDir?.let { components += File(it) }
-                            info.splitSourceDirs?.forEach { components += File(it) }
-                        }
-                }.onFailure { archive.unavailable("components/package_discovery", "unavailable", it.javaClass.simpleName) }
-                val codeFiles = components.toList()
-                codeFiles.filter { it.extension in setOf("jar", "apk") }.forEach { code ->
-                    listOf("arm", "arm64").forEach { arch ->
-                        listOf("odex", "vdex").forEach { extension ->
-                            val compiled = File(code.parentFile, "oat/$arch/${code.nameWithoutExtension}.$extension")
-                            if (compiled.isFile) components += compiled
-                        }
-                    }
-                }
-                val candidates = components.distinctBy { it.absolutePath }.sortedWith(
-                    compareBy<File> { if (it.extension in setOf("so", "jar")) 1 else 2 }
-                        .thenBy { it.absolutePath })
-                archive.text("system/component_inventory.txt") { candidates.joinToString("\n") { it.absolutePath } }
-                candidates.take(60).forEach { archive.component(it) }
-                candidates.drop(60).forEach { archive.unavailable("components" + it.absolutePath, "skipped", "component_count_limit") }
+                    if (items.none { it.name == "hud_firmware" })
+                        archive.unavailable("hud/firmware.json", "unavailable", "firmware_check_not_available")
+                }, {
+                    archive.unavailable("system/root", "collection_failed", it.javaClass.simpleName)
+                    archive.unavailable("hud/firmware.json", "unavailable", "root_collection_failed")
+                })
+                if (includeSystemComponents) appendSystemComponents(app, archive)
+                else archive.unavailable("components", "skipped", "not_requested_for_standard_export")
                 archive.text("README.txt") {
                     "DiPlay diagnostic bundle\nSee manifest.json for collection status, source paths, byte counts and SHA-256.\n" +
                         "Missing/denied/timeout entries are not successful collections. System logcat is a filtered current buffer, not a complete boot history.\n" +
                         "Bluetooth/Blueforce system components are intentionally excluded; bluetooth/state.txt is a read-only state snapshot.\n" +
-                        "Only readable OS code is included; protected components are recorded as unavailable.\n" +
+                        "System APK/JAR/ODEX and native binaries are excluded unless explicitly requested.\n" +
+                        "hud/state.json, settings.json and recent.ndjson describe the current process; firmware.json is a read-only export check, not proof startup passed.\n" +
                         "No settings database, pairing keys, hotspot passwords or protocol payloads are intentionally exported.\n"
                 }
             }
@@ -94,6 +84,51 @@ internal object DiagnosticBundle {
             }
             return file
         } catch (error: Throwable) { file.delete(); throw error }
+    }
+
+    /** Explicit engineering opt-in; standard exports never enumerate or copy OS binaries. */
+    private fun appendSystemComponents(app: Context, archive: DiagnosticArchive) {
+        // Read only OS-shipped code, never Bluetooth databases, hotspot configuration or app data.
+        // Bluetooth/Blueforce binaries are intentionally excluded; bluetooth/state.txt keeps the
+        // read-only state snapshot without copying the vendor stack or its compiled code.
+        val libraries = listOf("/system/lib", "/system/lib64", "/vendor/lib", "/vendor/lib64", "/system/framework")
+        val components = libraries.flatMap { directory ->
+            File(directory).listFiles()
+                ?.filter { file -> file.isFile && DiagnosticComponentPolicy.isSelectedLibrary(file.name) }
+                .orEmpty()
+        }.toMutableList()
+        DiagnosticComponentPolicy.explicitFiles.forEach { components += File(it) }
+        @Suppress("DEPRECATION")
+        val packages = runCatching { app.packageManager.getInstalledApplications(0) }
+        packages.onSuccess { installed ->
+            val selected = installed.filter { it.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
+                DiagnosticComponentPolicy.isSelectedPackage(it.packageName) }
+            archive.text("system/packages.txt") {
+                selected.joinToString("\n") { info ->
+                    val version = runCatching { app.packageManager.getPackageInfo(info.packageName, 0).versionName }.getOrNull()
+                    "package=${info.packageName} version=$version source=${info.sourceDir}"
+                }
+            }
+            selected.forEach { info ->
+                    info.sourceDir?.let { components += File(it) }
+                    info.splitSourceDirs?.forEach { components += File(it) }
+                }
+        }.onFailure { archive.unavailable("components/package_discovery", "unavailable", it.javaClass.simpleName) }
+        val codeFiles = components.toList()
+        codeFiles.filter { it.extension in setOf("jar", "apk") }.forEach { code ->
+            listOf("arm", "arm64").forEach { arch ->
+                listOf("odex", "vdex").forEach { extension ->
+                    val compiled = File(code.parentFile, "oat/$arch/${code.nameWithoutExtension}.$extension")
+                    if (compiled.isFile) components += compiled
+                }
+            }
+        }
+        val candidates = components.distinctBy { it.absolutePath }.sortedWith(
+            compareBy<File> { if (it.extension in setOf("so", "jar")) 1 else 2 }
+                .thenBy { it.absolutePath })
+        archive.text("system/component_inventory.txt") { candidates.joinToString("\n") { it.absolutePath } }
+        candidates.take(60).forEach { archive.component(it) }
+        candidates.drop(60).forEach { archive.unavailable("components" + it.absolutePath, "skipped", "component_count_limit") }
     }
 
     private object NullOutput : java.io.OutputStream() {
@@ -125,6 +160,23 @@ internal class DiagnosticArchive(
         written += bounded.size
         manifest.put(JSONObject().put("path", path).put("status", if (bytes.size > textLimit) "truncated" else status)
             .put("bytes", bounded.size).put("sha256", digest(bounded)))
+    }
+    fun json(path: String, status: String = "success", content: () -> JSONObject) {
+        structured(path, status) { HudDiagnosticJson.sanitize(content()).toString() }
+    }
+    fun jsonLines(path: String, status: String = "success", content: () -> String) {
+        structured(path, status) {
+            content().lineSequence().filter { it.isNotBlank() }
+                .joinToString("\n") { HudDiagnosticJson.sanitize(JSONObject(it)).toString() }
+        }
+    }
+    private fun structured(path: String, status: String, content: () -> String) {
+        val bytes = runCatching { content().toByteArray(Charsets.UTF_8) }.getOrElse {
+            unavailable(path, "unavailable", it.javaClass.simpleName); return
+        }
+        // Never cut machine-readable evidence in the middle of JSON or a UTF-8 character.
+        if (bytes.size > textLimit) { unavailable(path, "skipped", "structured_entry_size_limit"); return }
+        raw(path, bytes, status)
     }
     /** Writes content without line redaction; used for machine-readable metadata and the README. */
     fun raw(path: String, content: ByteArray, status: String = "success") {
