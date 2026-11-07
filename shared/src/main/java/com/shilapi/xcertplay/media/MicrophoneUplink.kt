@@ -467,6 +467,9 @@ internal class MicrophoneUplink(
                                 canceller = null
                             }
                         }
+                        if (vehicleMicrophoneLease != null && config.audioType == "telephony") {
+                            CallMicrophoneGain.apply(frame)
+                        }
                         stats.level(frame)
                         sendFrame(socket, counters, frame)
                         filled = 0
