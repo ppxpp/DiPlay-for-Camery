@@ -49,7 +49,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Optional unit tests and lint
         if: inputs.full_validation
-        run: ./gradlew -PdiplaySourceOnly=true --build-cache :shared:testDebugUnitTest :common:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug -x lintAnalyzeDebugUnitTest -x lintAnalyzeDebugAndroidTest --stacktrace
+        run: ./gradlew -PdiplaySourceOnly=true --build-cache :shared:testDebugUnitTest :common:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug --stacktrace
       - name: Build source-only APK
         run: ./gradlew -PdiplaySourceOnly=true --build-cache :mobile:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
