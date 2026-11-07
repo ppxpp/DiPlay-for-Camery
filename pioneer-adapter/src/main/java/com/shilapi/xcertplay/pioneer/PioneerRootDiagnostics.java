@@ -15,7 +15,8 @@ public final class PioneerRootDiagnostics {
     private static final Map<String, String[]> COMMANDS = new LinkedHashMap<>();
     static {
         COMMANDS.put("identity", new String[]{"id"});
-        COMMANDS.put("logcat", new String[]{"logcat", "-b", "main", "-b", "system", "-b", "crash", "-d", "-t", "2500", "-v", "threadtime", "*:S", "DiPlay:I", "DiPlayUpdate:I", "DiPlay-USB:E", "Pioneer:I", "UsbHostManager:I", "UsbDeviceManager:I", "UsbPortManager:I", "AndroidRuntime:E", "DEBUG:E", "ActivityManager:W", "WifiStateMachine:I", "WifiService:I", "wpa_supplicant:I", "hostapd:I", "dnsmasq:I", "Blueforce:I", "BlueforceService:I", "BluetoothAdapter:I", "BluetoothJni:I", "Tethering:I", "WifiController:I", "ConnectivityService:I"});
+        COMMANDS.put("logcat", new String[]{"logcat", "-b", "main", "-b", "system", "-b", "crash", "-d", "-t", "2500", "-v", "threadtime", "*:S", "DiPlay:I", "DiPlayUpdate:I", "DiPlay-USB:E", "DiPlay-Pioneer-Navi:V", "DiPlay-HudFilter:V", "Pioneer:I", "UsbHostManager:I", "UsbDeviceManager:I", "UsbPortManager:I", "AndroidRuntime:E", "DEBUG:E", "ActivityManager:W", "WifiStateMachine:I", "WifiService:I", "wpa_supplicant:I", "hostapd:I", "dnsmasq:I", "Blueforce:I", "BlueforceService:I", "BluetoothAdapter:I", "BluetoothJni:I", "Tethering:I", "WifiController:I", "ConnectivityService:I"});
+        COMMANDS.put("hud_firmware", PioneerHudFirmware.command());
         COMMANDS.put("kernel_usb", new String[]{"dmesg"});
         COMMANDS.put("interfaces", new String[]{"ip", "addr", "show"});
         COMMANDS.put("routes", new String[]{"ip", "route", "show", "table", "all"});
@@ -85,6 +86,7 @@ public final class PioneerRootDiagnostics {
                 if ("kernel_usb".equals(name) && exit != null && exit == 0) text = kernelUsbLines(text);
                 String status = exit == null ? "timeout" : readFailed.get() ? "unavailable" :
                     truncated.get() || reader.isAlive() ? "truncated" : exit != 0 ? "command_failed" : text.isEmpty() ? "empty" : "success";
+                if ("hud_firmware".equals(name) && exit != null) text = PioneerHudFirmware.commandReport(text, exit);
                 return new JSONObject().put("name", name).put("status", status).put("text", text);
             } catch (InterruptedException cancelled) {
                 interrupted = true;

@@ -52,6 +52,7 @@ public final class PioneerRootHudService implements Closeable {
     private FileObserver observer;
     private String state = "NEW", error;
     private JSONObject feedback = new JSONObject();
+    private String firmwareVerification;
     private boolean active, validFeedback;
     private long issuedMs = -1, deadline, retryAt;
 
@@ -91,7 +92,7 @@ public final class PioneerRootHudService implements Closeable {
                 case "HUD_START":
                     if (quarantinedRuntime == null && supervisor == null && SystemClock.elapsedRealtime() >= retryAt) {
                         invalidateRuntimeLocked();
-                        state = "STARTING"; error = null;
+                        state = "STARTING"; error = null; firmwareVerification = null;
                         supervisor = candidate; launch = candidate;
                     }
                     break;
@@ -244,6 +245,10 @@ public final class PioneerRootHudService implements Closeable {
         return new JSONObject(PioneerHudFilterHelper.read(file, 4096));
     }
 
+    void firmwareVerification(JSONObject evidence) {
+        synchronized (lock) { firmwareVerification = evidence.toString(); }
+    }
+
     void failed(String message) { synchronized (lock) { error = message; validFeedback = false; } }
 
     /** Called with lock held: constructs a memory-only latest value, preserving navigation issue time. */
@@ -307,6 +312,7 @@ public final class PioneerRootHudService implements Closeable {
         long readyUntil = ready ? Math.min(deadline, Math.min(feedback.optLong("expiresMs"), health + TIMEOUT_MS)) : 0;
         return new JSONObject().put("state", state).put("ready", ready).put("readyUntilElapsedMs", readyUntil).put("requested", active)
             .put("cleanupUnconfirmed", quarantinedRuntime != null).put("heartbeatMs", HEARTBEAT_MS).put("timeoutMs", TIMEOUT_MS).put("expiresAtElapsedMs", deadline)
+            .put("firmwareVerification", firmwareVerification == null ? JSONObject.NULL : new JSONObject(firmwareVerification))
             .put("error", error == null ? JSONObject.NULL : error).put("blockedFrames", feedback.optLong("blockedFrames"))
             .put("blockedExits", feedback.optLong("blockedExits")).put("tpsPid", feedback.optInt("tpsPid"));
     }

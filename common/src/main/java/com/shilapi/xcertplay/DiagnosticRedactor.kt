@@ -8,10 +8,19 @@ internal object DiagnosticRedactor {
     private val address = Regex("(?<![0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?![0-9])")
     private val namedDevice = Regex("(?i)(phone|device|peer|host)?name[=:]")
     private val ipv6 = Regex("(?i)(?:[0-9a-f]{1,4}:)*[0-9a-f]{0,4}::[0-9a-f:]*(?:%[a-z0-9_.-]+)?|(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}")
+    /** Structured values have already-separated keys; do not confuse verdict "passed" with a password. */
+    fun redactField(value: String): String = value.lineSequence().map { line ->
+        if (Regex("(?i)(pass(word|phrase)?|token|private.?key|certificate|pair.?record|ssid|body|payload|hex)\\s*[:=]").containsMatchIn(line) ||
+            line.contains("TRACE ") || line.contains("PHONE ") || namedDevice.containsMatchIn(line)) "[redacted]"
+        else identifiers(line).take(700)
+    }.joinToString("\n").take(4096)
+
+    private fun identifiers(line: String): String = line.replace(mac, "[address]").replace(identifier, "[identifier]")
+        .replace(address, "[ip]").replace(ipv6, "[ip]")
+
     fun redact(line: String): String? {
         if (line.contains("TRACE ") || line.contains("PHONE ") || line.contains('\n') || line.contains('\r')) return null
         if (secret.containsMatchIn(line) || namedDevice.containsMatchIn(line)) return null
-        return line.replace(mac, "[address]").replace(identifier, "[identifier]")
-            .replace(address, "[ip]").replace(ipv6, "[ip]").take(700)
+        return identifiers(line).take(700)
     }
 }

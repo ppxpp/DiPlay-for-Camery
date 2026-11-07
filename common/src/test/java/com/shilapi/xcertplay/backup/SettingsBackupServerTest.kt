@@ -39,6 +39,30 @@ class SettingsBackupServerTest {
         } finally { streaming.stop(); file.delete() }
     }
 
+    @Test fun engineeringComponentDownloadIsExplicitAuthenticatedAndCachedSeparately() {
+        val normal = java.nio.file.Files.createTempFile("normal", ".zip").toFile().apply { writeText("normal") }
+        val components = java.nio.file.Files.createTempFile("components", ".zip").toFile().apply { writeText("components") }
+        var normalCalls = 0; var componentCalls = 0
+        val streaming = SettingsBackupServer(page = "page".toByteArray(), export = { "settings".toByteArray() },
+            import = { SettingsImportOutcome(0, 0, false) },
+            reportFile = { normalCalls++; normal }, reportComponentsFile = { componentCalls++; components })
+        val started = requireNotNull(streaming.start())
+        fun download(token: String, suffix: String): HttpURLConnection =
+            URL("http://127.0.0.1:${started.port}/b/$token/$suffix").openConnection() as HttpURLConnection
+        try {
+            val wrong = download("wrong", "report-components")
+            try { assertEquals(404, wrong.responseCode); assertEquals(0, componentCalls) } finally { wrong.disconnect() }
+            for (suffix in listOf("report", "report-components", "report", "report-components")) {
+                val connection = download(started.token, suffix)
+                try {
+                    assertEquals(200, connection.responseCode)
+                    assertEquals(if (suffix == "report") "normal" else "components", connection.inputStream.reader().readText())
+                } finally { connection.disconnect() }
+            }
+            assertEquals(1, normalCalls); assertEquals(1, componentCalls)
+        } finally { streaming.stop(); normal.delete(); components.delete() }
+    }
+
     @Test fun reportDeadlineClosesTheSocketEvenWhileCollectionIsPending() {
         val file = java.nio.file.Files.createTempFile("diagnostic", ".zip").toFile().apply { writeText("zip") }
         val entered = java.util.concurrent.CountDownLatch(1)

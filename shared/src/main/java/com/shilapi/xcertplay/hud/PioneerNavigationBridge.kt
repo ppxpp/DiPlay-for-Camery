@@ -36,6 +36,10 @@ internal object PioneerNavigationBridge {
     private var last: Guidance? = null
     private var retainedInfo: Any? = null
     private var lastError: String? = null
+    @Volatile private var lastOutputEvidence = "{}"
+    private var listenerErrorStack: String? = null
+    private var parsedFrames = 0L
+    private var lastMessageId: Int? = null
     private var reason = "app_open"
     private var clearPending = false
     private var clearAttempts = 0
@@ -88,6 +92,7 @@ internal object PioneerNavigationBridge {
                 .put("lastReceivedAtMs", receivedAtMs.get()).put("queueDepth", queue.second)
                 .put("queueAccepting", queue.first).put("queueStopReason", worker.stopReason)
                 .put("queueOverflows", worker.overflowCount)
+                .put("lastOutput", JSONObject(lastOutputEvidence))
                 .put("observedAtMs", System.currentTimeMillis())
                 .put("observedElapsedNs", android.os.SystemClock.elapsedRealtimeNanos())
         }
@@ -143,6 +148,8 @@ internal object PioneerNavigationBridge {
         val receivedNs = System.nanoTime()
         receivedAtMs.set(received)
         worker.submit {
+            parsedFrames++
+            lastMessageId = frame.messageId
             route.accept(frame.messageId, frame.payload)
             parsedAtMs = System.currentTimeMillis()
             inputQueueDelayMs = ((System.nanoTime() - receivedNs) / 1_000_000L).coerceAtLeast(0)
@@ -273,11 +280,13 @@ internal object PioneerNavigationBridge {
                 .invoke(ctl.getMethod("getInstance").invoke(null), WeakReference(listener))
             meterListener = listener
             listenerError = null
+            listenerErrorStack = null
             PioneerHudCapture.event("meter_listener_registered")
         } catch (error: Throwable) {
             val message = (error.cause ?: error).toString()
             if (message != listenerError) Log.w("DiPlay-Pioneer-Navi", "Meter refresh listener unavailable: $message")
             listenerError = message
+            listenerErrorStack = Log.getStackTraceString(error).take(4096)
         }
     }
 
@@ -333,6 +342,13 @@ internal object PioneerNavigationBridge {
             .put("strategy", policy.activeConfig.strategy.name).put("policyReason", policy.reason)
             .put("thresholdMeters", policy.thresholdMeters)
             .put("estimatedSeconds", policy.etaSeconds ?: JSONObject.NULL)
+        val evidence = JSONObject(attempt.toString()).apply {
+            remove("road") // Always-on evidence must not include route names or destinations.
+            put("attemptedAtMs", System.currentTimeMillis())
+            put("result", "attempting")
+            put("sdkReturn", JSONObject.NULL)
+        }
+        lastOutputEvidence = evidence.toString()
         PioneerHudCapture.event("meter_attempt", attempt)
         try {
             val ctl = controllerType
@@ -364,24 +380,32 @@ internal object PioneerNavigationBridge {
             } else direction
             number("setGuideDir", mappedDirection)
             attempt.put("meterType", meterType).put("mappedDirection", mappedDirection)
+            evidence.put("meterType", meterType).put("mappedDirection", mappedDirection)
             infoType.getMethod("setNextRdName", String::class.java).invoke(info, guidance?.road.orEmpty())
             infoType.getMethod("setNextRdDistance", Int::class.javaPrimitiveType).invoke(info, guidance?.distance ?: 0)
             if (guidance != null) { retainedInfo = info; ownsOutput = true; acceptsMeterRefresh = true }
-            check(ctl.getMethod("setNaviInfo", infoType).invoke(ctl.getMethod("getInstance").invoke(null), info) == true) {
-                "Meter rejected navigation"
-            }
+            lastOutputEvidence = evidence.put("result", "invoking_sdk").put("sdkInvokedAtMs", System.currentTimeMillis()).toString()
+            val sdkReturn = ctl.getMethod("setNaviInfo", infoType).invoke(ctl.getMethod("getInstance").invoke(null), info)
+            evidence.put("meterType", meterType).put("mappedDirection", mappedDirection)
+                .put("sdkReturn", sdkReturn ?: JSONObject.NULL)
+            check(sdkReturn == true) { "Meter rejected navigation" }
             ownsOutput = guidance != null
             relinquishedOutput = false
             last = guidance
             lastError = null
             if (guidance == null) { clearPending = false; retainedInfo = null }
             successes++
+            lastOutputEvidence = evidence.put("result", "sdk_accepted").put("finishedAtMs", System.currentTimeMillis()).toString()
             PioneerHudCapture.event("meter_success", attempt)
         } catch (error: Exception) {
             val message = (error.cause ?: error).toString()
             if (message != lastError) Log.w("DiPlay-Pioneer-Navi", "Navigation output failed: $message")
             lastError = message
             failures++
+            val stack = Log.getStackTraceString(error)
+            lastOutputEvidence = evidence.put("result", "failed").put("error", message)
+                .put("exceptionChain", stack.take(4096)).put("exceptionTruncated", stack.length > 4096)
+                .put("finishedAtMs", System.currentTimeMillis()).toString()
             PioneerHudCapture.event("meter_failure", attempt.put("error", message))
         }
     }
@@ -401,12 +425,17 @@ internal object PioneerNavigationBridge {
             .put("routeFrames", routeFrames.get()).put("maneuverFrames", maneuverFrames.get())
             .put("lastReceivedAtMs", receivedAtMs.get()).put("lastParsedAtMs", parsedAtMs)
             .put("appleType", lastType ?: JSONObject.NULL).put("invalidFrames", invalidFrames)
+            .put("parsedFrames", parsedFrames).put("lastMessageId", lastMessageId ?: JSONObject.NULL)
+            .put("routeReason", route.diagnosticReason()).put("routeFrameValid", route.lastFrameValid)
+            .put("inputAgeMs", if (parsedReceivedNs > 0) ((System.nanoTime() - parsedReceivedNs) / 1_000_000L).coerceAtLeast(0) else JSONObject.NULL)
+            .put("lastOutput", JSONObject(lastOutputEvidence))
             .put("queueAccepting", queue.first).put("queueDepth", queue.second)
             .put("queueOverflows", worker.overflowCount).put("queueStopReason", worker.stopReason).put("sdkSuccesses", successes).put("sdkFailures", failures)
             .put("inputDistanceMeters", inputDistanceMeters ?: JSONObject.NULL)
             .put("inputQueueDelayMs", inputQueueDelayMs)
             .put("suppressedUpdates", suppressedUpdates).put("distanceRefreshMinMs", 500)
             .put("meterListenerRegistered", meterListener != null).put("meterListenerError", listenerError ?: JSONObject.NULL)
+            .put("meterListenerExceptionChain", listenerErrorStack ?: JSONObject.NULL)
             .put("meterRefreshRequests", meterRefreshRequests.get()).put("meterRefreshSends", meterRefreshSends)
             .put("meterRefreshPending", meterRefreshPending.get())
             .put("guideMode", displayed?.guideMode ?: "INVALID").put("distancePolicy", policy.activeConfig.strategy.name)
@@ -423,6 +452,7 @@ internal object PioneerNavigationBridge {
             .put("estimateReason", policy.estimateReason)
             .put("distanceResolutionMeters", policy.distanceResolutionMeters)
             .put("displayVerified", false).toString()
+        com.shilapi.xcertplay.pioneer.PioneerHudDiagnostics.checkpoint(JSONObject(PioneerDebugRuntime.navigationHudState))
         val now = System.currentTimeMillis()
         if (now - lastCheckpointMs >= 5_000) {
             lastCheckpointMs = now

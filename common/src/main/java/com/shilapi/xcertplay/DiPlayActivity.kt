@@ -2855,6 +2855,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 export = { SettingsBackupCodec.export(this, version()) },
                 import = { SettingsBackupCodec.import(this, it) },
                 reportFile = { DiagnosticBundle.collect(applicationContext) { diagnosticReportText(applicationContext) } },
+                reportComponentsFile = {
+                    DiagnosticBundle.collect(applicationContext, includeSystemComponents = true) { diagnosticReportText(applicationContext) }
+                },
                 codePage = assets.open("settings-code.html").use { it.readBytes() },
             )
             created.onCodeEntryClosed = {
