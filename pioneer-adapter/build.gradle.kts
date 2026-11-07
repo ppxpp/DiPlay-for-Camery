@@ -10,6 +10,7 @@ android {
     compileSdk = 37
     defaultConfig {
         minSdk = 23; consumerProguardFiles("consumer-rules.pro")
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
     ndkVersion = "28.2.13676358"

@@ -42,6 +42,7 @@ android {
         targetSdk = 37
         versionCode = 13
         versionName = "0.3.4-usbcheck"
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     compileOptions {
