@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -237,6 +238,19 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
     (*e)->SetLongArrayRegion(e,values,0,36,result);return 0;
 }
 #if defined(__linux__)
+static void fail_usb(JNIEnv *e, const char *direction, int result,
+                     const struct vpn_urb_failure *failure,
+                     int fd, int in_endpoint, int out_endpoint, int running) {
+    char message[512];
+    snprintf(message, sizeof(message),
+        "VPN USBFS %s failed operation=%s rc=%d errno=%d(%s) urbStatus=%d slot=%d "
+        "fd=%d in=0x%02x out=0x%02x runningAtFailure=%d runningAfterCleanup=%d",
+        direction, failure->operation ? failure->operation : "unknown", result,
+        failure->error_number, failure->error_number ? strerror(failure->error_number) : "not_recorded",
+        failure->urb_status, failure->slot, fd, in_endpoint, out_endpoint, failure->running, running);
+    fail(e, message);
+}
+
 struct native_rx_context {
     struct vpn *v;
     struct vpn_linux_urb_context *usb;
@@ -288,8 +302,10 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
     pthread_mutex_unlock(&v->usb_context_lock);
     if(!usb){fail(e,"Could not create VPN USBFS receiver");return -ENOMEM;}
     struct native_rx_context context={.v=v,.usb=usb};
-    int result=vpn_linux_urb_reader(usb,(unsigned)slots,&v->running,native_rx_chunk,&context);
-    if(result<0)fail(e,"VPN USBFS receiver failed");return result;
+    struct vpn_urb_failure failure={.slot=-1};
+    int result=vpn_linux_urb_reader(usb,(unsigned)slots,&v->running,native_rx_chunk,&context,&failure);
+    if(result<0)fail_usb(e,"receiver",result,&failure,fd,in_endpoint,out_endpoint,v->running);
+    return result;
 }
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_runUsbSender(
     JNIEnv *e,jobject o,jlong h,jint fd,jint out_endpoint,jint pipeline_depth) {
@@ -304,9 +320,11 @@ JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative
     pthread_mutex_unlock(&v->usb_context_lock);
     if(!usb){fail(e,"Could not create VPN USBFS sender");return -ENOMEM;}
     struct native_tx_context context={.v=v};
+    struct vpn_urb_failure failure={.slot=-1};
     int result=vpn_linux_urb_writer(usb,(unsigned)pipeline_depth,
-        8,&v->running,native_tx_build,&context);
-    if(result<0)fail(e,"VPN USBFS sender failed");return result;
+        8,&v->running,native_tx_build,&context,&failure);
+    if(result<0)fail_usb(e,"sender",result,&failure,fd,0,out_endpoint,v->running);
+    return result;
 }
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_pioneer_PioneerVpnPacketNative_enableBatching(
     JNIEnv *e,jobject o,jlong h) {

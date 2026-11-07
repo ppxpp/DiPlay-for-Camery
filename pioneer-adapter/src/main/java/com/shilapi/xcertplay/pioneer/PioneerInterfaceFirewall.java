@@ -163,10 +163,19 @@ final class PioneerInterfaceFirewall {
 
     private String chain(int id) throws Exception {
         String chain = id < 2 ? "CARNET_IN" : "CARNET_OUT";
-        Result result = runner.run(new String[]{"/system/bin/ip6tables", "-t", "filter", "-S", chain});
-        if (result.exit != 0) throw new IOException("FIREWALL_CHAIN_UNREADABLE " + chain);
+        String[] args = {"/system/bin/ip6tables", "-t", "filter", "-S", chain};
+        Result result = runner.run(args);
+        if (result.exit != 0) throw failedCommand("FIREWALL_CHAIN_UNREADABLE " + chain, args, result);
         requireChain(result.output, chain, false);
         return result.output;
+    }
+
+    /** Runner output includes stderr. Keep failure details bounded and on one log line. */
+    private static IOException failedCommand(String reason, String[] args, Result result) {
+        String output = result.output == null ? "" : result.output.replaceAll("[\\p{Cntrl}]", " ").trim();
+        if (output.length() > 1024) output = output.substring(0, 1024) + " [truncated]";
+        return new IOException(reason + " command=" + String.join(" ", args) +
+                " exit=" + result.exit + " output=" + (output.isEmpty() ? "[empty]" : output));
     }
 
     private State state(int id, String dump) throws Exception {
@@ -181,8 +190,9 @@ final class PioneerInterfaceFirewall {
         // Fsync must succeed before launching a mutating child.
         journal.write(pending, false);
         try {
-            Result result = runner.run(arguments(name, token, id, action));
-            if (result.exit != 0) throw new IOException("FIREWALL_COMMAND_FAILED " + pending + " exit=" + result.exit);
+            String[] args = arguments(name, token, id, action);
+            Result result = runner.run(args);
+            if (result.exit != 0) throw failedCommand("FIREWALL_COMMAND_FAILED " + pending, args, result);
         } catch (CompletionUnknown error) {
             unresolved = !error.childStopped;
             journal.write(pending, unresolved);

@@ -623,6 +623,8 @@ class Iap2UsbSession internal constructor(
 
     private fun requestDiagnostics(timeoutMillis: Long): String = buildString {
         append("api=").append(Build.VERSION.SDK_INT)
+        append(" usbFd=").append(runCatching { connection.fileDescriptor }.getOrDefault(-1))
+        append(" sessionClosed=").append(synchronized(stateLock) { closed })
         append(" endpoint=").append(describeUsbEndpoint(inEndpoint))
         append(" timeoutMs=").append(timeoutMillis)
     }
