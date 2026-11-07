@@ -50,13 +50,58 @@ class AndroidCiSelectionTest(unittest.TestCase):
                 self.assertIn(':common:testDebugUnitTest', tasks)
                 self.assertIn(f':{module}:assembleDebug', tasks)
 
-    def test_gradle_native_and_unknown_changes_run_full(self):
-        for path in ('gradle.properties', 'mobile/build.gradle.kts', 'shared/src/main/jni/Android.mk',
-                     'pioneer-adapter/src/main/cpp/wireless/test.c', 'pioneer-adapter/src/main/cpp/CMakeLists.txt',
-                     'scripts/ci_android_tasks.py',
-                     '.github/workflows/android.yml'):
+    def test_root_build_workflow_and_unknown_changes_run_full(self):
+        for path in ('build.gradle.kts', 'settings.gradle.kts', 'gradle.properties',
+                     'gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties',
+                     'scripts/ci_android_tasks.py', '.github/workflows/android.yml'):
             with self.subTest(path=path):
                 self.assertEqual(ci.FULL_TASKS, ci.select_tasks([path]))
+
+    def test_module_build_file_scopes_to_that_module(self):
+        tasks = ci.select_tasks(['mobile/build.gradle.kts'])
+        self.assertNotEqual(ci.FULL_TASKS, tasks)
+        self.assertIn(':mobile:lintDebug', tasks)
+        self.assertIn(':mobile:assembleDebug', tasks)
+        self.assertIn(':mobile:compileDebugKotlin', tasks)
+        self.assertNotIn(':home:lintDebug', tasks)
+
+        tasks = ci.select_tasks(['shared/build.gradle'])
+        self.assertIn(':shared:testDebugUnitTest', tasks)
+        self.assertIn(':common:testDebugUnitTest', tasks)
+        self.assertIn(':shared:lintDebug', tasks)
+        self.assertIn(':mobile:assembleDebug', tasks)
+        self.assertNotIn(':pioneer-adapter:lintDebug', tasks)
+
+    def test_native_changes_package_the_main_apk_without_full_validation(self):
+        for path in ('shared/src/main/jni/Android.mk',
+                     'pioneer-adapter/src/main/cpp/wireless/test.c',
+                     'pioneer-adapter/src/main/cpp/CMakeLists.txt',
+                     'pioneer-adapter/src/main/hud-filter/filter.js',
+                     'pioneer-adapter/scripts/build-wireless-assets.sh'):
+            with self.subTest(path=path):
+                tasks = ci.select_tasks([path])
+                self.assertNotEqual(ci.FULL_TASKS, tasks)
+                self.assertIn(':mobile:assembleDebug', tasks)
+                self.assertNotIn(':home:assembleDebug', tasks)
+
+    def test_diagnostic_modules_compile_themselves(self):
+        for path, module in (('usbcheck/src/main/java/example.kt', 'usbcheck'),
+                             ('bluetooth-probe/src/main/java/example.kt', 'bluetooth-probe'),
+                             ('usb-permission-probe/src/main/java/example.kt', 'usb-permission-probe'),
+                             ('automotive/src/main/java/example.kt', 'automotive')):
+            with self.subTest(path=path):
+                tasks = ci.select_tasks([path])
+                self.assertIn(f':{module}:lintDebug', tasks)
+                self.assertIn(f':{module}:assembleDebug', tasks)
+                self.assertNotIn(':mobile:assembleDebug', tasks)
+
+    def test_grouped_selection_matches_combined_tasks(self):
+        groups = ci.select_task_groups(['shared/src/main/java/example.kt'])
+        self.assertIn(':shared:testDebugUnitTest', groups['tests'])
+        self.assertIn(':shared:lintDebug', groups['lint'])
+        self.assertIn(':mobile:compileDebugKotlin', groups['build'])
+        self.assertEqual(sorted(ci.select_tasks(['shared/src/main/java/example.kt'])),
+                         sorted(groups['tests'] + groups['lint'] + groups['build']))
 
     def test_deleted_and_mixed_paths_keep_android_checks(self):
         tasks = ci.select_tasks(['README.md', 'shared/src/main/java/deleted.kt', 'common/src/test/java/test.kt'])
