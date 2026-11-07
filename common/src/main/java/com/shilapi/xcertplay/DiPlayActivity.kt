@@ -3127,7 +3127,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             installedVersionCode(),
             userAgent(),
             channel,
-            clientId = StableClientId.get(this),
+            clientId = checkNotNull(StableClientId.get(this)) { "Update client ID unavailable" },
         )
     }
 
