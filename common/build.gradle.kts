@@ -29,6 +29,9 @@ android {
         // Legacy findings are baselined; only new findings fail the build.
         baseline = file("lint-baseline.xml")
         abortOnError = true
+        // The check only fires because an old fragment is a transitive dependency of media3;
+        // this app deliberately registers activity results without using fragments.
+        disable += "InvalidFragmentVersionForActivityResult"
     }
 
     buildFeatures {
