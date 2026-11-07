@@ -1,11 +1,9 @@
 package com.shilapi.xcertplay.vehicle.runtime
 
 import android.content.Context
-import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import com.shilapi.xcertplay.vehicle.adapters.pioneer.CeamInstrumentMediaSink
-import com.shilapi.xcertplay.vehicle.adapters.pioneer.PalSteeringWheelInputAdapter
 import com.shilapi.xcertplay.vehicle.adapters.wecarflow.QQMusicPlaybackGuardClient
 import com.shilapi.xcertplay.vehicle.api.LocalPlaybackGuardClient
 import com.shilapi.xcertplay.vehicle.api.MediaCommand
@@ -24,7 +22,6 @@ class VehicleMediaRuntime private constructor(
     private val report: (String) -> Unit,
 ) : Closeable {
     private val context = context.applicationContext
-    private val main = Handler(Looper.getMainLooper())
     private val generation = AtomicLong()
     @Volatile private var session: Any? = null
     @Volatile private var disposed = false
@@ -42,13 +39,6 @@ class VehicleMediaRuntime private constructor(
 
     init {
         prepareCompanion(this.context)
-        // Prepare the input SDK while connecting; commands still require a live session.
-        main.post {
-            if (!disposed) {
-                PalSteeringWheelInputAdapter.configure(this.context)
-                PalSteeringWheelInputAdapter.start({ command -> dispatchCommand(generation.get(), command) }, report)
-            }
-        }
     }
 
     @Synchronized
@@ -59,13 +49,6 @@ class VehicleMediaRuntime private constructor(
         protected = false
         ready = if (active) CountDownLatch(1) else CountDownLatch(0)
         latest = Retained(NowPlayingSnapshot(), SystemClock.elapsedRealtime())
-        main.post {
-            if (generation.get() != revision) return@post
-            if (active) {
-                PalSteeringWheelInputAdapter.configure(context)
-                PalSteeringWheelInputAdapter.start({ command -> dispatchCommand(revision, command) }, report)
-            } else PalSteeringWheelInputAdapter.stop()
-        }
         val latch = ready
         worker.execute {
             progressTask?.cancel(false)
@@ -137,15 +120,6 @@ class VehicleMediaRuntime private constructor(
                 }
             }
         })
-
-    private fun dispatchCommand(revision: Long, command: MediaCommand) {
-        worker.execute {
-            if (generation.get() == revision && session != null && !disposed) {
-                val accepted = sendCommand(command)
-                report("Vehicle: CarPlay command=$command queued=$accepted (phone outcome unverified)")
-            }
-        }
-    }
 
     private fun refreshPublished(revision: Long) {
         worker.execute {
@@ -222,8 +196,6 @@ class VehicleMediaRuntime private constructor(
         generation.incrementAndGet()
         ready.countDown()
         VehiclePlaybackProtection.detach(this)
-        // Do not stop a newer runtime's PAL consumer while the old one is being disposed.
-        main.post { if (!VehiclePlaybackProtection.hasActiveSession) PalSteeringWheelInputAdapter.stop() }
         protectionWorker.execute { guard?.close(); guard = null }
         worker.execute { progressTask?.cancel(false); progressTask = null; instrument.close() }
     }
