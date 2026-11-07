@@ -19,8 +19,7 @@ object PioneerDebugRuntime {
     @Volatile var port: Int = 0
     @Volatile var listenerState = "未启动"
     @Volatile var lastCommand = ""
-    @Volatile var steeringWheelState = "{}"
-    val relayedWheelEventsIgnored = java.util.concurrent.atomic.AtomicLong()
+    @Volatile var steeringWheelState = "{\"policy\":\"COMPANION_RELAY\"}"
     @Volatile var navigationHudState = "{}"
     @Volatile var navigationHudSnapshot: (() -> JSONObject)? = null
     fun hudSnapshot(): JSONObject = navigationHudSnapshot?.invoke() ?: JSONObject(navigationHudState)
