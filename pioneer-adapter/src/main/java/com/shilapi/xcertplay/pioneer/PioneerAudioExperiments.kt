@@ -15,7 +15,8 @@ object PioneerAudioExperiments {
         val micGrantOrder: String = "SOURCE_FIRST",
         val grantDelayMs: Int = 150,
         val sourceDelayMs: Int = 150,
-        val ownershipRecovery: Boolean = false,
+        // CEAM can restore the voice assistant's mic token after the initial call grant.
+        val ownershipRecovery: Boolean = true,
         val ownershipCheckMs: Int = 1000,
         val ownershipMaxRestores: Int = 3,
         val preferredBuiltin: Boolean = true,
