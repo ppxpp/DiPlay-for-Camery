@@ -30,7 +30,7 @@ class PioneerAudioExperimentsTest {
         assertEquals("WECHAT", PioneerAudioExperiments.current().micIdentity)
         command("RESET")
         assertEquals("APP", PioneerAudioExperiments.current().micIdentity)
-        assertFalse(PioneerAudioExperiments.current().ownershipRecovery)
+        assertTrue(PioneerAudioExperiments.current().ownershipRecovery)
         assertEquals(400, PioneerAudioExperiments.current().callStream)
         assertEquals("COMMUNICATION", PioneerAudioExperiments.current().callMode)
         assertEquals(10, PioneerAudioExperiments.current().oversizePcmPacketMs)
