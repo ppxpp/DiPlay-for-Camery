@@ -66,6 +66,30 @@ const structuredData = {
     <main class="shell">
       <Hero />
 
+      <section id="features" class="features-section" aria-labelledby="features-title" tabindex="-1">
+        <div class="section-head">
+          <h2 id="features-title">核心功能</h2>
+          <p>围绕凯美瑞先锋车机的连接、启动、操作、通话、导航与仪表显示做的适配。</p>
+        </div>
+        <div class="feature-grid">
+          {
+            site.features.map((feature) => (
+              <article class:list={['feature-card', { 'feature-card--wide': feature.points?.length }]}>
+                <h3>{feature.title}</h3>
+                <p>{feature.text}</p>
+                {feature.points?.length ? (
+                  <ul class="feature-points">
+                    {feature.points.map((point) => (
+                      <li>{point}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
+            ))
+          }
+        </div>
+      </section>
+
       <section id="docs" class="docs-section" aria-labelledby="docs-title" tabindex="-1">
         <div class="section-head docs-head">
           <div class="docs-title-row">
