@@ -32,6 +32,30 @@ public class PioneerRootDiagnosticsTest {
     private JSONObject run(PioneerRootDiagnostics.Lane lane, Child child) throws Exception {
         return lane.run("test", () -> child, () -> true, PioneerRootDiagnosticsTest::now, Thread::sleep, 0, 5);
     }
+    @Test public void kernelUsbFilterKeepsResetDisconnectAndControllerErrorsOnly() {
+        String text = "[1.0] usb 1-1: reset high-speed USB device\n" +
+            "[2.0] ci_hdrc 2184000.usb: timeout\n" +
+            "[3.0] usb 1-1: USB disconnect, device number 3\n" +
+            "[4.0] wlan0: unrelated network event\n" +
+            "[5.0] usb 1-1: SerialNumber: PRIVATE-SERIAL\n";
+        String filtered = PioneerRootDiagnostics.kernelUsbLines(text);
+        assertTrue(filtered.contains("reset high-speed"));
+        assertTrue(filtered.contains("ci_hdrc"));
+        assertTrue(filtered.contains("USB disconnect"));
+        assertFalse(filtered.contains("wlan0"));
+        assertFalse(filtered.contains("PRIVATE-SERIAL"));
+    }
+
+    @Test public void deniedKernelReadPreservesCommandFailureInsteadOfReportingEmptyHistory() throws Exception {
+        Child child = new Child() { public int exitValue() { return 1; } };
+        child.alive = false;
+        child.input = new ByteArrayInputStream("dmesg: Permission denied\n".getBytes("UTF-8"));
+        JSONObject result = new PioneerRootDiagnostics.Lane().run("kernel_usb", () -> child, () -> true,
+            PioneerRootDiagnosticsTest::now, Thread::sleep, 100, 5);
+        assertEquals("command_failed", result.getString("status"));
+        assertTrue(result.getString("text").contains("Permission denied"));
+    }
+
     @Test public void timeoutConfirmsTerminationBeforeReuse() throws Exception {
         PioneerRootDiagnostics.Lane lane = new PioneerRootDiagnostics.Lane();
         Child child = new Child();
