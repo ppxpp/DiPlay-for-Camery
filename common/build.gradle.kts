@@ -41,6 +41,9 @@ android {
         // ceiling: adding one more Robolectric class pushed a full run into OutOfMemoryError in
         // unrelated tests, on CI and locally both, which is what BydSettingsDecoyTest measured.
         unitTests.all { it.maxHeapSize = "2g" }
+        // The Robolectric suite is the longest CI task. Each fork owns an isolated sandbox, so two
+        // forks cut the wall clock without sharing locale or resource state between tests.
+        unitTests.all { it.maxParallelForks = 2 }
     }
 }
 
