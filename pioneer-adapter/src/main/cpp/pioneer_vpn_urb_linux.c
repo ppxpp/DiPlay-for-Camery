@@ -11,6 +11,9 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
 
 enum vpn_urb_direction { VPN_URB_RX, VPN_URB_TX };
 
@@ -25,6 +28,8 @@ struct vpn_linux_urb_context;
 struct vpn_linux_target {
     struct vpn_linux_urb_context *parent;
     enum vpn_urb_direction direction;
+    struct vpn_urb_failure *failure;
+    volatile int *running;
 };
 
 struct vpn_linux_urb_context {
@@ -60,6 +65,30 @@ struct vpn_linux_urb_context {
     struct vpn_linux_target rx_target;
     struct vpn_linux_target tx_target;
 };
+
+static void record_failure(struct vpn_linux_target *target, const char *operation,
+                            int result, int error_number, int status, int slot) {
+    struct vpn_urb_failure *failure = target->failure;
+    if (!failure || failure->operation) return;
+    *failure = (struct vpn_urb_failure){operation, result, error_number, status, slot,
+        target->running ? *target->running : -1};
+#if defined(__ANDROID__)
+    /* Emit once before draining cancelled URBs; even a stuck drain keeps its root failure. */
+    __android_log_print(ANDROID_LOG_ERROR, "DiPlay-USB",
+        "VPN_USB_FAILURE operation=%s rc=%d errno=%d urbStatus=%d slot=%d "
+        "fd=%d direction=%s runningAtFailure=%d",
+        operation, result, error_number, status, slot, target->parent->fd,
+        target->direction == VPN_URB_RX ? "RX" : "TX", failure->running);
+#endif
+}
+
+static void before_cleanup_callback(void *opaque, const char *stage, int result, unsigned slot) {
+    struct vpn_linux_target *target = opaque;
+    /* Also covers parser/TUN and runner errors, which are not necessarily errno values. */
+    if (result < 0) record_failure(target, stage, result, 0, 0, (int)slot);
+    // Cancellation is cleanup, not a new root failure (including a normal successful stop).
+    target->failure = NULL;
+}
 
 static uint64_t monotonic_ns(void) {
     struct timespec value;
@@ -146,6 +175,8 @@ static int reap_for(struct vpn_linux_target *target, unsigned *slot,
             *length = items[oldest].length;
             items[oldest].ready = 0;
             pthread_mutex_unlock(&context->completion_lock);
+            if (status < 0) record_failure(target, "URB_COMPLETION",
+                status == -ECONNRESET ? -ECONNRESET : -EIO, -status, status, (int)oldest);
             return status < 0 ? (status == -ECONNRESET ? -ECONNRESET : -EIO) : 0;
         }
         uint64_t now = monotonic_ns();
@@ -160,12 +191,18 @@ static int reap_for(struct vpn_linux_target *target, unsigned *slot,
         if (result == 0 && completed) {
             result = store_completion(context, completed);
             pthread_mutex_unlock(&context->completion_lock);
-            if (result < 0) return result;
+            if (result < 0) {
+                record_failure(target, "completion-map", result, 0, 0, -1);
+                return result;
+            }
             continue;
         }
         int saved_errno = errno;
         pthread_mutex_unlock(&context->completion_lock);
-        if (result < 0 && saved_errno != EAGAIN && saved_errno != EINTR) return -saved_errno;
+        if (result < 0 && saved_errno != EAGAIN && saved_errno != EINTR) {
+            record_failure(target, "USBDEVFS_REAPURBNDELAY", -saved_errno, saved_errno, 0, -1);
+            return -saved_errno;
+        }
         // usbdev_poll reports completed URBs as POLLOUT/POLLWRNORM (Linux 4.9
         // drivers/usb/core/devio.c), regardless of USB transfer direction.
         struct pollfd descriptor = {.fd = context->fd, .events = POLLOUT};
@@ -225,6 +262,7 @@ static int submit_target(struct vpn_linux_target *target, unsigned slot,
     if (target->direction == VPN_URB_TX && context->write_lock)
         pthread_mutex_unlock(context->write_lock);
     if (result < 0) {
+        record_failure(target, "USBDEVFS_SUBMITURB", -error, error, 0, (int)slot);
         atomic_store_explicit(submitted, 0, memory_order_release);
         if (target->direction == VPN_URB_RX)
             atomic_fetch_add_explicit(&context->rx_errors, 1, memory_order_relaxed);
@@ -297,33 +335,48 @@ void vpn_linux_urb_destroy(struct vpn_linux_urb_context *context) {
 
 int vpn_linux_urb_reader(struct vpn_linux_urb_context *context,
                          unsigned slots, volatile int *running,
-                         vpn_urb_chunk callback, void *callback_context) {
+                         vpn_urb_chunk callback, void *callback_context,
+                         struct vpn_urb_failure *failure) {
     struct vpn_urb_runner runner;
     context->rx_capacity = slots < 2 ? 2 : slots > VPN_URB_MAX_SLOTS ? VPN_URB_MAX_SLOTS : slots;
+    if (failure) *failure = (struct vpn_urb_failure){.slot = -1};
+    context->rx_target.failure = failure;
+    context->rx_target.running = running;
     struct vpn_urb_io io = {
         .context = &context->rx_target,
         .submit = submit_callback,
         .reap = reap_callback,
         .discard = discard_callback,
+        .before_cleanup = before_cleanup_callback,
     };
     vpn_urb_init(&runner, io, context->rx_capacity, running);
-    return vpn_urb_reader_run(&runner, callback, callback_context);
+    int result = vpn_urb_reader_run(&runner, callback, callback_context);
+    context->rx_target.failure = NULL;
+    context->rx_target.running = NULL;
+    return result;
 }
 
 int vpn_linux_urb_writer(struct vpn_linux_urb_context *context,
                          unsigned pipeline_depth, unsigned max_frames,
                          volatile int *running, vpn_urb_build build,
-                         void *callback_context) {
+                         void *callback_context, struct vpn_urb_failure *failure) {
     struct vpn_urb_runner runner;
     context->tx_capacity = pipeline_depth == 2 ? 2 : 1;
+    if (failure) *failure = (struct vpn_urb_failure){.slot = -1};
+    context->tx_target.failure = failure;
+    context->tx_target.running = running;
     struct vpn_urb_io io = {
         .context = &context->tx_target,
         .submit = submit_callback,
         .reap = reap_callback,
         .discard = discard_callback,
+        .before_cleanup = before_cleanup_callback,
     };
     vpn_urb_init(&runner, io, context->tx_capacity, running);
-    return vpn_urb_writer_run(&runner, pipeline_depth, max_frames, build, callback_context);
+    int result = vpn_urb_writer_run(&runner, pipeline_depth, max_frames, build, callback_context);
+    context->tx_target.failure = NULL;
+    context->tx_target.running = NULL;
+    return result;
 }
 
 int vpn_linux_urb_sync_write(struct vpn_linux_urb_context *context,
@@ -349,7 +402,10 @@ int vpn_linux_urb_sync_write(struct vpn_linux_urb_context *context,
     atomic_fetch_add_explicit(&context->tx_reaps, 1, memory_order_relaxed);
     if (result < 0 || result != (int)length)
         atomic_fetch_add_explicit(&context->tx_errors, 1, memory_order_relaxed);
-    if (result < 0) return -error;
+    if (result < 0) {
+        record_failure(&context->rx_target, "USBDEVFS_BULK", -error, error, 0, -1);
+        return -error;
+    }
     return result == (int)length ? 0 : -EIO;
 }
 

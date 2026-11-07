@@ -118,6 +118,17 @@ class UsbReadQueueCompatibilityTest {
         assertEquals(listOf(32_768, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
     }
 
+    @Test fun rejectedUsbmuxQueueIncludesConnectionAndSessionState() {
+        val pipe = pipe()
+        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
+        try {
+            val error = expectUnavailable { pipe.read(100) }
+            assertTrue(error.message!!.contains("usbFd="))
+            assertTrue(error.message!!.contains("sessionClosed=false"))
+            assertTrue(error.message!!.contains("fallbackBytes=2048"))
+        } finally { pipe.close() }
+    }
+
     @Test fun queueExceptionDoesNotTriggerCompatibilityRetryInEitherPipe() {
         val pipe = pipe()
         UsbQueueReplay.queueException = IllegalStateException("unknown queue state")
