@@ -4,6 +4,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_validation:
+        description: Run all tests, lint and sample APK builds
+        type: boolean
+        default: true
+concurrency:
+  group: android-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
@@ -12,16 +21,38 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Select Android verification scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          FULL_VALIDATION: ${{ inputs.full_validation }}
+        run: |
+          if [ "$EVENT_NAME" = push ] || [ "$FULL_VALIDATION" = true ]; then
+            python3 scripts/ci_android_tasks.py --full --github-output "$GITHUB_OUTPUT"
+          else
+            if [ "$EVENT_NAME" = pull_request ]; then
+              git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            else
+              BASE_SHA="$(git rev-parse HEAD^)"
+            fi
+            python3 scripts/ci_android_tasks.py --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
+          fi
       - name: Reject credential files in public source
         run: python3 scripts/check_public_tree.py
       - uses: actions/setup-java@v4
+        if: steps.scope.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: '25'
       - uses: android-actions/setup-android@v3
+        if: steps.scope.outputs.android == 'true'
         with:
           packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358 cmake;3.10.2.4988404
       - name: Provision shared signing keystore
+        if: steps.scope.outputs.android == 'true'
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
@@ -42,17 +73,23 @@ jobs:
           } > .signing/signing.properties
           chmod 600 .signing/signing.properties
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.scope.outputs.android == 'true'
       - name: Root service and PAL packaging guards
         run: |
           node --test pioneer-adapter/src/test/js/hud-filter.test.cjs
           python3 pioneer-adapter/src/test/python/test_hud_unified_boundary.py
           cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror pioneer-adapter/src/main/cpp/wireless/pioneer_command_runner.c -o "$RUNNER_TEMP/diplay-command-runner"
           python3 pioneer-adapter/src/test/python/test_command_runner.py "$RUNNER_TEMP/diplay-command-runner"
-          python3 -m unittest discover -s scripts/tests -p 'test_prepare_pioneer_pal_sdk.py'
-      - name: Unit tests, lint and source-only debug build
-        run: ./gradlew -PdiplaySourceOnly=true :pioneer-adapter:testDebugUnitTest :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest :common:lintDebug :shared:lintDebug :pioneer-adapter:lintDebug :mobile:lintDebug :home:lintDebug :maphost:lintDebug :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug --stacktrace
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Run selected Android checks
+        if: steps.scope.outputs.android == 'true'
+        env:
+          GRADLE_TASKS: ${{ steps.scope.outputs.tasks }}
+        run: |
+          read -r -a tasks <<< "$GRADLE_TASKS"
+          ./gradlew -PdiplaySourceOnly=true --build-cache "${tasks[@]}" --stacktrace
       - name: Test reports
-        if: always()
+        if: always() && steps.scope.outputs.android == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
